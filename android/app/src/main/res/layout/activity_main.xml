@@ -56,7 +56,7 @@
                         android:paddingTop="2dp"
                         android:paddingEnd="7dp"
                         android:paddingBottom="2dp"
-                        android:text="v1.1.2"
+                        android:text="v1.2.3"
                         android:textColor="#3498db"
                         android:textSize="11sp"
                         android:textStyle="bold" />
@@ -138,9 +138,9 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="10dp"
-                    android:text="http://7.7.7.7:7777"
+                    android:text="https://teslamirror.net:9999"
                     android:textColor="#ffffff"
-                    android:textSize="26sp"
+                    android:textSize="24sp"
                     android:textStyle="bold" />
 
                 <TextView
@@ -148,7 +148,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
-                    android:text="핫스팟 직접: http://192.168.43.1:8080"
+                    android:text="보조 가상: http://td9.cc:7777  |  직접: http://192.168.43.1:8080"
                     android:textColor="#3498db"
                     android:textSize="12sp" />
 
@@ -336,11 +336,15 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- 쉬운 연결 3단계 안내 -->
+        <!-- 테슬라 연결 가이드 카드 -->
         <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardConnectionGuide"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:foreground="?android:attr/selectableItemBackground"
             app:cardBackgroundColor="#111317"
             app:cardCornerRadius="16dp"
             app:strokeColor="#1d2027"
@@ -352,28 +356,50 @@
                 android:orientation="vertical"
                 android:padding="16dp">
 
-                <TextView
-                    android:layout_width="wrap_content"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="💡 테슬라 연결 초간단 3단계"
-                    android:textColor="#ffffff"
-                    android:textSize="14sp"
-                    android:textStyle="bold" />
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="💡 테슬라 연결 가이드 (초간단 3단계)"
+                        android:textColor="#ffffff"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnViewDetailedGuide"
+                        style="@style/Widget.Material3.Button.TextButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:paddingStart="6dp"
+                        android:paddingEnd="6dp"
+                        android:text="📖 상세 매뉴얼"
+                        android:textColor="#3498db"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
 
                 <TextView
+                    android:id="@+id/tvConnectionGuideSteps"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
+                    android:layout_marginTop="6dp"
                     android:lineSpacingExtra="4dp"
-                    android:text="1️⃣ 핫스팟 켜고 테슬라 Wi-Fi를 폰에 연결\n2️⃣ 아래 [미러링 시작] 터치 후 '지금 시작' 선택\n3️⃣ 테슬라 모니터 브라우저에서 http://7.7.7.7:7777 접속!\n     (접속 지연 시 http://192.168.43.1:8080)"
-                    android:textColor="#95a5a6"
+                    android:text="1️⃣ 스마트폰 모바일 핫스팟 켜기 &amp; 테슬라 Wi-Fi 연결\n     ⚠️ 필수: 테슬라 Wi-Fi 설정에서 [D 기어 시 연결 유지] 체크!\n2️⃣ [가상 프록시(0MB)] 확인 후 아래 [미러링 시작] 터치\n3️⃣ 테슬라 브라우저에서 https://teslamirror.net:9999 접속\n     (보조 주소: http://td9.cc:7777  |  직접: http://192.168.43.1:8080)"
+                    android:textColor="#cbd5e1"
                     android:textSize="12sp" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="⭐ 꿀팁: 테슬라 브라우저에서 ★ 즐겨찾기 등록 시 다음 탑승부터 원클릭 연결!"
+                    android:layout_marginTop="10dp"
+                    android:lineSpacingExtra="3dp"
+                    android:text="⭐ 꿀팁:\n• 브라우저 ★ 즐겨찾기 등록 시 다음 탑승부터 원클릭 연결!\n• 폴드폰을 접거나 펼쳐도 실시간 해상도 자동 동기화\n• 운전자 쪽(좌측 밀착) 기본 배치 &amp; ⚙️ 버튼으로 전체화면 전환"
                     android:textColor="#f39c12"
                     android:textSize="11sp" />
             </LinearLayout>
@@ -410,7 +436,7 @@
                 android:id="@+id/tvVersionInfo"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="mplat Mirror v1.2.2 · 0MB 초저지연 로컬 터널"
+                android:text="mplat Mirror v1.2.3 · 0MB 초저지연 로컬 터널"
                 android:textColor="#888e9b"
                 android:textSize="12sp" />
 

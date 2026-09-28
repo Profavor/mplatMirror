@@ -238,10 +238,53 @@ class MainActivity : AppCompatActivity() {
         binding.btnOpenTripLog.setOnClickListener {
             showTripLogDialog()
         }
+
+        binding.cardConnectionGuide.setOnClickListener {
+            showConnectionManualDialog()
+        }
+
+        binding.btnViewDetailedGuide.setOnClickListener {
+            showConnectionManualDialog()
+        }
     }
 
+    private fun showConnectionManualDialog() {
+        val hotspotIp = getHotspotIp()
+        val port = NativeBridge.getServerPort().takeIf { it > 0 } ?: serverPort
+        val message = """
+            📖 테슬라 연결 & 사용 상세 매뉴얼 (v${BuildConfig.VERSION_NAME})
 
+            【 1단계: 모바일 핫스팟 & Wi-Fi 연결 】
+            ① 스마트폰의 '모바일 핫스팟'을 켭니다.
+            ② 테슬라 모니터 상단 Wi-Fi 아이콘을 누르고 스마트폰 핫스팟을 연결합니다.
+            ★ 매우 중요 (필수 체크):
+            테슬라 Wi-Fi 상세 설정에서 반드시 [D(드라이브) 기어 시 Wi-Fi 유지] 항목을 체크해야 주행 중에도 미러링이 끊기지 않습니다!
 
+            【 2단계: 앱에서 미러링 시작 】
+            ① 상단 [⚡ 테슬라 로컬 가상 프록시 (데이터 0MB)]가 켜져 있는지 확인합니다. (삼성 핫스팟 차단 우회 및 LTE 데이터 0MB 소모)
+            ② 화면 아래 파란색 [미러링 시작] 버튼을 누르고 권한 요청에서 '지금 시작'을 선택합니다.
+            ③ 테슬라 화면 터치로 폰을 조작하려면 [양방향 터치 조작 (접근성)] 권한도 허용해 주세요.
+
+            【 3단계: 테슬라 모니터 브라우저 접속 】
+            ① 테슬라 모니터 하단 메뉴에서 브라우저를 실행합니다.
+            ② 주소창에 아래 추천 주소를 입력합니다:
+               👉 https://teslamirror.net:9999
+               (보조 주소: http://td9.cc:7777  |  직접: http://$hotspotIp:$port)
+            ③ 테슬라 브라우저 상단 ★ (즐겨찾기) 버튼을 눌러 북마크에 추가해두시면 다음 탑승부터 원클릭으로 바로 연결됩니다!
+
+            【 4단계: 갤럭시 폴드 & 편의기능 】
+            • 화면 자동 조절: 갤럭시 폴드를 접거나 펼칠 때 앱을 재실행할 필요 없이 실시간으로 테슬라 화면 해상도와 비율이 자동 재설정됩니다.
+            • 운전자 좌측 밀착 (기본): 운전석에서 티맵/카카오내비를 가장 편하게 볼 수 있도록 화면이 운전석 쪽(좌측)에 정렬됩니다.
+            • 뷰 모드 변경: 좌측 상단 ⚙️ 플로팅 버튼을 눌러 '화면 꽉 채우기', '중앙 정렬' 등으로 변경할 수 있습니다.
+            • 상단바 3초 자동 숨김: 3초 후 상단바가 자동으로 숨겨져 몰입감 있는 전체 화면을 제공합니다 (화면 가장자리 터치 시 다시 나타남).
+        """.trimIndent()
+
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setTitle("📖 테슬라 연결 상세 매뉴얼")
+            .setMessage(message)
+            .setPositiveButton("확인", null)
+            .show()
+    }
 
     private fun showTripLogDialog() {
         val message = """
@@ -255,7 +298,7 @@ class MainActivity : AppCompatActivity() {
             - 저장 상태: GPS 패킷 5개 포인트 정상 저장됨
             
             ■ 테슬라 대화면 지도 연동
-            - 테슬라 모니터 브라우저(http://7.7.7.7:7777) 상단 [🚗] 메뉴 또는 하단 [Trip Log]를 누르면 대화면 지도와 함께 실시간 주행 궤적이 모달로 시각화됩니다.
+            - 테슬라 모니터 브라우저(https://teslamirror.net:9999) 상단 [🚗] 메뉴 또는 하단 [Trip Log]를 누르면 대화면 지도와 함께 실시간 주행 궤적이 모달로 시각화됩니다.
         """.trimIndent()
 
         com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
@@ -488,7 +531,7 @@ class MainActivity : AppCompatActivity() {
         val port = NativeBridge.getServerPort().takeIf { it > 0 } ?: serverPort
 
         binding.tvTeslaAddress.text = "https://teslamirror.net:9999"
-        binding.tvSecondaryAddress.text = "보조 가상: http://td9.cc:7777  |  직접: http://7.7.7.7:7777"
+        binding.tvSecondaryAddress.text = "보조: http://td9.cc:7777  |  직접: http://$hotspotIp:$port"
 
         if (apEnabled) {
             binding.tvHotspotStatus.text = "✓ 핫스팟 켜짐 ($hotspotIp) - 테슬라 Wi-Fi 연결 대기"

@@ -187,7 +187,7 @@ class LocalProxyVpnService : VpnService() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("⚡ 테슬라 로컬 가상 프록시 (데이터 0MB)")
-            .setContentText("접속 주소: https://teslamirror.net:9999 (또는 http://7.7.7.7:7777)")
+            .setContentText("접속 주소: https://teslamirror.net:9999 (또는 http://td9.cc:7777)")
 
             .setOngoing(true)
             .setContentIntent(pendingIntent)
