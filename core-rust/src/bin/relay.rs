@@ -13,7 +13,7 @@ use serde_json::json;
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 use tokio::sync::{broadcast, RwLock};
 use tower_http::cors::CorsLayer;
-use tracing::{info, warn};
+use tracing::info;
 
 const INDEX_HTML: &str = include_str!("../../../web/index.html");
 const STYLE_CSS: &str = include_str!("../../../web/style.css");
@@ -240,7 +240,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let app = Router::new()
-        .route("/", get(serve_mirror))
+        .route("/", get(serve_download))
         .route("/mirror", get(serve_mirror))
         .route("/tesla", get(serve_tesla))
         .route("/tesla.html", get(serve_tesla))

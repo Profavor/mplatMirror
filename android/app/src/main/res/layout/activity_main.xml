@@ -152,41 +152,19 @@
                     android:textColor="#3498db"
                     android:textSize="12sp" />
 
-                <LinearLayout
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnCopyAddress"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
+                    android:layout_height="46dp"
                     android:layout_marginTop="16dp"
-                    android:orientation="horizontal">
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnCopyAddress"
-                        android:layout_width="0dp"
-                        android:layout_height="44dp"
-                        android:layout_weight="1"
-                        android:backgroundTint="#1f3a52"
-                        android:text="📋 주소 복사"
-                        android:textColor="#3498db"
-                        android:textSize="13sp"
-                        android:textStyle="bold"
-                        app:cornerRadius="10dp"
-                        app:strokeColor="#2980b9"
-                        app:strokeWidth="1dp" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnTestBrowser"
-                        android:layout_width="0dp"
-                        android:layout_height="44dp"
-                        android:layout_marginStart="10dp"
-                        android:layout_weight="1"
-                        android:backgroundTint="#1c2833"
-                        android:text="📱 폰에서 테스트"
-                        android:textColor="#ecf0f1"
-                        android:textSize="13sp"
-                        android:textStyle="bold"
-                        app:cornerRadius="10dp"
-                        app:strokeColor="#34495e"
-                        app:strokeWidth="1dp" />
-                </LinearLayout>
+                    android:backgroundTint="#1f3a52"
+                    android:text="📋 테슬라 접속 주소 복사"
+                    android:textColor="#3498db"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    app:cornerRadius="10dp"
+                    app:strokeColor="#2980b9"
+                    app:strokeWidth="1dp" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
@@ -412,28 +390,13 @@
             android:layout_width="match_parent"
             android:layout_height="56dp"
             android:layout_marginTop="20dp"
+            android:layout_marginBottom="16dp"
             android:backgroundTint="#3498db"
             android:text="미러링 시작"
             android:textColor="#ffffff"
             android:textSize="16sp"
             android:textStyle="bold"
             app:cornerRadius="12dp" />
-
-        <!-- 테슬라에 앱 실행 버튼 -->
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnLaunchAppOnTesla"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="16dp"
-            android:backgroundTint="#2D303A"
-            android:text="📱 테슬라 화면에 앱 실행"
-            android:textColor="#b0b5c2"
-            android:textSize="14sp"
-            android:visibility="gone"
-            app:cornerRadius="10dp"
-            app:strokeColor="#3498db"
-            app:strokeWidth="1dp" />
 
         <!-- 라이선스 & 버전 정보 푸터 -->
         <LinearLayout
@@ -447,7 +410,7 @@
                 android:id="@+id/tvVersionInfo"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="mplat Mirror v1.1.2 · Apache License 2.0"
+                android:text="mplat Mirror v1.2.2 · 0MB 초저지연 로컬 터널"
                 android:textColor="#888e9b"
                 android:textSize="12sp" />
 

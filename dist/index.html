@@ -179,30 +179,30 @@
             <img src="app_logo.png" alt="mplat Mirror" class="app-logo">
         </div>
         <h1>mplat Mirror for Tesla</h1>
-        <div class="version-badge">v1.2.0 (Build 9) · Apache License 2.0</div>
-        <p class="subtitle">테슬라 차량 브라우저 전용 고성능 안드로이드 미러링 솔루션</p>
+        <div class="version-badge">v1.2.2 (Build 11) · Apache License 2.0</div>
+        <p class="subtitle">테슬라 차량 브라우저 전용 초저지연 안드로이드 미러링 솔루션</p>
 
         <div class="badge-list">
+            <span class="badge">🚗 운전석 좌측 밀착</span>
+            <span class="badge">⚡ 0MB 로컬 초저지연 프록시</span>
+            <span class="badge">👁️ 몰입형 UI 3초 자동 숨김</span>
+            <span class="badge">📱 티맵 안전점수 100% 보장</span>
+            <span class="badge">✂️ 스마트 내비 분할 확대</span>
+            <span class="badge">👆 양방향 정밀 터치</span>
+            <span class="badge">🔊 차량 스피커 사운드</span>
             <span class="badge">🚀 Rust NDK 엔진</span>
-            <span class="badge">🚗 티맵 안전점수 100% 보장</span>
-            <span class="badge">✂️ 스마트 내비 분할 크롭(Crop)</span>
-            <span class="badge">👆 크롭 좌표 양방향 터치</span>
-            <span class="badge">🔊 차량 스피커 오디오</span>
-            <span class="badge">📱 스마트폰 100% 자유 사용</span>
-            <span class="badge">🗺️ 구글지도 주행일지</span>
-            <span class="badge">⚡ WebCodecs 초저지연</span>
         </div>
 
         <a href="mplatMirror.apk" class="download-btn" download="mplatMirror.apk">
-            <span>📥 mplatMirror.apk 다운로드 (최신 v1.2.0)</span>
+            <span>📥 mplatMirror.apk 다운로드 (최신 v1.2.2)</span>
         </a>
-        <br>
-        <a href="mMirror.apk" class="secondary-link" download="mMirror.apk">
-            구버전 호환용 파일: mMirror.apk 받기
+
+        <a href="/mirror" style="display: flex; align-items: center; justify-content: center; gap: 8px; background: rgba(46, 204, 113, 0.15); color: #2ecc71; border: 1px solid rgba(46, 204, 113, 0.4); padding: 14px 24px; border-radius: 14px; font-weight: 700; text-decoration: none; margin-bottom: 16px; transition: all 0.2s;">
+            <span>🚗 테슬라 모니터 웹 뷰어 열기 (/mirror)</span>
         </a>
 
         <div class="file-meta">
-            <span>버전: v1.2.0</span> • <span>크기: ~27.8 MB</span> • <span>Android 10+ (API 29 이상)</span>
+            <span>버전: v1.2.2</span> • <span>크기: ~27.8 MB</span> • <span>Android 10+ (API 29 이상)</span>
         </div>
 
         <div class="qr-section">
@@ -214,9 +214,9 @@
             <strong>💡 간편 4단계 연결 안내 (데이터 소모 0MB):</strong>
             <ol>
                 <li>APK 다운로드 및 설치 후 <b>'알 수 없는 출처 앱'</b> 설치를 허용합니다.</li>
-                <li>스마트폰 <b>모바일 핫스팟</b>을 켜고, 테슬라 차량 Wi-Fi에 연결합니다.</li>
+                <li>스마트폰 <b>모바일 핫스팟</b>을 켜고, 테슬라 차량 Wi-Fi에 스마트폰 핫스팟을 연결합니다.</li>
                 <li>앱에서 <b>[가상 프록시 켜기]</b> 및 <b>[미러링 시작]</b>을 누릅니다.</li>
-                <li>테슬라 브라우저 주소창에 <code>https://teslamirror.net:9999</code>를 입력하여 접속하고, 폰에서 분할화면으로 티맵을 띄운 뒤 테슬라 화면의 <b>[✂️ 내비 확대]</b> 버튼을 누릅니다!</li>
+                <li>테슬라 브라우저 주소창에 <code>https://teslamirror.net:9999</code>를 입력하여 접속하면 운전석 좌측에 최적화된 풀스크린으로 즉시 미러링됩니다!</li>
             </ol>
         </div>
 
@@ -224,12 +224,21 @@
             <strong>📋 릴리즈 노트</strong>
 
             <div style="margin-top: 12px;">
-                <div style="color: #3498db; font-weight: 700; font-size: 14px;">v1.2.0 — 2026.09.28 (대규모 업데이트)</div>
+                <div style="color: #2ecc71; font-weight: 700; font-size: 14px;">v1.2.2 — 2026.09.29 (최신 업데이트)</div>
+                <ul style="padding-left: 18px; margin: 6px 0 14px;">
+                    <li>🚗 <b>운전석 좌측 밀착 (fit-left) 최적화</b> — 폰 화면 미러링 시 화면 중앙이 아닌 핸들과 운전석 바로 옆 좌측에 꽉 차게 정렬하여 시인성 및 한 손 터치 조작성 대폭 강화</li>
+                    <li>👁️ <b>몰입형 UI 3초 자동 숨김(오토 하이드)</b> — 툴바가 테슬라 화면을 가리지 않도록 3초 후 부드럽게 사라지는 100% 풀스크린 뷰어 탑재 (화면 가장자리 터치 시 즉시 복원)</li>
+                    <li>⚡ <b>원클릭 즉시 미러링 시작</b> — 번거로운 앱 선택 팝업 다이얼로그 및 테스트 버튼 완전 제거, 간결하고 직관적인 UI 개편</li>
+                    <li>👆 <b>테슬라 모니터 1:1 정밀 터치 좌표 역변환</b> — 좌측 정렬 및 풀스크린 확대 시에도 1:1 정확한 터치 반응 제공</li>
+                </ul>
+            </div>
+
+            <div>
+                <div style="color: #3498db; font-weight: 700; font-size: 14px;">v1.2.0 — 2026.09.28</div>
                 <ul style="padding-left: 18px; margin: 6px 0 14px;">
                     <li>🚗 <b>티맵 안전점수 100% 적립 보장</b> — 가짜 웹 지도가 아닌 실제 티맵 앱 세션을 유지하여 자동차 보험료 할인 점수 완벽 적립</li>
-                    <li>✂️ <b>스마트 내비 분할 크롭(Crop) 모드 신설</b> — 갤럭시 분할화면(상단 티맵 + 하단 카톡) 시 상단 티맵 영역만 2배 줌인하여 테슬라 모니터에 풀스크린 송출</li>
-                    <li>📱 <b>스마트폰 100% 자유 사용</b> — 폰 하단에서 카톡, 전화, 유튜브를 마음껏 써도 테슬라 모니터에는 전혀 나오지 않고 오직 티맵만 깨끗하게 표시</li>
-                    <li>👆 <b>크롭 모드 터치 좌표 자동 스케일링</b> — 테슬라 대화면 터치가 스마트폰 상단 티맵 영역으로 정확히 매핑되어 목적지 검색 및 경로 제어 가능</li>
+                    <li>✂️ <b>스마트 내비 분할 크롭(Crop) 모드 신설</b> — 갤럭시 분할화면 시 상단 티맵 영역만 2배 줌인하여 테슬라 모니터에 풀스크린 송출</li>
+                    <li>📱 <b>스마트폰 100% 자유 사용</b> — 폰 하단에서 카톡, 전화, 유튜브를 써도 테슬라 모니터에는 오직 티맵만 깨끗하게 표시</li>
                 </ul>
             </div>
 

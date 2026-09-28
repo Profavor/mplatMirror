@@ -79,6 +79,106 @@
         }
     });
 
+    // 화면 맞춤 모드 (Left / Fill / Cover / Center)
+    const btnFitMode = document.getElementById('btnFitMode');
+    const FIT_MODES = [
+        { id: 'left', label: '🚗 좌측 밀착 (운전석)', title: '핸드폰 화면을 운전석(좌측)에 밀착 배치' },
+        { id: 'fill', label: '⚡ 꽉 채움', title: '화면 전체 꽉 채움 (여백 0% 풀스크린)' },
+        { id: 'cover', label: '🔍 스마트 줌', title: '비율 유지 꽉 채움 (레터박스 제거)' },
+        { id: 'center', label: '📱 중앙 정렬', title: '화면 중앙 정렬 (원본 비율)' }
+    ];
+    let currentFitIndex = 0;
+    const savedFitMode = localStorage.getItem('mmirror_fit_mode') || 'left';
+    const foundIndex = FIT_MODES.findIndex(m => m.id === savedFitMode);
+    if (foundIndex >= 0) currentFitIndex = foundIndex;
+
+    function applyFitMode(modeObj) {
+        window.screenFitMode = modeObj.id;
+        canvas.className = 'fit-' + modeObj.id;
+        if (btnFitMode) {
+            btnFitMode.textContent = modeObj.label;
+            btnFitMode.title = modeObj.title;
+        }
+        localStorage.setItem('mmirror_fit_mode', modeObj.id);
+        console.log('화면 채움 모드 적용:', modeObj.id);
+    }
+
+    if (btnFitMode) {
+        btnFitMode.addEventListener('click', () => {
+            currentFitIndex = (currentFitIndex + 1) % FIT_MODES.length;
+            applyFitMode(FIT_MODES[currentFitIndex]);
+        });
+    }
+    applyFitMode(FIT_MODES[currentFitIndex]);
+
+    // 몰입 모드 & UI 자동 숨김 (Immersive Auto-Hide)
+    const topBar = document.getElementById('topBar');
+    const floatingNavbar = document.getElementById('floatingNavbar');
+    const btnImmersiveToggle = document.getElementById('btnImmersiveToggle');
+    const btnShowUiFab = document.getElementById('btnShowUiFab');
+    const tripLogModal = document.getElementById('tripLogModal');
+
+    window.isImmersiveMode = true; // 기본적으로 3초 후 UI 자동 숨김
+    let uiHideTimer = null;
+
+    function showUiControls() {
+        if (topBar) topBar.classList.remove('ui-hidden');
+        if (floatingNavbar) floatingNavbar.classList.remove('ui-hidden');
+        if (btnShowUiFab) btnShowUiFab.classList.add('hidden');
+        resetUiHideTimer();
+    }
+
+    function hideUiControls() {
+        if (!window.isImmersiveMode) return;
+        if (tripLogModal && !tripLogModal.classList.contains('hidden')) return;
+        if (disconnectOverlay && !disconnectOverlay.classList.contains('hidden')) return;
+
+        if (topBar) topBar.classList.add('ui-hidden');
+        if (floatingNavbar) floatingNavbar.classList.add('ui-hidden');
+        if (btnShowUiFab) btnShowUiFab.classList.remove('hidden');
+    }
+
+    function resetUiHideTimer() {
+        if (uiHideTimer) clearTimeout(uiHideTimer);
+        if (!window.isImmersiveMode) return;
+        uiHideTimer = setTimeout(() => {
+            hideUiControls();
+        }, 3200);
+    }
+
+    window.resetUiHideTimer = resetUiHideTimer;
+    window.showUiControls = showUiControls;
+
+    if (btnImmersiveToggle) {
+        btnImmersiveToggle.addEventListener('click', () => {
+            window.isImmersiveMode = !window.isImmersiveMode;
+            btnImmersiveToggle.classList.toggle('active', !window.isImmersiveMode);
+            btnImmersiveToggle.textContent = window.isImmersiveMode ? '👁️' : '🔒';
+            if (window.isImmersiveMode) {
+                resetUiHideTimer();
+            } else {
+                if (uiHideTimer) clearTimeout(uiHideTimer);
+                showUiControls();
+            }
+        });
+    }
+
+    if (btnShowUiFab) {
+        btnShowUiFab.addEventListener('click', (e) => {
+            e.stopPropagation();
+            showUiControls();
+        });
+    }
+
+    // 마우스 움직임 감지 시 UI 리셋
+    window.addEventListener('mousemove', () => {
+        if (topBar && topBar.classList.contains('ui-hidden')) {
+            showUiControls();
+        } else {
+            resetUiHideTimer();
+        }
+    }, { passive: true });
+
     // 티맵 분할 크롭 모드 (상단 50%만 2배 확대)
     const btnCropToggle = document.getElementById('btnCropToggle');
     const btnNavCrop = document.getElementById('btnNavCrop');

@@ -336,31 +336,19 @@ class MediaProjectionService : Service() {
                 }
             }, null)
 
-            // 해상도 계산
-            val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-            val metrics = DisplayMetrics()
-            @Suppress("DEPRECATION")
-            wm.defaultDisplay.getRealMetrics(metrics)
-
-            // 16배수 정렬 (대부분의 모바일 H.264 하드웨어 인코더 요구사항)
-            var w = (metrics.widthPixels / 16) * 16
-            var h = (metrics.heightPixels / 16) * 16
-            val maxDim = 1280
-            if (w > maxDim || h > maxDim) {
-                val scale = maxDim.toFloat() / maxOf(w, h)
-                w = ((w * scale).toInt() / 16) * 16
-                h = ((h * scale).toInt() / 16) * 16
-            }
-            screenWidth = maxOf(320, w)
-            screenHeight = maxOf(320, h)
-            screenDensity = metrics.densityDpi
+            // 해상도 계산 (폴드 열림/닫힘 및 화면 비율 자동 적응)
+            val (w, h, density) = computeScreenDimensions()
+            screenWidth = w
+            screenHeight = h
+            screenDensity = density
 
             Log.i(TAG, "Streaming resolution: ${screenWidth}x${screenHeight}, density: $screenDensity")
             TouchControlService.instance?.updateDimensions(screenWidth, screenHeight)
 
-            // 0. CPU WakeLock 획득 (전원 버튼 오프 시 Deep Sleep 방지)
+            // 0. CPU WakeLock 획득 및 화면/폴드 변경 리스너 등록
             acquireWakeLock()
             registerScreenStateReceiver()
+            registerDisplayListener()
 
             // 1. Rust HTTP & WebSocket 서버 시작 (로컬용)
             NativeBridge.startServer(port)
@@ -483,57 +471,7 @@ class MediaProjectionService : Service() {
 
             mediaCodec?.start()
             isStreaming = true
-
-            // 인코딩 출력 스트림 루프
-            encodingThread = Thread({
-                val bufferInfo = MediaCodec.BufferInfo()
-                Log.i(TAG, "H.264 Encoder loop started")
-
-                while (isStreaming) {
-                    val outputBufferIndex = try {
-                        mediaCodec?.dequeueOutputBuffer(bufferInfo, 10_000) ?: -1
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Error dequeuing output buffer", e)
-                        -1
-                    }
-
-                    if (outputBufferIndex >= 0) {
-                        val outputBuffer = mediaCodec?.getOutputBuffer(outputBufferIndex)
-                        if (outputBuffer != null && bufferInfo.size > 0) {
-                            outputBuffer.position(bufferInfo.offset)
-                            outputBuffer.limit(bufferInfo.offset + bufferInfo.size)
-
-                            val byteArray = ByteArray(bufferInfo.size)
-                            outputBuffer.get(byteArray)
-
-                            val isCodecConfig = (bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0
-                            val isKeyFrame = (bufferInfo.flags and MediaCodec.BUFFER_FLAG_KEY_FRAME) != 0
-
-                            if (isCodecConfig) {
-                                spsPpsBuffer = byteArray.clone()
-                                NativeBridge.sendVideoFrame(byteArray, 0, bufferInfo.size)
-                                sendRelayVideo(byteArray, false)
-                            } else if (isKeyFrame && spsPpsBuffer != null) {
-                                // 키프레임(IDR) 앞단에 SPS/PPS를 항상 병합하여 전송
-                                // 언제 접속하거나 새로고침한 테슬라 브라우저도 즉시 화면 수신 가능!
-                                val combined = ByteArray(spsPpsBuffer!!.size + byteArray.size)
-                                System.arraycopy(spsPpsBuffer!!, 0, combined, 0, spsPpsBuffer!!.size)
-                                System.arraycopy(byteArray, 0, combined, spsPpsBuffer!!.size, byteArray.size)
-                                NativeBridge.sendVideoFrame(combined, 0, combined.size)
-                                sendRelayVideo(combined, true)
-                            } else {
-                                NativeBridge.sendVideoFrame(byteArray, 0, bufferInfo.size)
-                                sendRelayVideo(byteArray, false)
-                            }
-                        }
-                        mediaCodec?.releaseOutputBuffer(outputBufferIndex, false)
-                    }
-                }
-                Log.i(TAG, "H.264 Encoder loop stopped")
-            }, "mMirror-VideoEncoderThread").apply {
-                priority = Thread.MAX_PRIORITY
-                start()
-            }
+            startEncodingLoop()
 
         } catch (e: Exception) {
             Log.e(TAG, "Failed to setup video encoder", e)
@@ -541,6 +479,182 @@ class MediaProjectionService : Service() {
                 android.widget.Toast.makeText(applicationContext, "인코더 시작 실패: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
             }
             stopMirroring()
+        }
+    }
+
+    private fun startEncodingLoop() {
+        encodingThread = Thread({
+            val bufferInfo = MediaCodec.BufferInfo()
+            Log.i(TAG, "H.264 Encoder loop started (${screenWidth}x${screenHeight})")
+
+            while (isStreaming) {
+                val outputBufferIndex = try {
+                    mediaCodec?.dequeueOutputBuffer(bufferInfo, 10_000) ?: -1
+                } catch (e: Exception) {
+                    if (isStreaming) Log.w(TAG, "Error dequeuing output buffer", e)
+                    -1
+                }
+
+                if (outputBufferIndex >= 0) {
+                    val outputBuffer = mediaCodec?.getOutputBuffer(outputBufferIndex)
+                    if (outputBuffer != null && bufferInfo.size > 0) {
+                        outputBuffer.position(bufferInfo.offset)
+                        outputBuffer.limit(bufferInfo.offset + bufferInfo.size)
+
+                        val byteArray = ByteArray(bufferInfo.size)
+                        outputBuffer.get(byteArray)
+
+                        val isCodecConfig = (bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0
+                        val isKeyFrame = (bufferInfo.flags and MediaCodec.BUFFER_FLAG_KEY_FRAME) != 0
+
+                        if (isCodecConfig) {
+                            spsPpsBuffer = byteArray.clone()
+                            NativeBridge.sendVideoFrame(byteArray, 0, bufferInfo.size)
+                            sendRelayVideo(byteArray, false)
+                        } else if (isKeyFrame && spsPpsBuffer != null) {
+                            // 키프레임(IDR) 앞단에 SPS/PPS를 항상 병합하여 전송
+                            val combined = ByteArray(spsPpsBuffer!!.size + byteArray.size)
+                            System.arraycopy(spsPpsBuffer!!, 0, combined, 0, spsPpsBuffer!!.size)
+                            System.arraycopy(byteArray, 0, combined, spsPpsBuffer!!.size, byteArray.size)
+                            NativeBridge.sendVideoFrame(combined, 0, combined.size)
+                            sendRelayVideo(combined, true)
+                        } else {
+                            NativeBridge.sendVideoFrame(byteArray, 0, bufferInfo.size)
+                            sendRelayVideo(byteArray, false)
+                        }
+                    }
+                    try {
+                        mediaCodec?.releaseOutputBuffer(outputBufferIndex, false)
+                    } catch (_: Exception) {}
+                }
+            }
+            Log.i(TAG, "H.264 Encoder loop stopped")
+        }, "mMirror-VideoEncoderThread").apply {
+            priority = Thread.MAX_PRIORITY
+            start()
+        }
+    }
+
+    private var displayListener: DisplayManager.DisplayListener? = null
+
+    private fun computeScreenDimensions(): Triple<Int, Int, Int> {
+        val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        val metrics = DisplayMetrics()
+        @Suppress("DEPRECATION")
+        wm.defaultDisplay.getRealMetrics(metrics)
+
+        var w = (metrics.widthPixels / 16) * 16
+        var h = (metrics.heightPixels / 16) * 16
+        val maxDim = 1280
+        if (w > maxDim || h > maxDim) {
+            val scale = maxDim.toFloat() / maxOf(w, h)
+            w = ((w * scale).toInt() / 16) * 16
+            h = ((h * scale).toInt() / 16) * 16
+        }
+        return Triple(maxOf(320, w), maxOf(320, h), metrics.densityDpi)
+    }
+
+    private fun registerDisplayListener() {
+        val dm = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
+        displayListener = object : DisplayManager.DisplayListener {
+            override fun onDisplayAdded(displayId: Int) {}
+            override fun onDisplayRemoved(displayId: Int) {}
+            override fun onDisplayChanged(displayId: Int) {
+                if (displayId == android.view.Display.DEFAULT_DISPLAY) {
+                    checkAndApplyDisplayChanges()
+                }
+            }
+        }
+        dm.registerDisplayListener(displayListener, android.os.Handler(android.os.Looper.getMainLooper()))
+    }
+
+    private fun unregisterDisplayListener() {
+        try {
+            displayListener?.let {
+                val dm = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
+                dm.unregisterDisplayListener(it)
+            }
+        } catch (_: Exception) {}
+        displayListener = null
+    }
+
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        Log.i(TAG, "onConfigurationChanged 감지 (폴드 열림/닫힘/화면회전) -> 해상도 자동 동기화")
+        checkAndApplyDisplayChanges()
+    }
+
+    @Synchronized
+    private fun checkAndApplyDisplayChanges() {
+        if (!isStreaming || mediaProjection == null) return
+
+        val (newW, newH, newDensity) = computeScreenDimensions()
+        if (newW == screenWidth && newH == screenHeight) {
+            return
+        }
+
+        Log.i(TAG, "🔄 폴드/화면 전환 감지: ${screenWidth}x${screenHeight} -> ${newW}x${newH} (밀도: $newDensity)")
+        screenWidth = newW
+        screenHeight = newH
+        screenDensity = newDensity
+
+        TouchControlService.instance?.updateDimensions(screenWidth, screenHeight)
+        NativeBridge.updateConfig(screenWidth, screenHeight, 0, 60)
+        sendRelayConfig()
+
+        restartVideoEncoder()
+    }
+
+    private fun restartVideoEncoder() {
+        try {
+            isStreaming = false
+            encodingThread?.interrupt()
+            encodingThread = null
+
+            try {
+                mediaCodec?.stop()
+                mediaCodec?.release()
+            } catch (_: Exception) {}
+
+            val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, screenWidth, screenHeight).apply {
+                setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
+                setInteger(MediaFormat.KEY_BIT_RATE, 4_000_000)
+                setInteger(MediaFormat.KEY_FRAME_RATE, 30)
+                setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
+                try {
+                    setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)
+                } catch (_: Exception) {}
+            }
+
+            mediaCodec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
+            mediaCodec?.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+            val surface = mediaCodec?.createInputSurface()
+
+            if (virtualDisplay != null && surface != null) {
+                virtualDisplay?.setSurface(surface)
+                virtualDisplay?.resize(screenWidth, screenHeight, screenDensity)
+            } else {
+                virtualDisplay = mediaProjection?.createVirtualDisplay(
+                    "mMirror-VirtualDisplay",
+                    screenWidth,
+                    screenHeight,
+                    screenDensity,
+                    DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                    surface,
+                    null,
+                    null
+                )
+            }
+            virtualDisplayId = virtualDisplay?.display?.displayId ?: -1
+
+            mediaCodec?.start()
+            isStreaming = true
+            startEncodingLoop()
+            requestSyncFrame()
+
+            Log.i(TAG, "✅ 폴드 화면 전환 완료: ${screenWidth}x${screenHeight} 실시간 재설정됨")
+        } catch (e: Exception) {
+            Log.e(TAG, "비디오 인코더 재설정 실패: ${e.message}", e)
         }
     }
 
@@ -554,6 +668,8 @@ class MediaProjectionService : Service() {
                 screenStateReceiver = null
             }
         } catch (_: Exception) {}
+
+        unregisterDisplayListener()
 
         try {
             wakeLock?.let {

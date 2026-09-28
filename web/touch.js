@@ -16,13 +16,49 @@
         const rect = canvas.getBoundingClientRect();
         if (rect.width === 0 || rect.height === 0) return null;
 
-        // 캔버스 내 상대 위치 계산
-        const x = clientX - rect.left;
-        const y = clientY - rect.top;
+        let normX = 0;
+        let normY = 0;
 
-        // 0.0 ~ 1.0 범위로 클램핑
-        const normX = Math.max(0.0, Math.min(1.0, x / rect.width));
-        let normY = Math.max(0.0, Math.min(1.0, y / rect.height));
+        if (window.screenFitMode === 'cover' && canvas.width > 0 && canvas.height > 0) {
+            const containerRatio = rect.width / rect.height;
+            const videoRatio = canvas.width / canvas.height;
+
+            if (videoRatio < containerRatio) {
+                // 비디오가 컨테이너보다 좁음 (세로 모드) -> 상하가 잘림
+                const scale = rect.width / canvas.width;
+                const scaledHeight = canvas.height * scale;
+                const offsetY = (scaledHeight - rect.height) / 2;
+
+                const x = clientX - rect.left;
+                const y = (clientY - rect.top) + offsetY;
+
+                normX = Math.max(0.0, Math.min(1.0, x / rect.width));
+                normY = Math.max(0.0, Math.min(1.0, y / scaledHeight));
+            } else {
+                // 비디오가 컨테이너보다 넓음 (와이드) -> 좌우가 잘림
+                const scale = rect.height / canvas.height;
+                const scaledWidth = canvas.width * scale;
+                const offsetX = (scaledWidth - rect.width) / 2;
+
+                const x = (clientX - rect.left) + offsetX;
+                const y = clientY - rect.top;
+
+                normX = Math.max(0.0, Math.min(1.0, x / scaledWidth));
+                normY = Math.max(0.0, Math.min(1.0, y / rect.height));
+            }
+        } else {
+            // 'left' (좌측 밀착), 'fill' (100% 꽉 채움) 또는 'center'
+            const x = clientX - rect.left;
+            const y = clientY - rect.top;
+
+            // 캔버스 영역 밖(우측 여백 등) 터치는 무시
+            if (x < 0 || x > rect.width || y < 0 || y > rect.height) {
+                return null;
+            }
+
+            normX = Math.max(0.0, Math.min(1.0, x / rect.width));
+            normY = Math.max(0.0, Math.min(1.0, y / rect.height));
+        }
 
         // 티맵 분할 크롭 모드 활성화 시 터치 좌표를 상단 50% 영역으로 자동 스케일링
         if (window.isCropMode) {
@@ -36,6 +72,11 @@
     // --- 터치 이벤트 핸들러 (테슬라 디스플레이 전용) ---
     canvas.addEventListener('touchstart', (e) => {
         e.preventDefault();
+        if (window.resetUiHideTimer) window.resetUiHideTimer();
+        if (e.changedTouches[0] && e.changedTouches[0].clientY < 40) {
+            if (window.showUiControls) window.showUiControls();
+        }
+
         for (let i = 0; i < e.changedTouches.length; i++) {
             const touch = e.changedTouches[i];
             const coords = getNormalizedCoords(touch.clientX, touch.clientY);
@@ -53,6 +94,8 @@
 
     canvas.addEventListener('touchmove', (e) => {
         e.preventDefault();
+        if (window.resetUiHideTimer) window.resetUiHideTimer();
+
         for (let i = 0; i < e.changedTouches.length; i++) {
             const touch = e.changedTouches[i];
             const coords = getNormalizedCoords(touch.clientX, touch.clientY);

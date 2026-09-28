@@ -8,7 +8,7 @@ use jni::objects::{JClass, JString};
 use jni::sys::{jboolean, jbyteArray, jdouble, jfloat, jint, jlong};
 use jni::{JNIEnv, JavaVM};
 use tokio::runtime::Runtime;
-use tracing::{info, error};
+use tracing::info;
 
 use crate::protocol::{ControlMessage, DeviceConfig, GpsData, TripRecord};
 use crate::server::MirrorServer;

@@ -186,19 +186,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        binding.btnTestBrowser.setOnClickListener {
-            val port = NativeBridge.getServerPort().takeIf { it > 0 } ?: serverPort
-            // 폰 자체 브라우저 테스트는 항상 loopback으로 직접 접속
-            // (7.7.7.7은 테슬라 등 외부 디바이스 전용 가상 주소)
-            val url = "http://127.0.0.1:$port"
-            try {
-                val browserIntent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))
-                startActivity(browserIntent)
-            } catch (e: Exception) {
-                Toast.makeText(this, "브라우저 열기 실패: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
-
         binding.switchLocalProxy.setOnClickListener {
             val isChecked = binding.switchLocalProxy.isChecked
             if (isChecked) {
@@ -251,228 +238,10 @@ class MainActivity : AppCompatActivity() {
         binding.btnOpenTripLog.setOnClickListener {
             showTripLogDialog()
         }
-
-        binding.btnLaunchAppOnTesla.setOnClickListener {
-            showAppPickerForTesla()
-        }
     }
 
-    data class TeslaAppItem(
-        val name: String,
-        val packageName: String,
-        val icon: Drawable?,
-        val isFavorite: Boolean,
-        val isRecent: Boolean
-    )
 
-    /**
-     * 테슬라 가상 디스플레이에 실행할 앱을 선택하는 모던 바텀시트 런처
-     * (아이콘 표시 + 실시간 검색 + 즐겨찾기/최근 사용 우선 정렬)
-     */
-    private fun showAppPickerForTesla() {
-        if (!MediaProjectionService.isRunning || MediaProjectionService.virtualDisplayId < 0) {
-            if (MediaProjectionService.isRunning) {
-                Toast.makeText(this, "ℹ️ 이 기기에서는 폰 화면 미러 모드로 동작합니다.", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(this, "먼저 미러링을 시작하세요.", Toast.LENGTH_SHORT).show()
-            }
-            return
-        }
 
-        val pm = packageManager
-        val prefs = getSharedPreferences("app_presets", Context.MODE_PRIVATE)
-        val lastUsedPackage = prefs.getString("last_app_package", null)
-        val favoritePackages = prefs.getStringSet("favorite_apps", mutableSetOf()) ?: mutableSetOf()
-
-        // 1. 전체 설치된 런처 앱 조회 (QUERY_ALL_PACKAGES 권한으로 100% 조회)
-        val mainIntent = Intent(Intent.ACTION_MAIN, null).apply {
-            addCategory(Intent.CATEGORY_LAUNCHER)
-        }
-        val resolveList = pm.queryIntentActivities(mainIntent, 0)
-
-        val allApps = mutableListOf<TeslaAppItem>()
-        val seenPackages = mutableSetOf<String>()
-
-        for (info in resolveList) {
-            val pkg = info.activityInfo.packageName
-            if (pkg == packageName || seenPackages.contains(pkg)) continue
-            seenPackages.add(pkg)
-
-            val label = info.loadLabel(pm).toString()
-            val icon = try { info.loadIcon(pm) } catch (_: Exception) { null }
-            val isRecent = pkg == lastUsedPackage
-            val isFav = favoritePackages.contains(pkg)
-
-            allApps.add(TeslaAppItem(label, pkg, icon, isFav, isRecent))
-        }
-
-        // 정렬: 최근 실행 최우선 -> 즐겨찾기 -> 가나다순
-        allApps.sortWith(compareByDescending<TeslaAppItem> { it.isRecent }
-            .thenByDescending { it.isFavorite }
-            .thenBy { it.name.lowercase() })
-
-        val bottomSheet = BottomSheetDialog(this)
-        val dialogView = layoutInflater.inflate(R.layout.dialog_app_picker, null)
-        bottomSheet.setContentView(dialogView)
-
-        val tvAppCount = dialogView.findViewById<TextView>(R.id.tvAppCount)
-        val etSearch = dialogView.findViewById<EditText>(R.id.etSearchApp)
-        val btnClear = dialogView.findViewById<ImageButton>(R.id.btnClearSearch)
-        val rvAppList = dialogView.findViewById<RecyclerView>(R.id.rvAppList)
-        val tvEmptyState = dialogView.findViewById<TextView>(R.id.tvEmptyState)
-
-        tvAppCount.text = "${allApps.size}개 앱"
-
-        val filteredList = ArrayList(allApps)
-
-        val adapter = object : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
-            override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
-                val itemView = LayoutInflater.from(parent.context).inflate(R.layout.item_app_entry, parent, false)
-                return object : RecyclerView.ViewHolder(itemView) {}
-            }
-
-            override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
-                val app = filteredList[position]
-                val ivIcon = holder.itemView.findViewById<ImageView>(R.id.ivAppIcon)
-                val tvName = holder.itemView.findViewById<TextView>(R.id.tvAppName)
-                val tvPkg = holder.itemView.findViewById<TextView>(R.id.tvAppPackage)
-                val tvStar = holder.itemView.findViewById<TextView>(R.id.tvStarBadge)
-
-                tvName.text = app.name
-                tvPkg.text = app.packageName
-                if (app.icon != null) {
-                    ivIcon.setImageDrawable(app.icon)
-                } else {
-                    ivIcon.setImageResource(android.R.drawable.sym_def_app_icon)
-                }
-
-                if (app.isRecent) {
-                    tvStar.text = "⭐ 최근"
-                    tvStar.visibility = View.VISIBLE
-                } else if (app.isFavorite) {
-                    tvStar.text = "★ 즐겨찾기"
-                    tvStar.visibility = View.VISIBLE
-                } else {
-                    tvStar.visibility = View.GONE
-                }
-
-                holder.itemView.setOnClickListener {
-                    bottomSheet.dismiss()
-                    launchAndSavePreset(app.packageName, app.name)
-                }
-            }
-
-            override fun getItemCount(): Int = filteredList.size
-        }
-
-        rvAppList.layoutManager = LinearLayoutManager(this)
-        rvAppList.adapter = adapter
-
-        // 실시간 검색 필터링
-        etSearch.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                val query = s?.toString()?.trim() ?: ""
-                btnClear.visibility = if (query.isNotEmpty()) View.VISIBLE else View.GONE
-
-                filteredList.clear()
-                if (query.isEmpty()) {
-                    filteredList.addAll(allApps)
-                } else {
-                    val lower = query.lowercase()
-                    for (app in allApps) {
-                        if (app.name.lowercase().contains(lower) || app.packageName.lowercase().contains(lower)) {
-                            filteredList.add(app)
-                        }
-                    }
-                }
-                adapter.notifyDataSetChanged()
-                tvEmptyState.visibility = if (filteredList.isEmpty()) View.VISIBLE else View.GONE
-                tvAppCount.text = "${filteredList.size}개 앱"
-            }
-            override fun afterTextChanged(s: Editable?) {}
-        })
-
-        btnClear.setOnClickListener {
-            etSearch.setText("")
-        }
-
-        bottomSheet.show()
-    }
-
-    private fun saveAppPreset(packageName: String, displayName: String) {
-        val prefs = getSharedPreferences("app_presets", Context.MODE_PRIVATE)
-        val favorites = prefs.getStringSet("favorite_apps", mutableSetOf())?.toMutableSet() ?: mutableSetOf()
-        favorites.add(packageName)
-        prefs.edit()
-            .putString("last_app_package", packageName)
-            .putString("last_app_name", displayName)
-            .putStringSet("favorite_apps", favorites)
-            .apply()
-    }
-
-    /**
-     * 앱을 선택하면 자동으로 실행:
-     * 1) 가상 디스플레이 독립 모드 시도
-     * 2) 보안 제한 시 자동으로 갤럭시 [팝업 창(Pop-up Window)]으로 실행!
-     *    -> 폰 전체를 덮지 않고 팝업으로 작게 떠서, 폰으로 카톡/유튜브 등을 자유롭게 사용하면서 테슬라에는 내비 유지!
-     */
-    private fun launchAndSavePreset(packageName: String, displayName: String) {
-        val pm = packageManager
-        val launchIntent = pm.getLaunchIntentForPackage(packageName)
-        if (launchIntent == null) {
-            Toast.makeText(this, "앱을 실행할 수 없습니다.", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        // 1. 가상 디스플레이 독립 실행 시도
-        val successVirtual = MediaProjectionService.instance?.launchAppOnVirtualDisplay(launchIntent) ?: false
-        if (successVirtual) {
-            saveAppPreset(packageName, displayName)
-            Toast.makeText(this, "✅ ${displayName}이(가) 가상 화면에서 실행됩니다.", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        // 2. 가상 화면 직접 라운치가 차단된 경우 -> 자동으로 갤럭시 팝업 윈도우(Pop-up Window)로 실행!
-        try {
-            val dm = resources.displayMetrics
-            val screenW = dm.widthPixels
-            val screenH = dm.heightPixels
-
-            val popupW = (screenW * 0.80).toInt()
-            val popupH = (screenH * 0.55).toInt()
-            val left = (screenW - popupW) / 2
-            val top = 100
-            val right = left + popupW
-            val bottom = top + popupH
-
-            val options = ActivityOptions.makeBasic()
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                options.launchBounds = Rect(left, top, right, bottom)
-            }
-            try {
-                // WINDOWING_MODE_FREEFORM = 5 (갤럭시 팝업 윈도우)
-                val method = options.javaClass.getMethod("setLaunchWindowingMode", Int::class.javaPrimitiveType)
-                method.invoke(options, 5)
-            } catch (_: Exception) {}
-
-            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
-            startActivity(launchIntent, options.toBundle())
-
-            saveAppPreset(packageName, displayName)
-            Toast.makeText(this, "✨ ${displayName}이(가) 팝업 창으로 자동 실행되었습니다.\n폰을 자유롭게 사용하세요!", Toast.LENGTH_LONG).show()
-        } catch (e: Exception) {
-            // 3. 폴백: 일반 실행
-            try {
-                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                startActivity(launchIntent)
-                saveAppPreset(packageName, displayName)
-                Toast.makeText(this, "✅ ${displayName}이(가) 실행되었습니다.", Toast.LENGTH_SHORT).show()
-            } catch (ex: Exception) {
-                Toast.makeText(this, "앱 실행 실패: ${ex.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
 
     private fun showTripLogDialog() {
         val message = """
@@ -493,13 +262,6 @@ class MainActivity : AppCompatActivity() {
             .setTitle("🚗 테슬라 주행일지 & GPS 통계")
             .setMessage(message)
             .setPositiveButton("확인", null)
-            .setNeutralButton("웹에서 지도 열기") { _, _ ->
-                val port = NativeBridge.getServerPort().takeIf { it > 0 } ?: serverPort
-                val url = if (LocalProxyVpnService.isRunning) "http://7.7.7.7:7777" else "http://127.0.0.1:$port"
-                try {
-                    startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)))
-                } catch (_: Exception) {}
-            }
             .show()
     }
 
@@ -595,13 +357,6 @@ class MainActivity : AppCompatActivity() {
         ContextCompat.startForegroundService(this, serviceIntent)
         updateUIState()
         Toast.makeText(this, "화면 송출이 시작되었습니다.", Toast.LENGTH_SHORT).show()
-
-        // 가상 디스플레이 생성 후 자동으로 앱 선택 다이얼로그 띄우기
-        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-            if (MediaProjectionService.isRunning && MediaProjectionService.virtualDisplayId >= 0) {
-                showAppPickerForTesla()
-            }
-        }, 1200)
     }
 
     private fun stopMirroringService() {
@@ -617,11 +372,9 @@ class MainActivity : AppCompatActivity() {
         if (MediaProjectionService.isRunning) {
             binding.btnToggleMirroring.text = "미러링 중지"
             binding.btnToggleMirroring.setBackgroundColor(0xFFE74C3C.toInt())
-            binding.btnLaunchAppOnTesla.visibility = android.view.View.VISIBLE
         } else {
             binding.btnToggleMirroring.text = "미러링 시작"
             binding.btnToggleMirroring.setBackgroundColor(0xFF3498DB.toInt())
-            binding.btnLaunchAppOnTesla.visibility = android.view.View.GONE
         }
 
         val proxyActive = LocalProxyVpnService.isRunning
