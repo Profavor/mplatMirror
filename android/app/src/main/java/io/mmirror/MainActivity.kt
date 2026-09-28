@@ -249,8 +249,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showConnectionManualDialog() {
-        val hotspotIp = getHotspotIp()
-        val port = NativeBridge.getServerPort().takeIf { it > 0 } ?: serverPort
         val message = """
             📖 테슬라 연결 & 사용 상세 매뉴얼 (v${BuildConfig.VERSION_NAME})
 
@@ -269,7 +267,7 @@ class MainActivity : AppCompatActivity() {
             ① 테슬라 모니터 하단 메뉴에서 브라우저를 실행합니다.
             ② 주소창에 아래 추천 주소를 입력합니다:
                👉 https://teslamirror.net:9999
-               (보조 주소: http://td9.cc:7777  |  직접: http://$hotspotIp:$port)
+               (보조 주소: http://td9.cc:7777)
             ③ 테슬라 브라우저 상단 ★ (즐겨찾기) 버튼을 눌러 북마크에 추가해두시면 다음 탑승부터 원클릭으로 바로 연결됩니다!
 
             【 4단계: 갤럭시 폴드 & 편의기능 】
@@ -527,14 +525,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateNetworkAddress() {
         val apEnabled = isWifiApEnabled()
-        val hotspotIp = getHotspotIp()
-        val port = NativeBridge.getServerPort().takeIf { it > 0 } ?: serverPort
 
         binding.tvTeslaAddress.text = "https://teslamirror.net:9999"
-        binding.tvSecondaryAddress.text = "보조: http://td9.cc:7777  |  직접: http://$hotspotIp:$port"
+        binding.tvSecondaryAddress.text = "보조 주소(HTTP): http://td9.cc:7777"
 
         if (apEnabled) {
-            binding.tvHotspotStatus.text = "✓ 핫스팟 켜짐 ($hotspotIp) - 테슬라 Wi-Fi 연결 대기"
+            binding.tvHotspotStatus.text = "✓ 핫스팟 켜짐 - 테슬라 Wi-Fi 연결 대기"
             binding.tvHotspotStatus.setTextColor(0xFF2ECC71.toInt())
             binding.btnOpenHotspot.text = "✓ 핫스팟 켜짐"
             binding.btnOpenHotspot.setBackgroundColor(0xFF2D303A.toInt())

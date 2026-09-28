@@ -148,7 +148,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
-                    android:text="보조 가상: http://td9.cc:7777  |  직접: http://192.168.43.1:8080"
+                    android:text="보조 주소(HTTP): http://td9.cc:7777"
                     android:textColor="#3498db"
                     android:textSize="12sp" />
 
@@ -390,7 +390,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
                     android:lineSpacingExtra="4dp"
-                    android:text="1️⃣ 스마트폰 모바일 핫스팟 켜기 &amp; 테슬라 Wi-Fi 연결\n     ⚠️ 필수: 테슬라 Wi-Fi 설정에서 [D 기어 시 연결 유지] 체크!\n2️⃣ [가상 프록시(0MB)] 확인 후 아래 [미러링 시작] 터치\n3️⃣ 테슬라 브라우저에서 https://teslamirror.net:9999 접속\n     (보조 주소: http://td9.cc:7777  |  직접: http://192.168.43.1:8080)"
+                    android:text="1️⃣ 스마트폰 모바일 핫스팟 켜기 &amp; 테슬라 Wi-Fi 연결\n     ⚠️ 필수: 테슬라 Wi-Fi 설정에서 [D 기어 시 연결 유지] 체크!\n2️⃣ [가상 프록시(0MB)] 확인 후 아래 [미러링 시작] 터치\n3️⃣ 테슬라 브라우저에서 https://teslamirror.net:9999 접속\n     (보조 주소: http://td9.cc:7777)"
                     android:textColor="#cbd5e1"
                     android:textSize="12sp" />
 
