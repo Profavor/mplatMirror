@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#16171d"
+    android:orientation="vertical"
+    android:paddingTop="12dp">
+
+    <!-- 상단 핸들 바 (BottomSheet 감성) -->
+    <View
+        android:layout_width="40dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginBottom="12dp"
+        android:background="#3a3f4d" />
+
+    <!-- 헤더 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="20dp"
+        android:paddingBottom="12dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="🚗 테슬라 화면에 실행할 앱"
+            android:textColor="#ffffff"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tvAppCount"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="#272b35"
+            android:paddingHorizontal="8dp"
+            android:paddingVertical="3dp"
+            android:textColor="#3498db"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- 검색창 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginHorizontal="20dp"
+        android:layout_marginBottom="12dp"
+        android:background="#22252f"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="14dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="🔍"
+            android:textSize="16sp" />
+
+        <EditText
+            android:id="@+id/etSearchApp"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:background="@null"
+            android:hint="앱 이름 검색 (예: 티맵, 카카오, 넷플릭스...)"
+            android:imeOptions="actionDone"
+            android:inputType="text"
+            android:maxLines="1"
+            android:textColor="#ffffff"
+            android:textColorHint="#6f7584"
+            android:textSize="14sp" />
+
+        <ImageButton
+            android:id="@+id/btnClearSearch"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:background="@null"
+            android:contentDescription="검색 초기화"
+            android:src="@android:drawable/ic_menu_close_clear_cancel"
+            android:visibility="gone"
+            app:tint="#8e94a5" />
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#272b35" />
+
+    <!-- 앱 목록 RecyclerView -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rvAppList"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipToPadding="false"
+        android:paddingVertical="8dp"
+        android:scrollbars="vertical" />
+
+    <!-- 검색 결과 없음 표시 -->
+    <TextView
+        android:id="@+id/tvEmptyState"
+        android:layout_width="match_parent"
+        android:layout_height="180dp"
+        android:gravity="center"
+        android:text="일치하는 앱을 찾을 수 없습니다."
+        android:textColor="#6f7584"
+        android:textSize="14sp"
+        android:visibility="gone" />
+
+</LinearLayout>

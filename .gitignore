@@ -1,0 +1,29 @@
+# Gradle & Android build files
+.gradle/
+**/build/
+android/.gradle/
+android/local.properties
+android/app/build/
+*.iml
+.idea/
+.vscode/
+
+# Rust build files
+**/target/
+core-rust/target/
+**/*.rs.bk
+
+# Secrets and Private Keys
+*.pem
+dist/*.pem
+*.key
+*.keystore
+*.jks
+
+# Binary APKs (Deploy via GitHub Releases)
+*.apk
+dist/*.apk
+
+# OS files
+.DS_Store
+Thumbs.db

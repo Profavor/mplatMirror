@@ -1,0 +1,7 @@
+[target.aarch64-linux-android]
+linker = "/home/profavor/android-sdk/ndk/26.1.10909125/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang"
+ar = "/home/profavor/android-sdk/ndk/26.1.10909125/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"
+
+[target.x86_64-linux-android]
+linker = "/home/profavor/android-sdk/ndk/26.1.10909125/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android24-clang"
+ar = "/home/profavor/android-sdk/ndk/26.1.10909125/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar"

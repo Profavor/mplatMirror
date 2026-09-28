@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>mplat Mirror - Tesla Direct Connect</title>
+    <style>
+        body {
+            background-color: #0b0c10;
+            color: #ffffff;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .card {
+            background: #16171d;
+            border: 1px solid #272b35;
+            border-radius: 20px;
+            padding: 36px 30px;
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 16px 40px rgba(0,0,0,0.8);
+        }
+        h1 {
+            font-size: 26px;
+            color: #3498db;
+            margin-bottom: 8px;
+        }
+        p {
+            color: #8e94a5;
+            font-size: 14px;
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+        .status-box {
+            background: #1f232d;
+            border-radius: 12px;
+            padding: 14px;
+            margin-bottom: 24px;
+            font-size: 15px;
+            color: #f1c40f;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        .btn-group {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            margin-bottom: 28px;
+        }
+        .btn {
+            display: block;
+            background: #3498db;
+            color: #fff;
+            padding: 16px;
+            border-radius: 12px;
+            text-decoration: none;
+            font-size: 18px;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        .btn:hover {
+            background: #2980b9;
+            transform: translateY(-2px);
+        }
+        .btn-green {
+            background: #2ecc71;
+        }
+        .btn-green:hover {
+            background: #27ae60;
+        }
+        .btn-alt {
+            background: #e67e22;
+        }
+        .btn-alt:hover {
+            background: #d35400;
+        }
+        .tips {
+            text-align: left;
+            background: rgba(255,255,255,0.04);
+            border-left: 4px solid #3498db;
+            padding: 14px 18px;
+            border-radius: 8px;
+            font-size: 13px;
+            color: #b0b5c2;
+            line-height: 1.7;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>🚗 mplat Mirror 테슬라 원클릭 접속기</h1>
+        <p>스마트폰 연결을 자동 감지하고 있습니다. 아래 버튼을 터치하여 바로 연결할 수도 있습니다.</p>
+
+        <div id="statusBox" class="status-box">
+            <span>📡 스마트폰 로컬 미러링 서버 탐색 중...</span>
+        </div>
+
+        <div class="btn-group">
+            <a href="https://teslamirror.net:9999" class="btn" style="background: #2ecc71;" id="btnTeslaMirror">
+                ⚡ 0MB 초고속 로컬 연결 (https://teslamirror.net:9999)
+            </a>
+            <a href="http://td9.cc:7777" class="btn" id="btnTd9">
+                ⚡ 보조 로컬 가상 접속 (http://td9.cc:7777)
+            </a>
+            <a href="http://7.7.7.7:7777" class="btn btn-alt" id="btn7777">
+                ⚡ 직접 가상 주소 접속 (http://7.7.7.7:7777)
+            </a>
+            <a href="https://mdm.mplat.store:8088/" class="btn" style="background: #4a5568; font-size: 15px; padding: 12px;" id="btnRelay">
+                🌐 원격 릴레이 접속 (모바일 데이터 소모됨)
+            </a>
+        </div>
+
+        <div class="tips">
+            <strong>💡 연결 전 필수 체크리스트:</strong><br>
+            1. 스마트폰 <strong>mplat Mirror 앱에서 [미러링 시작]</strong>이 켜져 있어야 합니다.<br>
+            2. 테슬라 Wi-Fi가 스마트폰 핫스팟에 연결되어 있고, <strong>[드라이브 중 연결 유지]</strong>가 체크되어 있어야 합니다.<br>
+            3. 최초 접속 시 보안 경고가 뜨면 <strong>[고급] -> [계속 진행(안전하지 않음)]</strong>을 터치하시면 이후 자동 연결됩니다.<br>
+            4. 접속 후 상단 <strong>[✂️ 내비 확대]</strong> 버튼을 누르면 티맵이 2배로 시원하게 확대됩니다!
+        </div>
+    </div>
+
+    <script>
+        const testUrls = [
+            "https://teslamirror.net:9999",
+            "http://td9.cc:7777",
+            "http://7.7.7.7:7777",
+            "http://100.99.9.9:9999"
+        ];
+
+        let redirected = false;
+
+        function checkUrl(url) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => resolve(url);
+                img.onerror = () => {
+                    const controller = new AbortController();
+                    setTimeout(() => controller.abort(), 1200);
+                    fetch(url + '/status', { signal: controller.signal, mode: 'no-cors' })
+                        .then(() => resolve(url))
+                        .catch(() => resolve(null));
+                };
+                img.src = url + '/logo.png?t=' + Date.now();
+                setTimeout(() => resolve(null), 1200);
+            });
+        }
+
+        async function autoDetect() {
+            const statusBox = document.getElementById('statusBox');
+            for (let i = 0; i < 20; i++) {
+                if (redirected) break;
+                for (const url of testUrls) {
+                    const result = await checkUrl(url);
+                    if (result && !redirected) {
+                        redirected = true;
+                        statusBox.innerHTML = `🟢 <b>로컬 연결 감지 성공!</b> ${url} (으)로 이동합니다...`;
+                        statusBox.style.color = "#2ecc71";
+                        setTimeout(() => {
+                            window.location.href = url;
+                        }, 500);
+                        return;
+                    }
+                }
+                await new Promise(r => setTimeout(r, 1000));
+            }
+            if (!redirected) {
+                statusBox.innerHTML = `⚡ 테슬라 핫스팟 연결 확인 후 <b>초고속 로컬 연결</b> 버튼을 눌러주세요`;
+                statusBox.style.color = "#e67e22";
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', autoDetect);
+    </script>
+</body>
+</html>

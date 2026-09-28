@@ -1,0 +1,39 @@
+[package]
+name = "mplat-mirror-core"
+version = "1.2.0"
+edition = "2021"
+authors = ["mplat Team"]
+description = "mplat Mirror - High-performance Rust streaming and control core for Tesla in-car display"
+license = "Apache-2.0"
+
+[lib]
+name = "mmirror_core"
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "mplat-relay"
+path = "src/bin/relay.rs"
+
+[dependencies]
+tokio = { version = "1.38", features = ["full"] }
+axum = { version = "0.7", features = ["ws"] }
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+jni = "0.21"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+bytes = "1.6"
+futures-util = "0.3"
+socket2 = "0.6.5"
+axum-server = { version = "0.8.0", features = ["tls-rustls"] }
+rcgen = "0.14.10"
+ipstack = "1.0.1"
+libc = "0.2"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

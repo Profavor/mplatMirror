@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>mplat Mirror - Tesla In-Car Display</title>
+    <link rel="stylesheet" href="leaflet.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="appContainer">
+        <!-- 상단 헤더 / 정보 바 -->
+        <header id="topBar">
+            <div class="status-indicator">
+                <span id="statusDot" class="dot disconnected"></span>
+                <span id="statusText">연결 대기 중...</span>
+                <span class="app-version-badge">v1.2.0</span>
+            </div>
+
+            <div class="metrics">
+                <span id="resolutionInfo">-- x --</span>
+                <span id="fpsInfo">0 FPS</span>
+                <span id="latencyInfo">-- ms</span>
+            </div>
+
+            <div class="header-actions">
+                <button id="btnCropToggle" class="icon-btn" title="티맵 상단 50% 분할 크롭 모드 (내비만 2배 확대)">✂️ 내비 확대</button>
+                <button id="btnHeaderTripLog" class="icon-btn" title="주행일지 &amp; 지도">🚗</button>
+                <button id="btnAudioToggle" class="icon-btn" title="오디오 토글">🔊</button>
+                <button id="btnFullscreen" class="icon-btn" title="전체화면">⛶</button>
+            </div>
+        </header>
+
+        <!-- 메인 뷰어 영역 -->
+        <main id="viewportContainer">
+            <!-- 캔버스 (주행 중 비디오 차단 방지 & WebCodecs 초저지연 하드웨어 렌더링) -->
+            <canvas id="videoCanvas"></canvas>
+            
+            <!-- 오디오 자동재생 언락 안내 오버레이 (테슬라 브라우저 사용자 제스처 필요 시) -->
+            <div id="audioUnlockOverlay" class="overlay hidden">
+                <div class="overlay-card">
+                    <p>차량 스피커로 소리를 들으려면 화면을 터치하세요.</p>
+                    <button id="btnUnlockAudio" class="btn-primary">오디오 활성화</button>
+                </div>
+            </div>
+
+            <!-- 연결 대기 및 이지 가이드 오버레이 -->
+            <div id="disconnectOverlay" class="overlay">
+                <div class="overlay-card guide-card">
+                    <div class="guide-header">
+                        <img src="logo.png" alt="mplat Mirror Logo" class="guide-logo">
+                        <div class="guide-title-box">
+                            <h2 id="overlayTitle">mplat Mirror 테슬라 연결 가이드 <span class="badge-version">v1.2.0</span></h2>
+                            <p class="guide-sub">컴퓨터 연결이나 개발자 모드 없이 3초 만에 시작하세요</p>
+                        </div>
+                    </div>
+                    
+                    <div class="guide-steps">
+                        <div class="guide-step-item step-done">
+                            <div class="step-num">✓</div>
+                            <div class="step-content">
+                                <strong>1단계: 차량 핫스팟 연결 확인</strong>
+                                <span>테슬라 Wi-Fi가 스마트폰 핫스팟에 정상 연결되었습니다.</span>
+                            </div>
+                        </div>
+                        <div class="guide-step-item step-active">
+                            <div class="step-num">2</div>
+                            <div class="step-content">
+                                <strong>2단계: 스마트폰에서 [미러링 시작] 터치</strong>
+                                <span id="overlayMessage">스마트폰 mplat Mirror 앱에서 파란색 <strong>[미러링 시작]</strong> 버튼을 누르고 <strong>'지금 시작'</strong>을 선택하세요.</span>
+                            </div>
+                        </div>
+                        <div class="guide-step-item">
+                            <div class="step-num">3</div>
+                            <div class="step-content">
+                                <strong>3단계: 테슬라 대화면 터치 조작 &amp; 즐기기</strong>
+                                <span>테슬라 화면으로 스마트폰을 직접 터치하고 티맵/유튜브를 감상하세요!</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="guide-tips">
+                        <span>💡 <strong>운전자 꿀팁</strong>: 현재 주소를 테슬라 브라우저 <strong>★ 즐겨찾기(북마크)</strong>에 등록해두시면 다음부터 원클릭 접속됩니다!</span>
+                    </div>
+
+                    <div class="guide-footer-status">
+                        <div class="spinner-small"></div>
+                        <span>스마트폰의 [미러링 시작] 신호를 기다리는 중...</span>
+                    </div>
+
+                    <div class="guide-legal">
+                        <span>mplat Mirror v1.2.0 · 0MB 초저지연 로컬 프록시 · Copyright © 2026 mplat</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 주행일지 & 지도 모달 -->
+            <div id="tripLogModal" class="modal-overlay hidden" style="display: none;">
+                <div class="modal-window">
+                    <div class="modal-header">
+                        <div class="modal-title">
+                            <span class="modal-icon">🚗</span>
+                            <h2>테슬라 주행일지 &amp; GPS 지도</h2>
+                        </div>
+                        <button id="btnCloseTripModal" class="btn-close-modal" title="닫기">✕ 닫기</button>
+                    </div>
+
+                    <!-- 모달 내부 실시간 주행 HUD 바 -->
+                    <div class="modal-hud-bar">
+                        <div class="hud-item speed-badge">
+                            <span id="hudSpeed">0</span>
+                            <small>km/h</small>
+                        </div>
+                        <div class="hud-item info-badge">
+                            <span class="badge-label">이번 주행거리</span>
+                            <span id="hudDistance">0.0 km</span>
+                        </div>
+                        <div class="hud-item info-badge">
+                            <span class="badge-label">주행 시간</span>
+                            <span id="hudDuration">00:00</span>
+                        </div>
+                    </div>
+
+                    <div class="modal-body">
+                        <div id="mapContainer"></div>
+                        <div id="tripSidebar">
+                            <div class="sidebar-header">
+                                <h3>주행 기록 목록</h3>
+                            </div>
+                            <div id="tripList" class="trip-list-scroll"></div>
+                            <div class="sidebar-footer">
+                                <button id="btnBottomCloseTripModal" class="btn-sidebar-close">✕ 닫고 미러링 복귀</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- 플로팅 가상 내비게이션 바 (안드로이드 제어용) -->
+        <nav id="floatingNavbar">
+            <button id="btnNavBack" class="nav-btn" title="뒤로가기">
+                <svg viewBox="0 0 24 24"><path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+                <span>Back</span>
+            </button>
+            <button id="btnNavHome" class="nav-btn" title="홈 화면">
+                <svg viewBox="0 0 24 24"><path fill="currentColor" d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+                <span>Home</span>
+            </button>
+            <button id="btnNavRecents" class="nav-btn" title="최근 앱">
+                <svg viewBox="0 0 24 24"><path fill="currentColor" d="M4 6h16v12H4zM2 4v16h20V4H2z"/></svg>
+                <span>Apps</span>
+            </button>
+            <button id="btnNavSplit" class="nav-btn" title="화면 분할 (멀티윈도우)">
+                <svg viewBox="0 0 24 24"><path fill="currentColor" d="M3 5v14h8V5H3zm6 12H5V7h4v10zm4-12v14h8V5h-8zm6 12h-4V7h4v10z"/></svg>
+                <span>Split</span>
+            </button>
+            <button id="btnNavCrop" class="nav-btn" title="티맵 분할 영역 확대 (Crop)">
+                <svg viewBox="0 0 24 24"><path fill="currentColor" d="M17 15h2V7c0-1.1-.9-2-2-2H9v2h8v8zM7 17V1H5v4H1v2h4v10c0 1.1.9 2 2 2h10v4h2v-4h4v-2H7z"/></svg>
+                <span>Crop</span>
+            </button>
+            <button id="btnRotate" class="nav-btn" title="방향 전환">
+                <svg viewBox="0 0 24 24"><path fill="currentColor" d="M7.11 8.53L5.7 7.11C4.8 8.27 4.24 9.61 4.07 11h2.02c.14-.87.49-1.72 1.02-2.47zM6.09 13H4.07c.17 1.39.72 2.73 1.62 3.89l1.41-1.42c-.52-.75-.87-1.6-1.01-2.47zm3.44 5.44l-1.41 1.41c1.26.97 2.77 1.62 4.41 1.83v-2.02c-1.12-.16-2.16-.62-3-1.22zM15.47 5.09c-1.12-.16-2.16-.62-3-1.22l-1.41 1.41c1.26.97 2.77 1.62 4.41 1.83V5.09zM19.93 11h-2.02c-.14-.87-.49-1.72-1.02-2.47l1.41-1.42c.9 1.16 1.46 2.5 1.63 3.89zm-2.02 2c-.14.87-.49 1.72-1.02 2.47l1.41 1.41c.9-1.16 1.46-2.5 1.63-3.88h-2.02z"/></svg>
+                <span>Rotate</span>
+            </button>
+            <button id="btnTripLog" class="nav-btn" title="주행일지 &amp; 지도">
+                <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 0 1 0-5 2.5 2.5 0 0 1 0 5z"/></svg>
+                <span>Trip Log</span>
+            </button>
+        </nav>
+    </div>
+
+    <script src="leaflet.js"></script>
+    <script src="player.js"></script>
+    <script src="touch.js"></script>
+    <script src="triplog.js"></script>
+</body>
+</html>
