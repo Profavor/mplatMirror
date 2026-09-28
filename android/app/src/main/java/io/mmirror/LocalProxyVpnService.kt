@@ -94,18 +94,18 @@ class LocalProxyVpnService : VpnService() {
             val builder = Builder()
                 .setSession("mplat Tesla Proxy")
                 .setMtu(1500)
-                .setBlocking(true)
+                .setBlocking(false)
 
-            // 가상 인터페이스 주소 직접 바인딩 (100.99.9.9, 7.7.7.7, 3.3.3.3, 10.254.1.1)
-            // 안드로이드 VpnService 규격에 맞게 호스트 주소(/32)로 바인딩
-            try { builder.addAddress("100.99.9.9", 32) } catch (e: Throwable) { Log.w(TAG, "addAddress 100.99.9.9 failed: ${e.message}") }
-            try { builder.addAddress("7.7.7.7", 32) } catch (e: Throwable) { Log.w(TAG, "addAddress 7.7.7.7 failed: ${e.message}") }
-            try { builder.addAddress("3.3.3.3", 32) } catch (e: Throwable) { Log.w(TAG, "addAddress 3.3.3.3 failed: ${e.message}") }
-            try { builder.addAddress("10.254.1.1", 32) } catch (e: Throwable) { Log.w(TAG, "addAddress 10.254.1.1 failed: ${e.message}") }
+            // 가상 인터페이스 주소 할당 (10.254.1.2/24)
+            // 호스트 IP 충돌 및 rp_filter 패킷 드롭 방지를 위해 전용 가상 서브넷 주소를 할당합니다.
+            try { builder.addAddress("10.254.1.2", 24) } catch (e: Throwable) { Log.w(TAG, "addAddress 10.254.1.2 failed: ${e.message}") }
 
-            // 테슬라 전용 가상 IP 대역을 로컬 VPN 터널로 유입
+            // 테슬라 브라우저가 사용하는 가상 프록시 IP 대역을 로컬 VPN 터널로 유입
+            // teslamirror.net -> 100.99.9.9
             try { builder.addRoute("100.99.9.0", 24) } catch (e: Throwable) { Log.w(TAG, "addRoute 100.99.9.0 failed: ${e.message}") }
+            // td9.cc -> 7.7.7.7
             try { builder.addRoute("7.7.7.0", 24) } catch (e: Throwable) { Log.w(TAG, "addRoute 7.7.7.0 failed: ${e.message}") }
+            // 보조 가상 대역
             try { builder.addRoute("3.3.3.0", 24) } catch (e: Throwable) { Log.w(TAG, "addRoute 3.3.3.0 failed: ${e.message}") }
             try { builder.addRoute("10.254.1.0", 24) } catch (e: Throwable) { Log.w(TAG, "addRoute 10.254.1.0 failed: ${e.message}") }
 
@@ -114,6 +114,11 @@ class LocalProxyVpnService : VpnService() {
                 builder.addDisallowedApplication(packageName)
             } catch (e: Throwable) {
                 Log.w(TAG, "Failed to disallow application package: ${e.message}")
+            }
+            try {
+                builder.allowBypass()
+            } catch (e: Throwable) {
+                Log.w(TAG, "Failed to allow bypass: ${e.message}")
             }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {

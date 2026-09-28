@@ -180,7 +180,19 @@ class MainActivity : AppCompatActivity() {
                 val textToCopy = "https://teslamirror.net:9999"
                 val clip = ClipData.newPlainText("Tesla Address", textToCopy)
                 clipboard.setPrimaryClip(clip)
-                Toast.makeText(this, "📋 0MB 로컬 초저지연 주소(https://teslamirror.net:9999)가 복사되었습니다.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "📋 가상 프록시 주소(https://teslamirror.net:9999)가 복사되었습니다.", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Toast.makeText(this, "복사 실패: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        binding.tvSecondaryAddress.setOnClickListener {
+            try {
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                val textToCopy = "http://td9.cc:7777"
+                val clip = ClipData.newPlainText("Tesla Secondary Address", textToCopy)
+                clipboard.setPrimaryClip(clip)
+                Toast.makeText(this, "📋 HTTP 가상 프록시 주소(http://td9.cc:7777)가 복사되었습니다.", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 Toast.makeText(this, "복사 실패: ${e.message}", Toast.LENGTH_SHORT).show()
             }

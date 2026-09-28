@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>mplat Mirror - 테슬라 미러링 APK 다운로드 (v1.2.0)</title>
+    <title>mplat Mirror - 테슬라 미러링 APK 다운로드 (v1.2.4)</title>
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <style>
         :root {
@@ -224,7 +224,17 @@
             <strong>📋 릴리즈 노트</strong>
 
             <div style="margin-top: 12px;">
-                <div style="color: #2ecc71; font-weight: 700; font-size: 14px;">v1.2.3 — 2026.09.29 (최신 업데이트)</div>
+                <div style="color: #2ecc71; font-weight: 700; font-size: 14px;">v1.2.4 — 2026.09.29 (최신 업데이트)</div>
+                <ul style="padding-left: 18px; margin: 6px 0 14px;">
+                    <li>⚡ <b>가상 프록시(Virtual Proxy) 연결 타임아웃 완벽 해결</b> — TUN I/O 블로킹 교착상태(Deadlock)를 고성능 논블로킹 <code>AsyncFd</code> 비동기 I/O로 전면 전환하여 0.05초 초고속 연결 복원</li>
+                    <li>🌐 <b>VPN 가상 서브넷 라우팅 구조 개편</b> — 호스트 IP 충돌 및 안드로이드 커널 패킷 드롭 방지 (10.254.1.2/24 터널 기반 라우팅)</li>
+                    <li>🔒 <b>HTTPS &amp; HTTP 듀얼 가상 프록시 지원</b> — <code>https://teslamirror.net:9999</code> 및 <code>http://td9.cc:7777</code> 둘 다 완벽 지원 &amp; 터치 복사 추가</li>
+                    <li>🚀 <b>192.168 수동 IP 입력 불필요 (0MB 로컬 초저지연)</b> — 테슬라 사설 IP 차단 우회 및 데이터 0MB 스트리밍 보장</li>
+                </ul>
+            </div>
+
+            <div>
+                <div style="color: #8e94a5; font-weight: 700; font-size: 14px;">v1.2.3 — 2026.09.29</div>
                 <ul style="padding-left: 18px; margin: 6px 0 14px;">
                     <li>📖 <b>앱 내 테슬라 연결 매뉴얼 최신화</b> — https://teslamirror.net:9999 로컬 프록시 기준 3단계 가이드 반영 및 팝업 상세 매뉴얼 추가</li>
                     <li>⚠️ <b>테슬라 주행 중 Wi-Fi 끊김 방지 안내 추가</b> — 테슬라 Wi-Fi 'D(드라이브) 기어 시 연결 유지' 필수 체크리스트 강조</li>

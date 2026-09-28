@@ -294,8 +294,6 @@ pub extern "system" fn Java_io_mmirror_NativeBridge_startTunProxy(
 #[no_mangle]
 pub extern "system" fn Java_io_mmirror_NativeBridge_stopTunProxy(
     _env: JNIEnv,
-    _class: JClass,
 ) {
     tun_proxy::stop_tun_proxy();
 }
-

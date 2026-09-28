@@ -257,19 +257,36 @@ impl MirrorServer {
                             let https_ports = vec![9999, 8443, 7679];
                             for https_port in https_ports {
                                 let addr: SocketAddr = ([0, 0, 0, 0], https_port).into();
-                                let handle = axum_server::Handle::new();
-                                if let Ok(mut lock) = tls_handles.lock() {
-                                    lock.push(handle.clone());
+                                match create_socket_listener(&addr) {
+                                    Ok(std_listener) => {
+                                        let handle = axum_server::Handle::new();
+                                        if let Ok(mut lock) = tls_handles.lock() {
+                                            lock.push(handle.clone());
+                                        }
+                                        let app_inst = app_https.clone();
+                                        let config_inst = tls_config.clone();
+                                        tokio::spawn(async move {
+                                            log_android(4, &format!("mMirror axum HTTPS server running on https://0.0.0.0:{}", https_port));
+                                            match axum_server::from_tcp_rustls(std_listener, config_inst) {
+                                                Ok(server) => {
+                                                    let res = server
+                                                        .handle(handle)
+                                                        .serve(app_inst.into_make_service())
+                                                        .await;
+                                                    if let Err(e) = res {
+                                                        log_android(6, &format!("mMirror axum HTTPS server error on port {}: {}", https_port, e));
+                                                    }
+                                                }
+                                                Err(e) => {
+                                                    log_android(6, &format!("from_tcp_rustls failed on port {}: {}", https_port, e));
+                                                }
+                                            }
+                                        });
+                                    }
+                                    Err(e) => {
+                                        log_android(5, &format!("Could not bind HTTPS port {}: {}", https_port, e));
+                                    }
                                 }
-                                let app_inst = app_https.clone();
-                                let config_inst = tls_config.clone();
-                                tokio::spawn(async move {
-                                    log_android(4, &format!("mMirror axum HTTPS server running on https://0.0.0.0:{}", https_port));
-                                    let _ = axum_server::bind_rustls(addr, config_inst)
-                                        .handle(handle)
-                                        .serve(app_inst.into_make_service())
-                                        .await;
-                                });
                             }
                         }
                         Err(e) => {
