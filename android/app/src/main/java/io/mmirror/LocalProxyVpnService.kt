@@ -96,8 +96,12 @@ class LocalProxyVpnService : VpnService() {
                 .setMtu(1500)
                 .setBlocking(false)
 
-            // 가상 인터페이스 주소 할당 (10.254.1.2/24)
-            // 호스트 IP 충돌 및 rp_filter 패킷 드롭 방지를 위해 전용 가상 서브넷 주소를 할당합니다.
+            // 가상 인터페이스 주소 직접 바인딩 (100.99.9.9, 7.7.7.7, 3.3.3.3, 10.254.1.1, 10.254.1.2)
+            // 안드로이드 커널이 해당 목적지 패킷을 호스트 로컬 수신으로 인식하여 테더링 방화벽 드롭 없이 즉시 처리하도록 /32 바인딩
+            try { builder.addAddress("100.99.9.9", 32) } catch (e: Throwable) { Log.w(TAG, "addAddress 100.99.9.9 failed: ${e.message}") }
+            try { builder.addAddress("7.7.7.7", 32) } catch (e: Throwable) { Log.w(TAG, "addAddress 7.7.7.7 failed: ${e.message}") }
+            try { builder.addAddress("3.3.3.3", 32) } catch (e: Throwable) { Log.w(TAG, "addAddress 3.3.3.3 failed: ${e.message}") }
+            try { builder.addAddress("10.254.1.1", 32) } catch (e: Throwable) { Log.w(TAG, "addAddress 10.254.1.1 failed: ${e.message}") }
             try { builder.addAddress("10.254.1.2", 24) } catch (e: Throwable) { Log.w(TAG, "addAddress 10.254.1.2 failed: ${e.message}") }
 
             // 테슬라 브라우저가 사용하는 가상 프록시 IP 대역을 로컬 VPN 터널로 유입
@@ -192,7 +196,7 @@ class LocalProxyVpnService : VpnService() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("⚡ 테슬라 로컬 가상 프록시 (데이터 0MB)")
-            .setContentText("접속 주소: https://teslamirror.net:9999 (또는 http://td9.cc:7777)")
+            .setContentText("접속 주소: http://td9.cc:7777 (또는 https://teslamirror.net:9999)")
 
             .setOngoing(true)
             .setContentIntent(pendingIntent)

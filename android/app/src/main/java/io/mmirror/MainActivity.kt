@@ -177,10 +177,10 @@ class MainActivity : AppCompatActivity() {
         binding.btnCopyAddress.setOnClickListener {
             try {
                 val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                val textToCopy = "https://teslamirror.net:9999"
+                val textToCopy = "http://td9.cc:7777"
                 val clip = ClipData.newPlainText("Tesla Address", textToCopy)
                 clipboard.setPrimaryClip(clip)
-                Toast.makeText(this, "📋 가상 프록시 주소(https://teslamirror.net:9999)가 복사되었습니다.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "📋 추천 가상 프록시 주소(http://td9.cc:7777)가 복사되었습니다.", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 Toast.makeText(this, "복사 실패: ${e.message}", Toast.LENGTH_SHORT).show()
             }
@@ -189,10 +189,10 @@ class MainActivity : AppCompatActivity() {
         binding.tvSecondaryAddress.setOnClickListener {
             try {
                 val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                val textToCopy = "http://td9.cc:7777"
+                val textToCopy = "https://teslamirror.net:9999"
                 val clip = ClipData.newPlainText("Tesla Secondary Address", textToCopy)
                 clipboard.setPrimaryClip(clip)
-                Toast.makeText(this, "📋 HTTP 가상 프록시 주소(http://td9.cc:7777)가 복사되었습니다.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "📋 보조 가상 프록시 주소(https://teslamirror.net:9999)가 복사되었습니다.", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 Toast.makeText(this, "복사 실패: ${e.message}", Toast.LENGTH_SHORT).show()
             }
@@ -278,9 +278,11 @@ class MainActivity : AppCompatActivity() {
             【 3단계: 테슬라 모니터 브라우저 접속 】
             ① 테슬라 모니터 하단 메뉴에서 브라우저를 실행합니다.
             ② 주소창에 아래 추천 주소를 입력합니다:
-               👉 https://teslamirror.net:9999
-               (보조 주소: http://td9.cc:7777)
+               👉 1순위 추천: http://td9.cc:7777 (보안 경고 없이 원클릭 접속)
+               👉 2순위 보조: https://teslamirror.net:9999 (HTTPS 접속)
             ③ 테슬라 브라우저 상단 ★ (즐겨찾기) 버튼을 눌러 북마크에 추가해두시면 다음 탑승부터 원클릭으로 바로 연결됩니다!
+            ★ 모바일 브라우저 테스트 팁:
+            스마트폰 브라우저로 접속 시 '연결이 비공개로 설정되어 있지 않습니다' 경고가 나타나면 [고급] → [계속 진행(안전하지 않음)]을 1회 눌러주시면 즉시 열립니다. (http://td9.cc:7777 접속 시에는 경고가 없습니다)
 
             【 4단계: 갤럭시 폴드 & 편의기능 】
             • 화면 자동 조절: 갤럭시 폴드를 접거나 펼칠 때 앱을 재실행할 필요 없이 실시간으로 테슬라 화면 해상도와 비율이 자동 재설정됩니다.
@@ -439,14 +441,14 @@ class MainActivity : AppCompatActivity() {
             binding.tvProxyBadge.text = "가상 프록시 활성화됨 (데이터 0MB)"
             binding.tvProxyBadge.setTextColor(0xFF2ECC71.toInt())
             binding.tvProxyBadge.setBackgroundColor(0x1F2ECC71.toInt())
-            binding.tvProxyStatus.text = "🟢 0MB 로컬 터널 가동 중 (teslamirror.net:9999)"
+            binding.tvProxyStatus.text = "🟢 0MB 로컬 터널 가동 중 (td9.cc:7777 / teslamirror.net:9999)"
             binding.tvProxyStatus.setTextColor(0xFF2ECC71.toInt())
         } else {
             binding.tvProxyBadge.text = "가상 프록시 대기 중"
             binding.tvProxyBadge.setTextColor(0xFFA0A5B1.toInt())
             binding.tvProxyBadge.setBackgroundColor(0x1FA0A5B1.toInt())
-            binding.tvProxyStatus.text = "⚪ 삼성 핫스팟 차단 우회 터널"
-            binding.tvProxyStatus.setTextColor(0xFFA0A5B1.toInt())
+            binding.tvProxyStatus.text = "⚠️ 아래 [미러링 시작] 버튼을 먼저 눌러야 프록시가 가동됩니다!"
+            binding.tvProxyStatus.setTextColor(0xFFE67E22.toInt())
         }
     }
 
@@ -538,8 +540,8 @@ class MainActivity : AppCompatActivity() {
     private fun updateNetworkAddress() {
         val apEnabled = isWifiApEnabled()
 
-        binding.tvTeslaAddress.text = "https://teslamirror.net:9999"
-        binding.tvSecondaryAddress.text = "보조 주소(HTTP): http://td9.cc:7777"
+        binding.tvTeslaAddress.text = "http://td9.cc:7777"
+        binding.tvSecondaryAddress.text = "보조 주소: https://teslamirror.net:9999"
 
         if (apEnabled) {
             binding.tvHotspotStatus.text = "✓ 핫스팟 켜짐 - 테슬라 Wi-Fi 연결 대기"

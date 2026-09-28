@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>mplat Mirror - 테슬라 미러링 APK 다운로드 (v1.2.4)</title>
+    <title>mplat Mirror - 테슬라 미러링 APK 다운로드 (v1.2.5)</title>
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <style>
         :root {
@@ -179,7 +179,7 @@
             <img src="app_logo.png" alt="mplat Mirror" class="app-logo">
         </div>
         <h1>mplat Mirror for Tesla</h1>
-        <div class="version-badge">v1.2.3 (Build 12) · Apache License 2.0</div>
+        <div class="version-badge">v1.2.5 (Build 14) · Apache License 2.0</div>
         <p class="subtitle">테슬라 차량 브라우저 전용 초저지연 안드로이드 미러링 솔루션</p>
 
         <div class="badge-list">
@@ -194,7 +194,7 @@
         </div>
 
         <a href="mplatMirror.apk" class="download-btn" download="mplatMirror.apk">
-            <span>📥 mplatMirror.apk 다운로드 (최신 v1.2.3)</span>
+            <span>📥 mplatMirror.apk 다운로드 (최신 v1.2.5)</span>
         </a>
 
         <a href="/mirror" style="display: flex; align-items: center; justify-content: center; gap: 8px; background: rgba(46, 204, 113, 0.15); color: #2ecc71; border: 1px solid rgba(46, 204, 113, 0.4); padding: 14px 24px; border-radius: 14px; font-weight: 700; text-decoration: none; margin-bottom: 16px; transition: all 0.2s;">
@@ -202,7 +202,7 @@
         </a>
 
         <div class="file-meta">
-            <span>버전: v1.2.3</span> • <span>크기: ~27.8 MB</span> • <span>Android 10+ (API 29 이상)</span>
+            <span>버전: v1.2.5</span> • <span>크기: ~27.8 MB</span> • <span>Android 10+ (API 29 이상)</span>
         </div>
 
         <div class="qr-section">
@@ -224,7 +224,16 @@
             <strong>📋 릴리즈 노트</strong>
 
             <div style="margin-top: 12px;">
-                <div style="color: #2ecc71; font-weight: 700; font-size: 14px;">v1.2.4 — 2026.09.29 (최신 업데이트)</div>
+                <div style="color: #2ecc71; font-weight: 700; font-size: 14px;">v1.2.5 — 2026.09.29 (최신 업데이트)</div>
+                <ul style="padding-left: 18px; margin: 6px 0 14px;">
+                    <li>🔄 <b>듀얼 프로토콜 디스패처</b> — 같은 포트(7777/9999)에서 HTTP·HTTPS 동시 지원, 브라우저 자동 HTTPS 업그레이드 문제 완전 해결</li>
+                    <li>🛡️ <b>addAddress 가상 IP 복원</b> — 100.99.9.9, 7.7.7.7, 3.3.3.3 로컬 호스트 IP 복원으로 핫스팟 환경 패킷 드롭 방지</li>
+                    <li>📋 <b>기본 주소 http://td9.cc:7777 변경</b> — SSL 경고 없는 HTTP 주소를 기본으로, HTTPS는 보조 주소로 제공</li>
+                </ul>
+            </div>
+
+            <div>
+                <div style="color: #8e94a5; font-weight: 700; font-size: 14px;">v1.2.4 — 2026.09.29</div>
                 <ul style="padding-left: 18px; margin: 6px 0 14px;">
                     <li>⚡ <b>가상 프록시(Virtual Proxy) 연결 타임아웃 완벽 해결</b> — TUN I/O 블로킹 교착상태(Deadlock)를 고성능 논블로킹 <code>AsyncFd</code> 비동기 I/O로 전면 전환하여 0.05초 초고속 연결 복원</li>
                     <li>🌐 <b>VPN 가상 서브넷 라우팅 구조 개편</b> — 호스트 IP 충돌 및 안드로이드 커널 패킷 드롭 방지 (10.254.1.2/24 터널 기반 라우팅)</li>

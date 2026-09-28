@@ -156,19 +156,15 @@ pub fn start_tun_proxy(fd: i32, target_port: u16) -> bool {
                                             Ok(1) => {
                                                 let is_tls = first_byte[0] == 0x16;
                                                 let dest_port = if is_tls {
-                                                    // TLS / HTTPS 요청인 경우: 9999 (또는 8443, 7679)
+                                                    // TLS / HTTPS 요청인 경우: 내부 TLS 포트 9998 (또는 8443, 7679)
                                                     if local_port == 8443 || local_port == 7679 {
                                                         local_port
                                                     } else {
-                                                        9999
+                                                        9998
                                                     }
                                                 } else {
-                                                    // 일반 텍스트 HTTP 요청인 경우: target_port (8080) 또는 7777, 7678
-                                                    if local_port == 7777 || local_port == 7678 {
-                                                        local_port
-                                                    } else {
-                                                        target_port
-                                                    }
+                                                    // 일반 텍스트 HTTP 요청인 경우: target_port (8080)
+                                                    target_port
                                                 };
 
                                                 crate::server::log_android(

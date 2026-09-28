@@ -1,0 +1,6 @@
+[build]
+# cross needs access to ../../web/ from core-rust/src/ for include_str! macros
+# Setting the workspace root to the parent ensures Docker mounts the entire project
+
+[build.env]
+passthrough = ["RUST_BACKTRACE"]
