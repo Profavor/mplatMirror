@@ -284,35 +284,30 @@ impl MirrorServer {
                 }
             }
 
-            // 테슬라 가상 프록시 스마트 듀얼 프로토콜 디스패처 (7777 [td9.cc], 9999 [teslamirror.net], 7678)
-            // 첫 1바이트 peek:
-            //   - 0x16(TLS Handshake)인 경우: 127.0.0.1:9998 (로컬 HTTPS)로 전달
-            //   - 일반 텍스트 HTTP(GET, POST 등)인 경우: 127.0.0.1:{actual_port} (로컬 HTTP)로 전달
-            let dual_ports = vec![7777, 9999, 7678];
-            for dport in dual_ports {
-                if dport != actual_port {
-                    if let Ok(sec_std) = create_socket_listener(&([0, 0, 0, 0], dport).into()) {
-                        if let Ok(sec_listener) = tokio::net::TcpListener::from_std(sec_std) {
-                            let http_port = actual_port;
-                            tokio::spawn(async move {
-                                log_android(4, &format!("mMirror dual-protocol dispatcher running on 0.0.0.0:{}", dport));
-                                while let Ok((mut client_stream, _)) = sec_listener.accept().await {
-                                    tokio::spawn(async move {
-                                        let mut peek_buf = [0u8; 1];
-                                        match client_stream.peek(&mut peek_buf).await {
-                                            Ok(1) => {
-                                                let is_tls = peek_buf[0] == 0x16;
-                                                let target_port = if is_tls { 9998 } else { http_port };
-                                                if let Ok(mut target_stream) = tokio::net::TcpStream::connect(format!("127.0.0.1:{}", target_port)).await {
-                                                    let _ = tokio::io::copy_bidirectional(&mut client_stream, &mut target_stream).await;
-                                                }
-                                            }
-                                            _ => {}
-                                        }
-                                    });
-                                }
-                            });
+            // 테슬라 가상 프록시 — 추가 HTTP 포트 직접 바인딩 (7777 [td9.cc], 9999 [teslamirror.net], 7678)
+            // 디스패처 대신 동일한 axum 앱을 직접 serve하여 안정성 확보
+            let extra_http_ports = vec![7777, 9999, 7678];
+            for eport in extra_http_ports {
+                if eport != actual_port {
+                    if let Ok(std_lis) = create_socket_listener(&([0, 0, 0, 0], eport).into()) {
+                        match tokio::net::TcpListener::from_std(std_lis) {
+                            Ok(listener) => {
+                                let app_clone = app_https.clone();
+                                tokio::spawn(async move {
+                                    log_android(4, &format!("mMirror HTTP server also listening on 0.0.0.0:{}", eport));
+                                    axum::serve(listener, app_clone.into_make_service())
+                                        .await
+                                        .unwrap_or_else(|e| {
+                                            log_android(6, &format!("HTTP server error on port {}: {}", eport, e));
+                                        });
+                                });
+                            }
+                            Err(e) => {
+                                log_android(5, &format!("Could not convert listener for port {}: {}", eport, e));
+                            }
                         }
+                    } else {
+                        log_android(5, &format!("Could not bind extra HTTP port {}", eport));
                     }
                 }
             }
