@@ -1,9 +1,10 @@
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
-        State,
+        Request, State,
     },
     http::{header, StatusCode},
+    middleware::{self, Next},
     response::{Html, IntoResponse, Response},
     routing::get,
     Json, Router,
@@ -314,6 +315,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         apk_path: PathBuf::from("/home/profavor/mMirror/dist/mplatMirror.apk"),
     };
 
+async fn log_request_middleware(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    req: Request,
+    next: Next,
+) -> Response {
+    let method = req.method().to_string();
+    let uri = req.uri().to_string();
+    println!("⚡ [RELAY REQUEST] {} {} from {}", method, uri, addr);
+    next.run(req).await
+}
+
     let base_app = Router::new()
         .route("/mirror", get(serve_mirror))
         .route("/tesla", get(serve_tesla))
@@ -334,6 +346,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/trips", get(get_trips))
         .route("/ws", get(ws_handler))
         .route("/publish", get(publish_handler))
+        .layer(middleware::from_fn(log_request_middleware))
         .layer(CorsLayer::permissive())
         .with_state(state);
 
@@ -344,7 +357,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await
         .map_err(|e| format!("Failed to load certs: {}", e))?;
 
-    let app_8088 = base_app.clone().route("/", get(serve_download));
+    let app_8088 = base_app
+        .clone()
+        .route("/", get(serve_download))
+        .layer(middleware::from_fn(log_request_middleware));
     let tls_8088 = tls_config.clone();
     let addr_8088: SocketAddr = ([0, 0, 0, 0], 8088).into();
     tokio::spawn(async move {
@@ -357,7 +373,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
-    let app_9999 = base_app.route("/", get(serve_mirror));
+    let app_9999 = base_app
+        .route("/", get(serve_mirror))
+        .layer(middleware::from_fn(log_request_middleware));
     let addr_9999: SocketAddr = ([0, 0, 0, 0], 9999).into();
     println!("🚀 mplat Mirror Official Port 9999 HTTPS Server running on https://0.0.0.0:9999 (mdm.mplat.store:9999)");
 

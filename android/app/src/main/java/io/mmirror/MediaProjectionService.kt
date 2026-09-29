@@ -82,12 +82,12 @@ class MediaProjectionService : Service() {
         if (!enableRemoteRelay || !isStreaming) return
         try {
             val request = Request.Builder()
-                .url("wss://mdm.mplat.store:8088/publish")
+                .url("wss://mdm.mplat.store:9999/publish")
                 .build()
 
             relayWebSocket = okHttpClient.newWebSocket(request, object : WebSocketListener() {
                 override fun onOpen(webSocket: WebSocket, response: Response) {
-                    Log.i(TAG, "🟢 Connected to mplat Relay Server (wss://mdm.mplat.store:8088/publish)")
+                    Log.i(TAG, "🟢 Connected to mplat Relay Server (wss://mdm.mplat.store:9999/publish)")
                     isRelayConnected = true
                     sendRelayConfig()
                     spsPpsBuffer?.let { sps ->
@@ -185,7 +185,7 @@ class MediaProjectionService : Service() {
             private set
 
         @Volatile
-        var enableRemoteRelay: Boolean = false
+        var enableRemoteRelay: Boolean = true
     }
 
     /**
