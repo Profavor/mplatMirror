@@ -373,6 +373,23 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun checkPermissionsAndStart() {
+        // 방식 B (0MB 도메인 가로채기): 테슬라 브라우저 공인 도메인(mdm.mplat.store) 가로채기를 위해 로컬 VPN 가동
+        if (!LocalProxyVpnService.isRunning) {
+            try {
+                val vpnIntent = android.net.VpnService.prepare(this)
+                if (vpnIntent != null) {
+                    startMirroringAfterVpn = true
+                    vpnLauncher.launch(vpnIntent)
+                    return
+                } else {
+                    LocalProxyVpnService.start(this)
+                    updateUIState()
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("MainActivity", "Failed to start LocalProxyVpnService: ${e.message}")
+            }
+        }
+
         val needed = mutableListOf<String>()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
@@ -465,23 +482,23 @@ class MainActivity : AppCompatActivity() {
         if (vpnActive) {
             binding.btnToggleVpn.text = "VPN 끄기"
             binding.btnToggleVpn.setBackgroundColor(0xFFE74C3C.toInt())
-            binding.tvProxyBadge.text = "가상 프록시(VPN) 활성화됨"
+            binding.tvProxyBadge.text = "0MB 가상 프록시 활성화됨"
             binding.tvProxyBadge.setTextColor(0xFF2ECC71.toInt())
             binding.tvProxyBadge.setBackgroundColor(0x1F2ECC71.toInt())
             binding.tvProxyStatus.text = "🟢 0MB 초저지연 로컬 터널 가동 중 (https://mdm.mplat.store:9999)"
             binding.tvProxyStatus.setTextColor(0xFF2ECC71.toInt())
-            binding.tvVpnHint.text = "⚠️ VPN 가동 시 핫스팟 기기 인터넷/삼성페이가 제한될 수 있습니다."
-            binding.tvVpnHint.setTextColor(0xFFF39C12.toInt())
-        } else {
-            binding.btnToggleVpn.text = "VPN 켜기 (선택)"
-            binding.btnToggleVpn.setBackgroundColor(0xFF3498DB.toInt())
-            binding.tvProxyBadge.text = "가상 프록시 꺼짐 (권장)"
-            binding.tvProxyBadge.setTextColor(0xFF2ECC71.toInt())
-            binding.tvProxyBadge.setBackgroundColor(0x1F2ECC71.toInt())
-            binding.tvProxyStatus.text = "⚪ 일반 모드: 핫스팟 인터넷 100% 정상 · 삼성페이 정상"
-            binding.tvProxyStatus.setTextColor(0xFFA0A5B1.toInt())
-            binding.tvVpnHint.text = "✅ 핫스팟 인터넷과 삼성페이가 정상 작동하는 표준 권장 모드입니다."
+            binding.tvVpnHint.text = "✅ 0MB 모바일 데이터 · LTE/5G 소모 제로 · 테슬라 보안경고 0건"
             binding.tvVpnHint.setTextColor(0xFF2ECC71.toInt())
+        } else {
+            binding.btnToggleVpn.text = "VPN 켜기"
+            binding.btnToggleVpn.setBackgroundColor(0xFF3498DB.toInt())
+            binding.tvProxyBadge.text = "0MB 가상 프록시 대기"
+            binding.tvProxyBadge.setTextColor(0xFFA0A5B1.toInt())
+            binding.tvProxyBadge.setBackgroundColor(0x1FA0A5B1.toInt())
+            binding.tvProxyStatus.text = "⚪ [미러링 시작] 시 0MB 가상 프록시가 자동 가동됩니다."
+            binding.tvProxyStatus.setTextColor(0xFFA0A5B1.toInt())
+            binding.tvVpnHint.text = "💡 스마트폰 핫스팟의 로컬 Wi-Fi(0MB)로만 통신합니다."
+            binding.tvVpnHint.setTextColor(0xFF3498DB.toInt())
         }
     }
 

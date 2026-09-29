@@ -198,7 +198,7 @@ class MediaProjectionService : Service() {
             private set
 
         @Volatile
-        var enableRemoteRelay: Boolean = true
+        var enableRemoteRelay: Boolean = false // 0MB 모바일 데이터 원칙: 외부 릴레이 완전 차단 (기본값 false)
     }
 
     /**
