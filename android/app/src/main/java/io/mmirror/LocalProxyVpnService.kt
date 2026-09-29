@@ -114,7 +114,6 @@ class LocalProxyVpnService : VpnService() {
             sendDebugLog("2/5 addAddress 완료, addRoute 설정 중")
 
             // 테슬라 브라우저가 사용하는 가상 프록시 IP 대역을 로컬 VPN 터널로 유입
-            try { builder.addRoute("122.40.252.0", 24) } catch (e: Throwable) { sendDebugLog("⚠ addRoute 122.40.252.0 실패: ${e.message}") }
             try { builder.addRoute("100.99.9.0", 24) } catch (e: Throwable) { sendDebugLog("⚠ addRoute 100.99.9.0 실패: ${e.message}") }
             try { builder.addRoute("7.7.7.0", 24) } catch (e: Throwable) { sendDebugLog("⚠ addRoute 7.7.7.0 실패: ${e.message}") }
             try { builder.addRoute("3.3.3.0", 24) } catch (e: Throwable) { sendDebugLog("⚠ addRoute 3.3.3.0 실패: ${e.message}") }
