@@ -192,10 +192,10 @@ class MainActivity : AppCompatActivity() {
         binding.btnCopyAddress.setOnClickListener {
             try {
                 val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                val textToCopy = "https://mdm.mplat.store:9999"
+                val textToCopy = binding.tvTeslaAddress.text.toString()
                 val clip = ClipData.newPlainText("Tesla Address", textToCopy)
                 clipboard.setPrimaryClip(clip)
-                Toast.makeText(this, "📋 테슬라 초고속 로컬 주소($textToCopy)가 복사되었습니다.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "📋 주소($textToCopy)가 복사되었습니다.", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 Toast.makeText(this, "복사 실패: ${e.message}", Toast.LENGTH_SHORT).show()
             }
@@ -204,10 +204,11 @@ class MainActivity : AppCompatActivity() {
         binding.tvSecondaryAddress.setOnClickListener {
             try {
                 val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                val textToCopy = "https://teslamirror.net:9999"
+                val hotspotIp = getHotspotIp()
+                val textToCopy = if (LocalProxyVpnService.isRunning) "https://mdm.mplat.store:9999" else "https://$hotspotIp:9999"
                 val clip = ClipData.newPlainText("Tesla Secondary Address", textToCopy)
                 clipboard.setPrimaryClip(clip)
-                Toast.makeText(this, "📋 테슬라미러 주소($textToCopy)가 복사되었습니다.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "📋 테슬라 HTTPS 주소($textToCopy)가 복사되었습니다.", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 Toast.makeText(this, "복사 실패: ${e.message}", Toast.LENGTH_SHORT).show()
             }
@@ -372,23 +373,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun checkPermissionsAndStart() {
-        // 테슬라 로컬 가상 프록시(VPN)가 꺼져 있다면 먼저 권한 확인 및 가동
-        if (!LocalProxyVpnService.isRunning) {
-            try {
-                val vpnIntent = android.net.VpnService.prepare(this)
-                if (vpnIntent != null) {
-                    startMirroringAfterVpn = true
-                    vpnLauncher.launch(vpnIntent)
-                    return
-                } else {
-                    LocalProxyVpnService.start(this)
-                    updateUIState()
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("MainActivity", "Failed to start LocalProxyVpnService: ${e.message}")
-            }
-        }
-
         val needed = mutableListOf<String>()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
@@ -436,9 +420,11 @@ class MainActivity : AppCompatActivity() {
             action = MediaProjectionService.ACTION_STOP
         }
         startService(serviceIntent)
-        LocalProxyVpnService.stop(this)
+        if (LocalProxyVpnService.isRunning) {
+            LocalProxyVpnService.stop(this)
+        }
         updateUIState()
-        Toast.makeText(this, "미러링 및 가상 프록시가 중지되었습니다.", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "미러링이 중지되었습니다.", Toast.LENGTH_SHORT).show()
     }
 
     private fun reportHotspotIpToRelay() {
@@ -479,26 +465,22 @@ class MainActivity : AppCompatActivity() {
         if (vpnActive) {
             binding.btnToggleVpn.text = "VPN 끄기"
             binding.btnToggleVpn.setBackgroundColor(0xFFE74C3C.toInt())
-            binding.tvProxyBadge.text = "가상 프록시(VPN) 활성화됨 (데이터 0MB)"
+            binding.tvProxyBadge.text = "가상 프록시(VPN) 활성화됨"
             binding.tvProxyBadge.setTextColor(0xFF2ECC71.toInt())
             binding.tvProxyBadge.setBackgroundColor(0x1F2ECC71.toInt())
             binding.tvProxyStatus.text = "🟢 0MB 초저지연 로컬 터널 가동 중 (https://mdm.mplat.store:9999)"
             binding.tvProxyStatus.setTextColor(0xFF2ECC71.toInt())
-            binding.tvVpnHint.text = "💡 삼성페이 결제 시에는 상단 [VPN 끄기]를 눌러주세요."
+            binding.tvVpnHint.text = "⚠️ VPN 가동 시 핫스팟 기기 인터넷/삼성페이가 제한될 수 있습니다."
             binding.tvVpnHint.setTextColor(0xFFF39C12.toInt())
         } else {
-            binding.btnToggleVpn.text = "VPN 켜기"
+            binding.btnToggleVpn.text = "VPN 켜기 (선택)"
             binding.btnToggleVpn.setBackgroundColor(0xFF3498DB.toInt())
-            binding.tvProxyBadge.text = "가상 프록시 대기 중"
-            binding.tvProxyBadge.setTextColor(0xFFA0A5B1.toInt())
-            binding.tvProxyBadge.setBackgroundColor(0x1FA0A5B1.toInt())
-            if (apEnabled) {
-                binding.tvProxyStatus.text = "⚪ VPN 꺼짐 (삼성페이 결제 가능 · 테슬라 접속 시 켜기)"
-            } else {
-                binding.tvProxyStatus.text = "⚠️ 핫스팟을 켠 후 [미러링 시작]을 눌러주세요"
-            }
+            binding.tvProxyBadge.text = "가상 프록시 꺼짐 (권장)"
+            binding.tvProxyBadge.setTextColor(0xFF2ECC71.toInt())
+            binding.tvProxyBadge.setBackgroundColor(0x1F2ECC71.toInt())
+            binding.tvProxyStatus.text = "⚪ 일반 모드: 핫스팟 인터넷 100% 정상 · 삼성페이 정상"
             binding.tvProxyStatus.setTextColor(0xFFA0A5B1.toInt())
-            binding.tvVpnHint.text = "✅ 현재 VPN이 꺼져 있어 삼성페이를 정상 사용할 수 있습니다."
+            binding.tvVpnHint.text = "✅ 핫스팟 인터넷과 삼성페이가 정상 작동하는 표준 권장 모드입니다."
             binding.tvVpnHint.setTextColor(0xFF2ECC71.toInt())
         }
     }
@@ -592,11 +574,16 @@ class MainActivity : AppCompatActivity() {
         val apEnabled = isWifiApEnabled()
         val hotspotIp = getHotspotIp()
 
-        binding.tvTeslaAddress.text = "https://mdm.mplat.store:9999"
-        binding.tvSecondaryAddress.text = "보조(테슬라미러): https://teslamirror.net:9999  |  HTTP: http://td9.cc:7777"
+        if (LocalProxyVpnService.isRunning) {
+            binding.tvTeslaAddress.text = "https://mdm.mplat.store:9999"
+            binding.tvSecondaryAddress.text = "로컬 Wi-Fi 직접 주소: http://$hotspotIp:8080  |  https://$hotspotIp:9999"
+        } else {
+            binding.tvTeslaAddress.text = "http://$hotspotIp:8080"
+            binding.tvSecondaryAddress.text = "테슬라 HTTPS: https://$hotspotIp:9999  |  접속기: https://mdm.mplat.store:8088/tesla"
+        }
 
         if (apEnabled) {
-            binding.tvHotspotStatus.text = "✓ 핫스팟 켜짐 ($hotspotIp) - 테슬라 Wi-Fi 연결 대기"
+            binding.tvHotspotStatus.text = "✓ 핫스팟 켜짐 ($hotspotIp) - 태블릿/테슬라 Wi-Fi 연결 대기"
             binding.tvHotspotStatus.setTextColor(0xFF2ECC71.toInt())
             binding.btnOpenHotspot.text = "✓ 핫스팟 켜짐"
             binding.btnOpenHotspot.setBackgroundColor(0xFF2D303A.toInt())

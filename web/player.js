@@ -284,11 +284,16 @@
 
     let hasReceivedFirstKeyFrame = false;
 
-    // --- WebCodecs 비디오 디코더 초기화 ---
     function initVideoDecoder() {
         if (!('VideoDecoder' in window)) {
+            if (location.protocol === 'http:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+                console.warn('WebCodecs는 HTTPS 보안 연결이 필요합니다. HTTPS로 전환합니다...');
+                statusText.textContent = '🔒 테슬라 보안 연결(HTTPS)로 전환 중...';
+                location.href = `https://${location.hostname}:9999/`;
+                return;
+            }
             console.error('WebCodecs VideoDecoder를 지원하지 않는 브라우저입니다.');
-            statusText.textContent = '⚠️ WebCodecs 미지원 브라우저 (MCU3/크롬 필요)';
+            statusText.textContent = '⚠️ WebCodecs 미지원 브라우저 (MCU3/크롬/HTTPS 필요)';
             statusDot.className = 'dot disconnected';
             return;
         }
