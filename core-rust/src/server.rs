@@ -19,6 +19,11 @@ use tracing::{info, warn};
 use crate::protocol::{ControlMessage, DeviceConfig, GpsData, TripRecord, PathPoint, PKT_TYPE_AUDIO, PKT_TYPE_VIDEO};
 use crate::web_assets::{INDEX_HTML, PLAYER_JS, STYLE_CSS, TOUCH_JS, TRIPLOG_JS, LEAFLET_CSS, LEAFLET_JS, LOGO_PNG};
 
+use rustls::server::{ClientHello, ResolvesServerCert};
+use rustls::sign::CertifiedKey;
+use rustls_pki_types::{CertificateDer, PrivateKeyDer};
+use rustls_pki_types::pem::PemObject;
+
 
 pub type ControlCallback = Arc<dyn Fn(ControlMessage) + Send + Sync>;
 
@@ -78,6 +83,39 @@ pub fn get_rust_logs() -> String {
     } else {
         String::new()
     }
+}
+
+#[derive(Debug)]
+struct MultiCertResolver {
+    official: Option<Arc<CertifiedKey>>,
+    fallback: Arc<CertifiedKey>,
+}
+
+impl ResolvesServerCert for MultiCertResolver {
+    fn resolve(&self, client_hello: ClientHello) -> Option<Arc<CertifiedKey>> {
+        if let Some(sni) = client_hello.server_name() {
+            if sni.ends_with(".mplat.store") || sni.eq_ignore_ascii_case("mplat.store") {
+                if let Some(ref cert) = self.official {
+                    log_android(4, &format!("🔒 [TLS] SNI '{}' 감지 -> 공인 Let's Encrypt (*.mplat.store) 인증서 매칭 (녹색 자물쇠 보장)", sni));
+                    return Some(cert.clone());
+                }
+            }
+            log_android(4, &format!("🔓 [TLS] SNI '{}' 감지 -> 전용 SAN 인증서 매칭 (연결 유지)", sni));
+        } else {
+            log_android(4, "🔓 [TLS] SNI 없음 (IP 직접 접속) -> 기본 인증서 매칭");
+        }
+        Some(self.fallback.clone())
+    }
+}
+
+fn make_certified_key(cert_pem: &[u8], key_pem: &[u8]) -> Result<CertifiedKey, Box<dyn std::error::Error + Send + Sync>> {
+    let certs: Vec<CertificateDer<'static>> = CertificateDer::pem_slice_iter(cert_pem)
+        .collect::<Result<Vec<_>, _>>()?;
+    let key: PrivateKeyDer<'static> = PrivateKeyDer::from_pem_slice(key_pem)?;
+    let signing_key = rustls::crypto::aws_lc_rs::default_provider()
+        .key_provider
+        .load_private_key(key)?;
+    Ok(CertifiedKey::new(certs, signing_key))
 }
 
 pub struct MirrorServer {
@@ -252,16 +290,14 @@ impl MirrorServer {
         let app_https = app.clone();
         let tls_handles = self.tls_handles.clone();
         tokio::spawn(async move {
-            // 1. 공인 Let's Encrypt SSL 인증서(mdm.mplat.store) 우선 로드
-            let official_tls = axum_server::tls_rustls::RustlsConfig::from_pem(
-                include_bytes!("../certs/fullchain.pem").to_vec(),
-                include_bytes!("../certs/privkey.pem").to_vec(),
-            ).await;
-
-            let tls_config_opt = match official_tls {
-                Ok(cfg) => {
-                    log_android(4, "✅ 공인 Let's Encrypt SSL 인증서 로드 성공 (mdm.mplat.store) - 테슬라 브라우저 보안경고 0건 보장");
-                    Some(cfg)
+            // 1. 공인 Let's Encrypt SSL 인증서(mdm.mplat.store) 로드
+            let official_key = match make_certified_key(
+                include_bytes!("../certs/fullchain.pem"),
+                include_bytes!("../certs/privkey.pem"),
+            ) {
+                Ok(k) => {
+                    log_android(4, "✅ 공인 Let's Encrypt SSL 인증서 로드 성공 (*.mplat.store) - 테슬라 브라우저 보안경고 0건 보장");
+                    Some(Arc::new(k))
                 }
                 Err(e) => {
                     log_android(5, &format!("공인 인증서 로드 실패 (자체서명 폴백 전환): {}", e));
@@ -269,36 +305,43 @@ impl MirrorServer {
                 }
             };
 
-            let tls_config = match tls_config_opt {
-                Some(cfg) => cfg,
-                None => {
-                    let subject_alt_names = vec![
-                        "mdm.mplat.store".to_string(),
-                        "teslamirror.net".to_string(),
-                        "*.teslamirror.net".to_string(),
-                        "td9.cc".to_string(),
-                        "*.td9.cc".to_string(),
-                        "td7.cc".to_string(),
-                        "*.td7.cc".to_string(),
-                        "122.40.252.50".to_string(),
-                        "100.99.9.9".to_string(),
-                        "7.7.7.7".to_string(),
-                        "3.3.3.3".to_string(),
-                        "10.254.1.1".to_string(),
-                        "192.168.43.1".to_string(),
-                        "127.0.0.1".to_string(),
-                        "localhost".to_string(),
-                        "tesla.local".to_string(),
-                    ];
-                    let certified_key = rcgen::generate_simple_self_signed(subject_alt_names).expect("Failed to gen self-signed cert");
-                    let cert_pem = certified_key.cert.pem();
-                    let key_pem = certified_key.signing_key.serialize_pem();
-                    axum_server::tls_rustls::RustlsConfig::from_pem(
-                        cert_pem.as_bytes().to_vec(),
-                        key_pem.as_bytes().to_vec(),
-                    ).await.expect("Failed to create self-signed tls config")
-                }
-            };
+            // 2. 테슬라미러/IP/보조 도메인용 멀티 SAN 인증서 생성 (rcgen) - 도메인 불일치 커넥션 종료(Aborted) 원천 차단
+            let subject_alt_names = vec![
+                "mdm.mplat.store".to_string(),
+                "rnd.mplat.store".to_string(),
+                "*.mplat.store".to_string(),
+                "teslamirror.net".to_string(),
+                "*.teslamirror.net".to_string(),
+                "td9.cc".to_string(),
+                "*.td9.cc".to_string(),
+                "td7.cc".to_string(),
+                "*.td7.cc".to_string(),
+                "122.40.252.50".to_string(),
+                "100.99.9.9".to_string(),
+                "7.7.7.7".to_string(),
+                "3.3.3.3".to_string(),
+                "10.254.1.1".to_string(),
+                "192.168.43.1".to_string(),
+                "10.82.165.254".to_string(),
+                "127.0.0.1".to_string(),
+                "localhost".to_string(),
+                "tesla.local".to_string(),
+            ];
+            let certified_key = rcgen::generate_simple_self_signed(subject_alt_names).expect("Failed to gen self-signed cert");
+            let cert_pem = certified_key.cert.pem();
+            let key_pem = certified_key.signing_key.serialize_pem();
+            let fallback_key = Arc::new(make_certified_key(cert_pem.as_bytes(), key_pem.as_bytes()).expect("Failed to create fallback certified key"));
+
+            let resolver = Arc::new(MultiCertResolver {
+                official: official_key,
+                fallback: fallback_key,
+            });
+
+            let mut config = rustls::ServerConfig::builder()
+                .with_no_client_auth()
+                .with_cert_resolver(resolver);
+            config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+            let tls_config = axum_server::tls_rustls::RustlsConfig::from_config(Arc::new(config));
 
             let https_ports = vec![9999, 9998, 8443, 7679];
             for https_port in https_ports {

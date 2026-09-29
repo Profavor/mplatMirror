@@ -41,6 +41,10 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
+import android.net.Uri
+import androidx.appcompat.app.AlertDialog
+import rikka.shizuku.Shizuku
+import io.mmirror.adb.AdbTouchManager
 
 class MainActivity : AppCompatActivity() {
 
@@ -64,30 +68,33 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private var startMirroringAfterVpn = false
-
-    private val vpnLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == RESULT_OK) {
-            LocalProxyVpnService.start(this)
-            Toast.makeText(this, "⚡ 테슬라 로컬 가상 프록시(VPN)가 가동되었습니다!", Toast.LENGTH_SHORT).show()
-            updateUIState()
-            if (startMirroringAfterVpn) {
-                startMirroringAfterVpn = false
-                checkPermissionsAndStart()
-            }
-        } else {
-            startMirroringAfterVpn = false
-            Toast.makeText(this, "로컬 가상 프록시(VPN) 권한이 취소되었습니다.", Toast.LENGTH_SHORT).show()
-            updateUIState()
-        }
-    }
-
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { _ ->
         requestScreenCapture()
+    }
+
+    private val shizukuPermissionListener = Shizuku.OnRequestPermissionResultListener { requestCode, grantResult ->
+        if (requestCode == AdbTouchManager.SHIZUKU_REQUEST_CODE) {
+            runOnUiThread {
+                updateWirelessDebuggingStatus()
+                if (grantResult == PackageManager.PERMISSION_GRANTED) {
+                    Toast.makeText(this, "✓ Shizuku 무선 디버깅 권한이 승인되었습니다. (0ms 터치 활성)", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private val shizukuBinderReceivedListener = Shizuku.OnBinderReceivedListener {
+        runOnUiThread {
+            updateWirelessDebuggingStatus()
+        }
+    }
+
+    private val shizukuBinderDeadListener = Shizuku.OnBinderDeadListener {
+        runOnUiThread {
+            updateWirelessDebuggingStatus()
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -111,12 +118,29 @@ class MainActivity : AppCompatActivity() {
         setupListeners()
         ensureServerRunning()
 
+        try {
+            Shizuku.addRequestPermissionResultListener(shizukuPermissionListener)
+            Shizuku.addBinderReceivedListenerSticky(shizukuBinderReceivedListener)
+            Shizuku.addBinderDeadListener(shizukuBinderDeadListener)
+        } catch (e: Exception) {
+            android.util.Log.w("MainActivity", "Failed to add Shizuku listeners: ${e.message}")
+        }
+
         // 뒤로가기 키 입력 시 앱이 종료되어 미러링이 중단되지 않고 백그라운드로 안전하게 전환
         onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 moveTaskToBack(true)
             }
         })
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        try {
+            Shizuku.removeRequestPermissionResultListener(shizukuPermissionListener)
+            Shizuku.removeBinderReceivedListener(shizukuBinderReceivedListener)
+            Shizuku.removeBinderDeadListener(shizukuBinderDeadListener)
+        } catch (_: Exception) {}
     }
 
     @Deprecated("Deprecated in Java")
@@ -160,11 +184,11 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         ensureServerRunning()
 
-        // 삼성페이 간섭 방지: onResume에서 VPN을 강제로 자동 가동하지 않고 UI 상태만 갱신합니다.
-        // VPN은 [미러링 시작] 또는 [VPN 켜기] 버튼을 누를 때 가동됩니다.
+        // 삼성페이 간섭 방지: 순수 WebRTC 로컬 P2P 직결로 구동되어 VPN 없이 UI 상태만 갱신합니다.
 
         updateNetworkAddress()
         updateAccessibilityStatus()
+        updateWirelessDebuggingStatus()
         updateUIState()
         reportHotspotIpToRelay()
 
@@ -174,6 +198,7 @@ class MainActivity : AppCompatActivity() {
                 delay(1200)
                 updateNetworkAddress()
                 updateAccessibilityStatus()
+                updateWirelessDebuggingStatus()
                 updateUIState()
             }
         }
@@ -205,10 +230,10 @@ class MainActivity : AppCompatActivity() {
             try {
                 val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 val hotspotIp = getHotspotIp()
-                val textToCopy = if (LocalProxyVpnService.isRunning) "https://mdm.mplat.store:9999" else "https://$hotspotIp:9999"
-                val clip = ClipData.newPlainText("Tesla Secondary Address", textToCopy)
+                val textToCopy = "http://$hotspotIp:8080"
+                val clip = ClipData.newPlainText("Tablet Address", textToCopy)
                 clipboard.setPrimaryClip(clip)
-                Toast.makeText(this, "📋 테슬라 HTTPS 주소($textToCopy)가 복사되었습니다.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "📋 태블릿/PC 주소($textToCopy)가 복사되었습니다.", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 Toast.makeText(this, "복사 실패: ${e.message}", Toast.LENGTH_SHORT).show()
             }
@@ -227,32 +252,23 @@ class MainActivity : AppCompatActivity() {
             startActivity(intent)
         }
 
+        binding.btnOpenWirelessDebugging.setOnClickListener {
+            showWirelessDebuggingDialog()
+        }
+
+        binding.btnShizukuPermission.setOnClickListener {
+            AdbTouchManager.requestShizukuPermission()
+        }
+
+        binding.btnOpenShizukuApp.setOnClickListener {
+            openOrInstallShizuku()
+        }
+
         binding.btnToggleMirroring.setOnClickListener {
             if (MediaProjectionService.isRunning) {
                 stopMirroringService()
             } else {
                 checkPermissionsAndStart()
-            }
-        }
-
-        binding.btnToggleVpn.setOnClickListener {
-            if (LocalProxyVpnService.isRunning) {
-                LocalProxyVpnService.stop(this)
-                Toast.makeText(this, "⚡ 테슬라 로컬 가상 프록시(VPN)를 껐습니다.\n삼성페이 결제가 가능합니다.", Toast.LENGTH_SHORT).show()
-                updateUIState()
-            } else {
-                try {
-                    val vpnIntent = android.net.VpnService.prepare(this)
-                    if (vpnIntent != null) {
-                        vpnLauncher.launch(vpnIntent)
-                    } else {
-                        LocalProxyVpnService.start(this)
-                        Toast.makeText(this, "⚡ 테슬라 로컬 가상 프록시(VPN)가 가동되었습니다.", Toast.LENGTH_SHORT).show()
-                        updateUIState()
-                    }
-                } catch (e: Exception) {
-                    Toast.makeText(this, "VPN 가동 실패: ${e.message}", Toast.LENGTH_SHORT).show()
-                }
             }
         }
 
@@ -285,14 +301,13 @@ class MainActivity : AppCompatActivity() {
 
             【 2단계: 앱에서 미러링 시작 】
             ① 화면 아래 파란색 [미러링 시작] 버튼을 누르고 화면 캡처 권한 '지금 시작'을 허용합니다.
-            ② 테슬라 화면 터치로 폰을 조작하려면 [양방향 터치 조작 (접근성)] 권한도 허용해 주세요.
+            ② 테슬라 화면 터치로 폰을 조작하려면 [양방향 터치 조작 (접근성)] 또는 [무선 디버깅 (0ms 터치)]을 활성화해 주세요.
 
             【 3단계: 테슬라 모니터 접속 (데이터 0MB 초저지연) 】
             ① 테슬라 모니터 브라우저를 켭니다.
             ② 주소창에 아래 주소를 입력합니다:
-               👉 https://mdm.mplat.store:9999
-               (또는 보조: https://teslamirror.net:9999 / http://td9.cc:7777)
-            ③ 공인 Let's Encrypt SSL 인증서가 적용되어 보안 경고 없이 녹색 자물쇠와 함께 즉시 접속됩니다!
+               👉 https://mdm.mplat.store:8088
+            ③ 공인 Let's Encrypt SSL 인증서 + WebRTC P2P 기술로 VPN 설정 없이 녹색 자물쇠와 함께 즉시 접속됩니다!
             ④ 테슬라 브라우저 상단 ★ (즐겨찾기)에 추가해 두시면, 다음 탑승부터 원클릭으로 0.5초 만에 초저지연 로컬 미러링(0MB)으로 바로 연결됩니다!
 
             【 4단계: 갤럭시 폴드 & 편의기능 】
@@ -373,23 +388,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun checkPermissionsAndStart() {
-        // 방식 B (0MB 도메인 가로채기): 테슬라 브라우저 공인 도메인(mdm.mplat.store) 가로채기를 위해 로컬 VPN 가동
-        if (!LocalProxyVpnService.isRunning) {
-            try {
-                val vpnIntent = android.net.VpnService.prepare(this)
-                if (vpnIntent != null) {
-                    startMirroringAfterVpn = true
-                    vpnLauncher.launch(vpnIntent)
-                    return
-                } else {
-                    LocalProxyVpnService.start(this)
-                    updateUIState()
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("MainActivity", "Failed to start LocalProxyVpnService: ${e.message}")
-            }
-        }
-
         val needed = mutableListOf<String>()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
@@ -437,9 +435,6 @@ class MainActivity : AppCompatActivity() {
             action = MediaProjectionService.ACTION_STOP
         }
         startService(serviceIntent)
-        if (LocalProxyVpnService.isRunning) {
-            LocalProxyVpnService.stop(this)
-        }
         updateUIState()
         Toast.makeText(this, "미러링이 중지되었습니다.", Toast.LENGTH_SHORT).show()
     }
@@ -470,35 +465,13 @@ class MainActivity : AppCompatActivity() {
         if (MediaProjectionService.isRunning) {
             binding.btnToggleMirroring.text = "미러링 중지"
             binding.btnToggleMirroring.setBackgroundColor(0xFFE74C3C.toInt())
+            binding.tvStreamStatus.text = "🟢 WebRTC 초저지연 로컬 스트리밍 중 (0MB)"
+            binding.tvStreamStatus.setTextColor(0xFF2ECC71.toInt())
         } else {
             binding.btnToggleMirroring.text = "미러링 시작"
             binding.btnToggleMirroring.setBackgroundColor(0xFF3498DB.toInt())
-        }
-
-        val apEnabled = isWifiApEnabled()
-        val hotspotIp = getHotspotIp()
-        val vpnActive = LocalProxyVpnService.isRunning
-
-        if (vpnActive) {
-            binding.btnToggleVpn.text = "VPN 끄기"
-            binding.btnToggleVpn.setBackgroundColor(0xFFE74C3C.toInt())
-            binding.tvProxyBadge.text = "0MB 가상 프록시 활성화됨"
-            binding.tvProxyBadge.setTextColor(0xFF2ECC71.toInt())
-            binding.tvProxyBadge.setBackgroundColor(0x1F2ECC71.toInt())
-            binding.tvProxyStatus.text = "🟢 0MB 초저지연 로컬 터널 가동 중 (https://mdm.mplat.store:9999)"
-            binding.tvProxyStatus.setTextColor(0xFF2ECC71.toInt())
-            binding.tvVpnHint.text = "✅ 0MB 모바일 데이터 · LTE/5G 소모 제로 · 테슬라 보안경고 0건"
-            binding.tvVpnHint.setTextColor(0xFF2ECC71.toInt())
-        } else {
-            binding.btnToggleVpn.text = "VPN 켜기"
-            binding.btnToggleVpn.setBackgroundColor(0xFF3498DB.toInt())
-            binding.tvProxyBadge.text = "0MB 가상 프록시 대기"
-            binding.tvProxyBadge.setTextColor(0xFFA0A5B1.toInt())
-            binding.tvProxyBadge.setBackgroundColor(0x1FA0A5B1.toInt())
-            binding.tvProxyStatus.text = "⚪ [미러링 시작] 시 0MB 가상 프록시가 자동 가동됩니다."
-            binding.tvProxyStatus.setTextColor(0xFFA0A5B1.toInt())
-            binding.tvVpnHint.text = "💡 스마트폰 핫스팟의 로컬 Wi-Fi(0MB)로만 통신합니다."
-            binding.tvVpnHint.setTextColor(0xFF3498DB.toInt())
+            binding.tvStreamStatus.text = "VPN 불필요 · 핫스팟 로컬 직결 전송 대기"
+            binding.tvStreamStatus.setTextColor(0xFFA0A5B1.toInt())
         }
     }
 
@@ -524,6 +497,126 @@ class MainActivity : AppCompatActivity() {
             it.resolveInfo.serviceInfo.packageName == packageName &&
             it.resolveInfo.serviceInfo.name == TouchControlService::class.java.name
         }
+    }
+
+    private fun updateWirelessDebuggingStatus() {
+        val isGranted = AdbTouchManager.isShizukuPermissionGranted
+        val isRunning = AdbTouchManager.isShizukuRunning
+        val isInstalled = AdbTouchManager.isShizukuInstalled(this)
+
+        if (isGranted) {
+            binding.tvWirelessDebuggingStatus.text = "✓ 무선 디버깅(ADB) 활성화됨 (0ms 초저지연 터치)"
+            binding.tvWirelessDebuggingStatus.setTextColor(0xFF2ECC71.toInt())
+            binding.btnOpenWirelessDebugging.text = "설정 완료"
+            binding.btnOpenWirelessDebugging.setBackgroundColor(0xFF27AE60.toInt())
+            binding.layoutShizukuActions.visibility = View.GONE
+        } else if (isRunning) {
+            binding.tvWirelessDebuggingStatus.text = "Shizuku 실행 중 (권한 승인 필요)"
+            binding.tvWirelessDebuggingStatus.setTextColor(0xFFF39C12.toInt())
+            binding.btnOpenWirelessDebugging.text = "권한 승인"
+            binding.btnOpenWirelessDebugging.setBackgroundColor(0xFFE67E22.toInt())
+            binding.layoutShizukuActions.visibility = View.VISIBLE
+            binding.btnShizukuPermission.visibility = View.VISIBLE
+            binding.btnOpenShizukuApp.visibility = if (isInstalled) View.VISIBLE else View.GONE
+        } else {
+            binding.tvWirelessDebuggingStatus.text = "미연결 (무선 디버깅 켜면 0ms 초저지연 터치 지원)"
+            binding.tvWirelessDebuggingStatus.setTextColor(0xFFA0A5B1.toInt())
+            binding.btnOpenWirelessDebugging.text = "무선디버깅 켜기"
+            binding.btnOpenWirelessDebugging.setBackgroundColor(0xFF27AE60.toInt())
+            if (isInstalled) {
+                binding.layoutShizukuActions.visibility = View.VISIBLE
+                binding.btnShizukuPermission.visibility = View.GONE
+                binding.btnOpenShizukuApp.visibility = View.VISIBLE
+            } else {
+                binding.layoutShizukuActions.visibility = View.GONE
+            }
+        }
+    }
+
+    private fun showWirelessDebuggingDialog() {
+        if (AdbTouchManager.isShizukuRunning && !AdbTouchManager.isShizukuPermissionGranted) {
+            AdbTouchManager.requestShizukuPermission()
+            return
+        }
+
+        val isInstalled = AdbTouchManager.isShizukuInstalled(this)
+        val options = mutableListOf(
+            "📱 안드로이드 무선 디버깅 설정 열기",
+            if (isInstalled) "⚡ Shizuku 앱 열기" else "⚡ Shizuku 앱 설치 (무선 디버깅 연동)",
+            "❓ 개발자 옵션 활성화 방법 안내"
+        )
+
+        AlertDialog.Builder(this)
+            .setTitle("🛠️ 무선 디버깅(Wireless Debugging) 설정")
+            .setItems(options.toTypedArray()) { _, which ->
+                when (which) {
+                    0 -> openWirelessDebuggingSettings()
+                    1 -> openOrInstallShizuku()
+                    2 -> showDeveloperOptionsGuide()
+                }
+            }
+            .setNegativeButton("닫기", null)
+            .show()
+    }
+
+    private fun openWirelessDebuggingSettings() {
+        val intents = listOf(
+            Intent("android.settings.WIRELESS_DEBUGGING_SETTINGS"),
+            Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS),
+            Intent(Settings.ACTION_DEVICE_INFO_SETTINGS),
+            Intent(Settings.ACTION_SETTINGS)
+        )
+        for (intent in intents) {
+            try {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                startActivity(intent)
+                Toast.makeText(this, "설정에서 '무선 디버깅'을 켜주세요.", Toast.LENGTH_SHORT).show()
+                return
+            } catch (_: Exception) {}
+        }
+        Toast.makeText(this, "설정 화면을 열 수 없습니다.", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun openOrInstallShizuku() {
+        val packageName = "moe.shizuku.privileged.api"
+        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
+        if (launchIntent != null) {
+            startActivity(launchIntent)
+        } else {
+            try {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$packageName")).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                })
+            } catch (_: Exception) {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=$packageName")).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                })
+            }
+        }
+    }
+
+    private fun showDeveloperOptionsGuide() {
+        AlertDialog.Builder(this)
+            .setTitle("❓ 개발자 옵션 활성화 안내")
+            .setMessage(
+                "1. 휴대폰 [설정] > [휴대전화 정보] > [소프트웨어 정보]로 이동합니다.\n\n" +
+                "2. '빌드번호' 항목을 7번 연속으로 터치합니다.\n\n" +
+                "3. 패턴/비밀번호 확인 후 '개발자 모드를 켰습니다' 문구가 표시됩니다.\n\n" +
+                "4. 다시 [설정] 최하단의 [개발자 옵션]으로 이동하여 [무선 디버깅]을 켭니다."
+            )
+            .setPositiveButton("휴대전화 정보로 이동") { _, _ ->
+                try {
+                    startActivity(Intent(Settings.ACTION_DEVICE_INFO_SETTINGS).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    })
+                } catch (_: Exception) {
+                    startActivity(Intent(Settings.ACTION_SETTINGS).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    })
+                }
+            }
+            .setNegativeButton("닫기", null)
+            .show()
     }
 
     private fun openHotspotSettings() {
@@ -591,8 +684,8 @@ class MainActivity : AppCompatActivity() {
         val apEnabled = isWifiApEnabled()
         val hotspotIp = getHotspotIp()
 
-        binding.tvTeslaAddress.text = "https://mdm.mplat.store:9999"
-        binding.tvSecondaryAddress.text = "보조(테슬라미러): https://teslamirror.net:9999 · 태블릿: http://$hotspotIp:8080"
+        binding.tvTeslaAddress.text = "https://mdm.mplat.store:8088"
+        binding.tvSecondaryAddress.text = "태블릿/PC: http://$hotspotIp:8080"
 
         if (apEnabled) {
             binding.tvHotspotStatus.text = "✓ 핫스팟 켜짐 ($hotspotIp) - 태블릿/테슬라 Wi-Fi 연결 대기"

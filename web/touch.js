@@ -3,6 +3,7 @@
     'use strict';
 
     const canvas = document.getElementById('videoCanvas');
+    const viewportContainer = document.getElementById('viewportContainer') || canvas;
     const btnNavBack = document.getElementById('btnNavBack');
     const btnNavHome = document.getElementById('btnNavHome');
     const btnNavRecents = document.getElementById('btnNavRecents');
@@ -11,17 +12,21 @@
 
     let isMouseDown = false;
 
-    // 터치/마우스 좌표를 캔버스 기준 0.0 ~ 1.0 정규화 좌표로 변환
+    // 터치/마우스 좌표를 화면 기준 0.0 ~ 1.0 정규화 좌표로 변환
     function getNormalizedCoords(clientX, clientY) {
-        const rect = canvas.getBoundingClientRect();
+        const activeEl = (window.mMirror && window.mMirror.getVideo && window.mMirror.getVideo().style.display !== 'none') ? window.mMirror.getVideo() : canvas;
+        const rect = activeEl.getBoundingClientRect();
         if (rect.width === 0 || rect.height === 0) return null;
 
         let normX = 0;
         let normY = 0;
 
-        if (window.screenFitMode === 'cover' && canvas.width > 0 && canvas.height > 0) {
+        const naturalWidth = activeEl.videoWidth || activeEl.width || rect.width;
+        const naturalHeight = activeEl.videoHeight || activeEl.height || rect.height;
+
+        if (window.screenFitMode === 'cover' && naturalWidth > 0 && naturalHeight > 0) {
             const containerRatio = rect.width / rect.height;
-            const videoRatio = canvas.width / canvas.height;
+            const videoRatio = naturalWidth / naturalHeight;
 
             if (videoRatio < containerRatio) {
                 // 비디오가 컨테이너보다 좁음 (세로 모드) -> 상하가 잘림
@@ -69,8 +74,12 @@
         return { x: normX, y: normY };
     }
 
+    function getMode() {
+        return (window.mMirror && window.mMirror.getDisplayMode) ? window.mMirror.getDisplayMode() : 'standalone';
+    }
+
     // --- 터치 이벤트 핸들러 (테슬라 디스플레이 전용) ---
-    canvas.addEventListener('touchstart', (e) => {
+    viewportContainer.addEventListener('touchstart', (e) => {
         e.preventDefault();
         if (window.resetUiHideTimer) window.resetUiHideTimer();
         if (e.changedTouches[0] && e.changedTouches[0].clientY < 40) {
@@ -86,13 +95,14 @@
                     action: 'down',
                     id: touch.identifier,
                     x: coords.x,
-                    y: coords.y
+                    y: coords.y,
+                    mode: getMode()
                 });
             }
         }
     }, { passive: false });
 
-    canvas.addEventListener('touchmove', (e) => {
+    viewportContainer.addEventListener('touchmove', (e) => {
         e.preventDefault();
         if (window.resetUiHideTimer) window.resetUiHideTimer();
 
@@ -105,38 +115,41 @@
                     action: 'move',
                     id: touch.identifier,
                     x: coords.x,
-                    y: coords.y
+                    y: coords.y,
+                    mode: getMode()
                 });
             }
         }
     }, { passive: false });
 
-    canvas.addEventListener('touchend', (e) => {
+    viewportContainer.addEventListener('touchend', (e) => {
         e.preventDefault();
         for (let i = 0; i < e.changedTouches.length; i++) {
             const touch = e.changedTouches[i];
             window.mMirror.sendControl({
                 type: 'touch',
                 action: 'up',
-                id: touch.identifier
+                id: touch.identifier,
+                mode: getMode()
             });
         }
     }, { passive: false });
 
-    canvas.addEventListener('touchcancel', (e) => {
+    viewportContainer.addEventListener('touchcancel', (e) => {
         e.preventDefault();
         for (let i = 0; i < e.changedTouches.length; i++) {
             const touch = e.changedTouches[i];
             window.mMirror.sendControl({
                 type: 'touch',
                 action: 'up',
-                id: touch.identifier
+                id: touch.identifier,
+                mode: getMode()
             });
         }
     }, { passive: false });
 
     // --- 마우스 이벤트 폴백 (PC 브라우저 테스트 지원) ---
-    canvas.addEventListener('mousedown', (e) => {
+    viewportContainer.addEventListener('mousedown', (e) => {
         isMouseDown = true;
         const coords = getNormalizedCoords(e.clientX, e.clientY);
         if (coords) {
@@ -145,7 +158,8 @@
                 action: 'down',
                 id: 0,
                 x: coords.x,
-                y: coords.y
+                y: coords.y,
+                mode: getMode()
             });
         }
     });
@@ -159,7 +173,8 @@
                 action: 'move',
                 id: 0,
                 x: coords.x,
-                y: coords.y
+                y: coords.y,
+                mode: getMode()
             });
         }
     });
@@ -170,7 +185,8 @@
             window.mMirror.sendControl({
                 type: 'touch',
                 action: 'up',
-                id: 0
+                id: 0,
+                mode: getMode()
             });
         }
     });

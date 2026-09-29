@@ -14,7 +14,7 @@
             <div class="status-indicator">
                 <span id="statusDot" class="dot disconnected"></span>
                 <span id="statusText">연결 대기 중...</span>
-                <span class="app-version-badge">v1.4.0</span>
+                <span class="app-version-badge">v1.5.1</span>
             </div>
 
             <div class="metrics">
@@ -25,19 +25,75 @@
 
             <div class="header-actions">
                 <button id="btnRecoverStream" class="icon-btn" title="스트림 수동 복구 (화면 멈춤 시 터치)">🔄</button>
+                <button id="btnDisplayMode" class="icon-btn-text" title="디스플레이 모드 전환 (🖥️ 단독 가상화면 / 📱 폰 화면 복제)">🖥️ 가상화면</button>
+                <button id="btnToggleDock" class="icon-btn" title="앱 팔레트 열기/닫기">📱 앱</button>
                 <button id="btnFitMode" class="icon-btn-text" title="화면 맞춤 모드 (꽉 채움 / 스마트 줌 / 원본)">⚡ 꽉 채움</button>
                 <button id="btnCropToggle" class="icon-btn" title="티맵 상단 50% 분할 크롭 모드 (내비만 2배 확대)">✂️ 내비 확대</button>
                 <button id="btnImmersiveToggle" class="icon-btn" title="UI 자동 숨김 토글 (몰입 모드)">👁️</button>
                 <button id="btnHeaderTripLog" class="icon-btn" title="주행일지 &amp; 지도">🚗</button>
                 <button id="btnAudioToggle" class="icon-btn" title="오디오 토글">🔊</button>
+                <a href="/download" class="icon-btn" style="text-decoration: none; display: inline-flex; align-items: center; justify-content: center; font-size: 14px;" title="최신 앱 다운로드 (v1.5.1)">📥</a>
                 <button id="btnFullscreen" class="icon-btn" title="전체화면">⛶</button>
             </div>
         </header>
 
+        <!-- 테슬라 맞춤형 독립 가상 디스플레이 앱 팔레트 (CarPlay Dock) -->
+        <aside id="appDock" class="app-dock">
+            <div class="dock-toggle-btn" id="dockToggleBtn" title="앱 팔레트 접기/펼치기">📱</div>
+            <div class="dock-scroll-container">
+                <div class="dock-section-title">앱 팔레트</div>
+                <button class="dock-item-btn" data-pkg="com.skt.tmap.ku" title="티맵 실행">
+                    <span class="dock-emoji">🚗</span>
+                    <span class="dock-text">티맵</span>
+                </button>
+                <button class="dock-item-btn" data-pkg="com.locnall.KimGiSa" title="카카오내비 실행">
+                    <span class="dock-emoji">🧭</span>
+                    <span class="dock-text">카카오내비</span>
+                </button>
+                <button class="dock-item-btn" data-pkg="com.nhn.android.nmap" title="네이버지도 실행">
+                    <span class="dock-emoji">🗺️</span>
+                    <span class="dock-text">네이버지도</span>
+                </button>
+                <button class="dock-item-btn" data-pkg="com.google.android.youtube" title="유튜브 실행">
+                    <span class="dock-emoji">▶️</span>
+                    <span class="dock-text">유튜브</span>
+                </button>
+                <button class="dock-item-btn" data-pkg="com.netflix.mediaclient" title="넷플릭스 실행">
+                    <span class="dock-emoji">🍿</span>
+                    <span class="dock-text">넷플릭스</span>
+                </button>
+                <button class="dock-item-btn" data-pkg="com.google.android.apps.youtube.music" title="유튜브 뮤직 실행">
+                    <span class="dock-emoji">🎵</span>
+                    <span class="dock-text">YT뮤직</span>
+                </button>
+                <button class="dock-item-btn" data-pkg="com.android.chrome" title="크롬 브라우저 실행">
+                    <span class="dock-emoji">🌐</span>
+                    <span class="dock-text">크롬</span>
+                </button>
+                
+                <div class="dock-divider"></div>
+                <div class="dock-section-title">원격 내비키</div>
+                <button class="dock-item-btn dock-key-btn" data-key="BACK" title="뒤로가기">
+                    <span class="dock-emoji">◀</span>
+                    <span class="dock-text">뒤로</span>
+                </button>
+                <button class="dock-item-btn dock-key-btn" data-key="HOME" title="홈 화면">
+                    <span class="dock-emoji">⌂</span>
+                    <span class="dock-text">홈</span>
+                </button>
+                <button class="dock-item-btn dock-key-btn" data-key="RECENTS" title="최근 실행 앱">
+                    <span class="dock-emoji">▢</span>
+                    <span class="dock-text">최근앱</span>
+                </button>
+            </div>
+        </aside>
+
         <!-- 메인 뷰어 영역 -->
         <main id="viewportContainer">
-            <!-- 캔버스 (주행 중 비디오 차단 방지 & WebCodecs 초저지연 하드웨어 렌더링) -->
+            <!-- 캔버스 (WebCodecs 초저지연 하드웨어 렌더링) -->
             <canvas id="videoCanvas"></canvas>
+            <!-- WebRTC 초저지연 로컬 P2P 비디오 엘리먼트 -->
+            <video id="webrtcVideo" autoplay playsinline muted style="display: none; width: 100%; height: 100%; object-fit: contain;"></video>
             
             <!-- 오디오 자동재생 언락 안내 오버레이 (테슬라 브라우저 사용자 제스처 필요 시) -->
             <div id="audioUnlockOverlay" class="overlay hidden">
@@ -53,7 +109,7 @@
                     <div class="guide-header">
                         <img src="logo.png" alt="mplat Mirror Logo" class="guide-logo">
                         <div class="guide-title-box">
-                            <h2 id="overlayTitle">mplat Mirror 테슬라 연결 가이드 <span class="badge-version">v1.4.0</span></h2>
+                            <h2 id="overlayTitle">mplat Mirror 테슬라 연결 가이드 <span class="badge-version">v1.5.1</span></h2>
                             <p class="guide-sub">컴퓨터 연결이나 개발자 모드 없이 3초 만에 시작하세요</p>
                         </div>
                     </div>
@@ -86,13 +142,19 @@
                         <span>💡 <strong>운전자 꿀팁</strong>: 현재 주소를 테슬라 브라우저 <strong>★ 즐겨찾기(북마크)</strong>에 등록해두시면 다음부터 원클릭 접속됩니다!</span>
                     </div>
 
+                    <div style="margin-top: 14px; text-align: center;">
+                        <a href="/download" style="display: inline-flex; align-items: center; gap: 8px; background: rgba(52, 152, 219, 0.18); color: #3498db; border: 1px solid rgba(52, 152, 219, 0.4); padding: 8px 18px; border-radius: 20px; font-size: 13px; text-decoration: none; font-weight: 600;">
+                            📥 mplat Mirror 앱 다운로드 페이지 바로가기 (v1.5.1)
+                        </a>
+                    </div>
+
                     <div class="guide-footer-status">
                         <div class="spinner-small"></div>
                         <span>스마트폰의 [미러링 시작] 신호를 기다리는 중...</span>
                     </div>
 
                     <div class="guide-legal">
-                        <span>mplat Mirror v1.4.0 · 0MB 초저지연 로컬 가상 프록시 · Copyright © 2026 mplat</span>
+                        <span>mplat Mirror v1.5.1 · 0MB 초저지연 WebRTC 로컬 P2P 직결 · Copyright © 2026 mplat</span>
                     </div>
                 </div>
             </div>

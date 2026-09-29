@@ -4,7 +4,7 @@ use std::pin::Pin;
 use std::sync::Mutex;
 use std::task::{ready, Context, Poll};
 use tokio::io::unix::AsyncFd;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf};
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::net::TcpStream;
 use tokio::sync::oneshot;
 

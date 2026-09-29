@@ -27,6 +27,8 @@ bytes = "1.6"
 futures-util = "0.3"
 socket2 = "0.6.5"
 axum-server = { version = "0.8.0", features = ["tls-rustls"] }
+rustls = { version = "0.23", default-features = false, features = ["aws_lc_rs", "std"] }
+rustls-pki-types = "1.14"
 rcgen = "0.14.10"
 ipstack = "1.0.1"
 libc = "0.2"

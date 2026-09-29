@@ -119,7 +119,7 @@
                         android:textStyle="bold" />
 
                     <TextView
-                        android:id="@+id/tvProxyBadge"
+                        android:id="@+id/tvStreamBadge"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:background="#1f2ecc71"
@@ -127,7 +127,7 @@
                         android:paddingTop="3dp"
                         android:paddingEnd="8dp"
                         android:paddingBottom="3dp"
-                        android:text="로컬 초저지연 (데이터 0MB)"
+                        android:text="WebRTC 0MB P2P"
                         android:textColor="#2ecc71"
                         android:textSize="11sp"
                         android:textStyle="bold" />
@@ -138,7 +138,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="10dp"
-                    android:text="https://mdm.mplat.store:9999"
+                    android:text="https://rnd.mplat.store:9999"
                     android:textColor="#ffffff"
                     android:textSize="20sp"
                     android:textStyle="bold" />
@@ -148,7 +148,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
-                    android:text="보조: https://teslamirror.net:9999  |  HTTP: http://td9.cc:7777"
+                    android:text="보조: https://teslamirror.net:9999  |  https://mdm.mplat.store:9999"
                     android:textColor="#3498db"
                     android:textSize="12sp" />
 
@@ -245,7 +245,7 @@
                     android:layout_marginBottom="12dp"
                     android:background="#22252e" />
 
-                <!-- 2. 테슬라 스마트 게이트웨이 연동 -->
+                <!-- 2. WebRTC 로컬 P2P 연결 상태 -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -261,42 +261,41 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="⚡ 테슬라 로컬 가상 프록시 (VPN)"
+                            android:text="⚡ WebRTC 로컬 P2P (0MB)"
                             android:textColor="#ecf0f1"
                             android:textSize="14sp"
                             android:textStyle="bold" />
 
                         <TextView
-                            android:id="@+id/tvProxyStatus"
+                            android:id="@+id/tvStreamStatus"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="2dp"
-                            android:text="미러링 시작 시 자동 가동 (0MB)"
-                            android:textColor="#a0a5b1"
+                            android:text="VPN 불필요 · 핫스팟 로컬 직결 전송"
+                            android:textColor="#2ecc71"
                             android:textSize="12sp" />
                     </LinearLayout>
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnToggleVpn"
+                    <TextView
                         android:layout_width="wrap_content"
-                        android:layout_height="38dp"
-                        android:backgroundTint="#e74c3c"
-                        android:paddingStart="12dp"
-                        android:paddingEnd="12dp"
-                        android:text="VPN 끄기"
-                        android:textColor="#ffffff"
-                        android:textSize="12sp"
-                        android:textStyle="bold"
-                        app:cornerRadius="8dp" />
+                        android:layout_height="wrap_content"
+                        android:background="#1f2ecc71"
+                        android:paddingStart="8dp"
+                        android:paddingTop="4dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="4dp"
+                        android:text="VPN 불필요"
+                        android:textColor="#2ecc71"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
                 </LinearLayout>
 
                 <TextView
-                    android:id="@+id/tvVpnHint"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
-                    android:text="💡 삼성페이 결제 시에는 [VPN 끄기]를 눌러 일시 해제하세요."
-                    android:textColor="#f39c12"
+                    android:text="💡 핫스팟 로컬 Wi-Fi(UDP)로만 통신하여 모바일 데이터 소모가 0MB이며 삼성페이 사용에 전혀 영향이 없습니다."
+                    android:textColor="#3498db"
                     android:textSize="11sp" />
 
                 <com.google.android.material.button.MaterialButton
@@ -364,6 +363,95 @@
                         app:cornerRadius="8dp" />
                 </LinearLayout>
 
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginBottom="12dp"
+                    android:background="#22252e" />
+
+                <!-- 4. 초저지연 무선 디버깅 (Wireless Debugging / ADB) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🛠️ 무선 디버깅 (0ms 터치)"
+                            android:textColor="#ecf0f1"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/tvWirelessDebuggingStatus"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="무선 디버깅(ADB) / Shizuku 상태 확인 중..."
+                            android:textColor="#a0a5b1"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnOpenWirelessDebugging"
+                        android:layout_width="wrap_content"
+                        android:layout_height="38dp"
+                        android:backgroundTint="#27ae60"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
+                        android:text="무선디버깅 켜기"
+                        android:textColor="#ffffff"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        app:cornerRadius="8dp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/layoutShizukuActions"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:visibility="gone">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnShizukuPermission"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:text="Shizuku 권한 승인"
+                        android:textColor="#2ecc71"
+                        android:textSize="11sp"
+                        app:cornerRadius="8dp"
+                        app:strokeColor="#2ecc71"
+                        app:strokeWidth="1dp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnOpenShizukuApp"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_marginStart="6dp"
+                        android:layout_weight="1"
+                        android:text="Shizuku 앱 열기"
+                        android:textColor="#3498db"
+                        android:textSize="11sp"
+                        app:cornerRadius="8dp"
+                        app:strokeColor="#3498db"
+                        app:strokeWidth="1dp" />
+                </LinearLayout>
+
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
@@ -421,7 +509,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
                     android:lineSpacingExtra="4dp"
-                    android:text="1️⃣ 스마트폰 모바일 핫스팟 켜기 &amp; 테슬라 Wi-Fi 연결\n     ⚠️ 필수: 테슬라 Wi-Fi 설정에서 [D 기어 시 연결 유지] 체크!\n2️⃣ [가상 프록시(0MB)] 확인 후 아래 [미러링 시작] 터치\n3️⃣ 테슬라 브라우저에서 https://teslamirror.net:9999 접속\n     (보조 주소: http://td9.cc:7777)"
+                    android:text="1️⃣ 스마트폰 모바일 핫스팟 켜기 &amp; 테슬라 Wi-Fi 연결\n     ⚠️ 필수: 테슬라 Wi-Fi 설정에서 [D 기어 시 연결 유지] 체크!\n2️⃣ 아래 파란색 [미러링 시작] 터치 (화면 캡처 허용)\n3️⃣ 테슬라 브라우저에서 https://mdm.mplat.store:8088 접속\n     (0MB 데이터 WebRTC 로컬 P2P로 1초 만에 즉시 연결!)"
                     android:textColor="#cbd5e1"
                     android:textSize="12sp" />
 

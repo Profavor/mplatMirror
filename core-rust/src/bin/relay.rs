@@ -1,7 +1,7 @@
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
-        Request, State,
+        ConnectInfo, Query, Request, State,
     },
     http::{header, StatusCode},
     middleware::{self, Next},
@@ -16,7 +16,6 @@ use tokio::sync::{broadcast, RwLock};
 use tower_http::cors::CorsLayer;
 use tracing::info;
 
-use axum::extract::ConnectInfo;
 use std::collections::HashMap;
 use std::net::IpAddr;
 
@@ -45,12 +44,20 @@ struct RegisterHostPayload {
 }
 
 #[derive(Clone)]
+pub struct RoomChannels {
+    pub to_publisher: broadcast::Sender<String>,
+    pub to_viewer: broadcast::Sender<String>,
+    pub last_offer: Arc<RwLock<Option<String>>>,
+}
+
+#[derive(Clone)]
 struct RelayState {
     broadcast_tx: broadcast::Sender<Arc<Vec<u8>>>,
     control_tx: broadcast::Sender<String>,
     current_config: Arc<RwLock<Option<Arc<Vec<u8>>>>>,
     last_keyframe: Arc<RwLock<Option<Arc<Vec<u8>>>>>,
     hosts: Arc<RwLock<HashMap<IpAddr, HostRegistration>>>,
+    webrtc_rooms: Arc<RwLock<HashMap<String, RoomChannels>>>,
     apk_path: PathBuf,
 }
 
@@ -69,7 +76,7 @@ async fn serve_download() -> impl IntoResponse {
 async fn serve_tesla() -> impl IntoResponse {
     let mut headers = axum::http::HeaderMap::new();
     headers.insert(header::CACHE_CONTROL, "no-cache, no-store, must-revalidate".parse().unwrap());
-    (StatusCode::OK, headers, Html(TESLA_HTML))
+    (StatusCode::OK, headers, Html(INDEX_HTML))
 }
 
 async fn get_trips() -> impl IntoResponse {
@@ -337,6 +344,115 @@ async fn handle_phone_publisher(socket: WebSocket, state: RelayState) {
     println!("📱 [RELAY] Phone publisher disconnected from /publish");
 }
 
+#[derive(serde::Deserialize)]
+struct WebrtcSignalQuery {
+    role: Option<String>,
+    room: Option<String>,
+}
+
+async fn webrtc_signal_handler(
+    ws: WebSocketUpgrade,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    Query(query): Query<WebrtcSignalQuery>,
+    State(state): State<RelayState>,
+) -> Response {
+    let role = query.role.unwrap_or_else(|| "viewer".to_string());
+    let room = query.room.unwrap_or_else(|| "default".to_string());
+    ws.on_upgrade(move |socket| handle_webrtc_signal(socket, state, role, room))
+}
+
+async fn handle_webrtc_signal(
+    socket: WebSocket,
+    state: RelayState,
+    role: String,
+    room: String,
+) {
+    println!("📡 [WEBRTC SIGNAL] Connected: role={} room={}", role, room);
+
+    let (to_publisher, to_viewer, last_offer) = {
+        let mut rooms = state.webrtc_rooms.write().await;
+        let entry = rooms.entry(room.clone()).or_insert_with(|| {
+            let (to_pub, _) = broadcast::channel(128);
+            let (to_view, _) = broadcast::channel(128);
+            RoomChannels {
+                to_publisher: to_pub,
+                to_viewer: to_view,
+                last_offer: Arc::new(RwLock::new(None)),
+            }
+        });
+        (entry.to_publisher.clone(), entry.to_viewer.clone(), entry.last_offer.clone())
+    };
+
+    let (mut sender, mut receiver) = socket.split();
+
+    if role == "publisher" {
+        let mut rx = to_publisher.subscribe();
+        let send_task = tokio::spawn(async move {
+            while let Ok(msg) = rx.recv().await {
+                if let Err(_) = sender.send(Message::Text(msg)).await {
+                    break;
+                }
+            }
+        });
+
+        let forward_tx = to_viewer.clone();
+        let last_offer_clone = last_offer.clone();
+        let recv_task = tokio::spawn(async move {
+            while let Some(Ok(msg)) = receiver.next().await {
+                if let Message::Text(text) = msg {
+                    if text.contains("\"type\":\"offer\"") || text.contains("\"offer\"") {
+                        println!("📥 [SIGNAL] Cached SDP Offer from publisher (len={})", text.len());
+                        let mut lock = last_offer_clone.write().await;
+                        *lock = Some(text.clone());
+                    } else if text.contains("\"type\":\"candidate\"") {
+                        println!("📡 [SIGNAL] Forwarding Candidate from publisher");
+                    }
+                    let _ = forward_tx.send(text);
+                }
+            }
+        });
+
+        tokio::select! {
+            _ = send_task => {},
+            _ = recv_task => {},
+        }
+    } else {
+        // 시청자(테슬라 브라우저) 접속 시: 스마트폰 퍼블리셔에 뷰어 준비 완료 알림 -> 퍼블리셔가 즉시 최신 Offer 생성 전송
+        println!("📢 [SIGNAL] Viewer connected, requesting fresh SDP Offer from publisher");
+        let _ = to_publisher.send("{\"type\":\"ready\"}".to_string());
+
+        let mut rx = to_viewer.subscribe();
+        let send_task = tokio::spawn(async move {
+            while let Ok(msg) = rx.recv().await {
+                if let Err(_) = sender.send(Message::Text(msg)).await {
+                    break;
+                }
+            }
+        });
+
+        let forward_tx = to_publisher.clone();
+        let recv_task = tokio::spawn(async move {
+            while let Some(Ok(msg)) = receiver.next().await {
+                if let Message::Text(text) = msg {
+                    if text.contains("\"type\":\"answer\"") {
+                        println!("📥 [SIGNAL] Forwarding SDP Answer from viewer (len={})", text.len());
+                    } else if text.contains("\"type\":\"candidate\"") {
+                        println!("📡 [SIGNAL] Forwarding Candidate from viewer");
+                    }
+                    let _ = forward_tx.send(text);
+                }
+            }
+        });
+
+        tokio::select! {
+            _ = send_task => {},
+            _ = recv_task => {},
+        }
+    }
+
+    println!("📡 [WEBRTC SIGNAL] Disconnected: role={} room={}", role, room);
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
@@ -350,6 +466,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         current_config: Arc::new(RwLock::new(None)),
         last_keyframe: Arc::new(RwLock::new(None)),
         hosts: Arc::new(RwLock::new(HashMap::new())),
+        webrtc_rooms: Arc::new(RwLock::new(HashMap::new())),
         apk_path: PathBuf::from("/home/profavor/mMirror/dist/mplatMirror.apk"),
     };
 
@@ -365,11 +482,13 @@ async fn log_request_middleware(
 }
 
     let base_app = Router::new()
+        .route("/", get(serve_mirror))
         .route("/mirror", get(serve_mirror))
-        .route("/tesla", get(serve_tesla))
-        .route("/tesla.html", get(serve_tesla))
+        .route("/tesla", get(serve_mirror))
+        .route("/tesla.html", get(serve_mirror))
         .route("/download", get(serve_download))
         .route("/mplatMirror.apk", get(serve_apk))
+        .route("/dist/mplatMirror.apk", get(serve_apk))
         .route("/api/register_host", axum::routing::post(register_host))
         .route("/api/discover", get(discover_host))
         .route("/style.css", get(serve_css))
@@ -384,25 +503,26 @@ async fn log_request_middleware(
         .route("/api/trips", get(get_trips))
         .route("/ws", get(ws_handler))
         .route("/publish", get(publish_handler))
+        .route("/webrtc/signal", get(webrtc_signal_handler))
         .layer(middleware::from_fn(log_request_middleware))
         .layer(CorsLayer::permissive())
         .with_state(state);
 
-    let cert_path = "/home/profavor/.letsencrypt/live/mdm.mplat.store/fullchain.pem";
-    let key_path = "/home/profavor/.letsencrypt/live/mdm.mplat.store/privkey.pem";
+    let (cert_path, key_path) = if std::path::Path::new("/home/profavor/.letsencrypt/live/mplat.store/fullchain.pem").exists() {
+        ("/home/profavor/.letsencrypt/live/mplat.store/fullchain.pem", "/home/profavor/.letsencrypt/live/mplat.store/privkey.pem")
+    } else {
+        ("/home/profavor/.letsencrypt/live/mdm.mplat.store/fullchain.pem", "/home/profavor/.letsencrypt/live/mdm.mplat.store/privkey.pem")
+    };
 
     let tls_config = axum_server::tls_rustls::RustlsConfig::from_pem_file(cert_path, key_path)
         .await
         .map_err(|e| format!("Failed to load certs: {}", e))?;
 
-    let app_8088 = base_app
-        .clone()
-        .route("/", get(serve_download))
-        .layer(middleware::from_fn(log_request_middleware));
+    let app_8088 = base_app.clone();
     let tls_8088 = tls_config.clone();
     let addr_8088: SocketAddr = ([0, 0, 0, 0], 8088).into();
     tokio::spawn(async move {
-        println!("🚀 mplat Mirror Relay & Download Server running on https://0.0.0.0:8088 (mdm.mplat.store:8088)");
+        println!("🚀 mplat Mirror Web Player & Relay Server running on https://0.0.0.0:8088 (mdm.mplat.store:8088)");
         if let Err(e) = axum_server::bind_rustls(addr_8088, tls_8088)
             .serve(app_8088.into_make_service_with_connect_info::<SocketAddr>())
             .await
@@ -411,9 +531,7 @@ async fn log_request_middleware(
         }
     });
 
-    let app_9999 = base_app
-        .route("/", get(serve_mirror))
-        .layer(middleware::from_fn(log_request_middleware));
+    let app_9999 = base_app;
     let addr_9999: SocketAddr = ([0, 0, 0, 0], 9999).into();
     println!("🚀 mplat Mirror Official Port 9999 HTTPS Server running on https://0.0.0.0:9999 (mdm.mplat.store:9999)");
 

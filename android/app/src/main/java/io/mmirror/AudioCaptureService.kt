@@ -65,6 +65,7 @@ class AudioCaptureService(private val mediaProjection: MediaProjection) {
                     if (bytesRead > 0) {
                         NativeBridge.sendAudioData(buffer, 0, bytesRead)
                         MediaProjectionService.instance?.sendRelayAudio(buffer, bytesRead)
+                        MediaProjectionService.instance?.sendWebRtcAudio(buffer, bytesRead)
                     } else {
                         try {
                             Thread.sleep(10)

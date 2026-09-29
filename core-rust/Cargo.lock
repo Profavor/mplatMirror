@@ -813,6 +813,8 @@ dependencies = [
  "jni",
  "libc",
  "rcgen",
+ "rustls",
+ "rustls-pki-types",
  "serde",
  "serde_json",
  "socket2",

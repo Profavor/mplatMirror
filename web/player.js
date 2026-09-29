@@ -525,6 +525,185 @@
         }
     });
 
+    // --- WebRTC 로컬 P2P 연결 엔진 (0MB 모바일 데이터) ---
+    let peerConnection = null;
+    let webrtcDataChannel = null;
+    let webrtcSignalWs = null;
+    let isWebRtcConnected = false;
+
+    function connectWebRtc() {
+        if (!window.RTCPeerConnection) {
+            console.warn('WebRTC not supported on this browser');
+            return;
+        }
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const roomName = urlParams.get('room') || 'default';
+        const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const signalUrl = `${protocol}//${location.host}/webrtc/signal?role=viewer&room=${encodeURIComponent(roomName)}`;
+        console.log('📡 [WEBRTC] Connecting to signaling server:', signalUrl);
+
+        try {
+            webrtcSignalWs = new WebSocket(signalUrl);
+        } catch (e) {
+            console.warn('WebRTC signal socket error:', e);
+            return;
+        }
+
+        webrtcSignalWs.onopen = () => {
+            console.log('📡 [WEBRTC] Signaling open, initializing RTCPeerConnection');
+            setupPeerConnection();
+        };
+
+        webrtcSignalWs.onmessage = async (event) => {
+            try {
+                const msg = JSON.parse(event.data);
+                if (msg.type === 'offer') {
+                    console.log('📡 [WEBRTC] Received Offer from phone');
+                    await handleWebRtcOffer(msg.sdp);
+                } else if (msg.type === 'candidate' && msg.candidate) {
+                    console.log('📡 [WEBRTC] Received ICE candidate');
+                    await handleRemoteCandidate(msg.candidate);
+                } else if (msg.type === 'config' && msg.width && msg.height) {
+                    if (resolutionInfo) resolutionInfo.textContent = `${msg.width}x${msg.height}`;
+                }
+            } catch (e) {
+                console.warn('WebRTC signal message parse error:', e);
+            }
+        };
+
+        webrtcSignalWs.onclose = () => {
+            console.log('📡 [WEBRTC] Signaling closed. Reconnecting in 3s...');
+            setTimeout(connectWebRtc, 3000);
+        };
+    }
+
+    function setupPeerConnection() {
+        if (peerConnection) {
+            try { peerConnection.close(); } catch (_) {}
+        }
+
+        const rtcConfig = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' }
+            ],
+            sdpSemantics: 'unified-plan'
+        };
+
+        peerConnection = new RTCPeerConnection(rtcConfig);
+
+        peerConnection.onicecandidate = (event) => {
+            if (event.candidate && webrtcSignalWs && webrtcSignalWs.readyState === WebSocket.OPEN) {
+                console.log('📡 [WEBRTC] Sending local ICE candidate to phone:', event.candidate.candidate);
+                webrtcSignalWs.send(JSON.stringify({
+                    type: 'candidate',
+                    candidate: event.candidate
+                }));
+            }
+        };
+
+        peerConnection.onconnectionstatechange = () => {
+            const state = peerConnection.connectionState;
+            console.log('⚡ [WEBRTC] Connection state:', state);
+            if (state === 'connected') {
+                console.log('🎉 [WEBRTC] Direct P2P Connected to Phone! 0MB Local Stream Active!');
+                isWebRtcConnected = true;
+                isConnected = true;
+                statusDot.className = 'dot connected';
+                statusText.textContent = '0MB 로컬 WebRTC 스트리밍 중';
+                if (disconnectOverlay) disconnectOverlay.classList.add('hidden');
+                initAudio();
+            } else if (state === 'failed' || state === 'disconnected') {
+                isWebRtcConnected = false;
+                if (!ws || ws.readyState !== WebSocket.OPEN) {
+                    statusDot.className = 'dot disconnected';
+                    statusText.textContent = 'P2P 재연결 중...';
+                }
+            }
+        };
+
+        peerConnection.ontrack = (event) => {
+            console.log('🎬 [WEBRTC] Received remote track:', event.track.kind);
+            const remoteVideo = document.getElementById('webrtcVideo');
+            if (remoteVideo) {
+                remoteVideo.srcObject = event.streams[0];
+                remoteVideo.style.display = 'block';
+                if (canvas) canvas.style.display = 'none';
+                remoteVideo.play().then(() => {
+                    console.log('🎬 [WEBRTC] Remote video playback started successfully!');
+                    if (disconnectOverlay) disconnectOverlay.classList.add('hidden');
+                }).catch(e => console.warn('WebRTC video play failed:', e));
+            }
+        };
+
+        peerConnection.ondatachannel = (event) => {
+            console.log('💬 [WEBRTC] DataChannel received from phone:', event.channel.label);
+            setupDataChannel(event.channel);
+        };
+
+        if (webrtcSignalWs && webrtcSignalWs.readyState === WebSocket.OPEN) {
+            webrtcSignalWs.send(JSON.stringify({ type: 'ready' }));
+        }
+    }
+
+    async function handleWebRtcOffer(sdp) {
+        if (!peerConnection) setupPeerConnection();
+        await peerConnection.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp }));
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+
+        if (webrtcSignalWs && webrtcSignalWs.readyState === WebSocket.OPEN) {
+            console.log('📡 [WEBRTC] Sending Answer to phone');
+            webrtcSignalWs.send(JSON.stringify({
+                type: 'answer',
+                sdp: answer.sdp
+            }));
+        }
+    }
+
+    async function handleRemoteCandidate(candidate) {
+        if (peerConnection && peerConnection.remoteDescription) {
+            try {
+                await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+            } catch (e) {
+                console.warn('Failed to add remote candidate:', e);
+            }
+        }
+    }
+
+    function setupDataChannel(channel) {
+        webrtcDataChannel = channel;
+        try {
+            webrtcDataChannel.binaryType = 'arraybuffer';
+        } catch (_) {}
+        webrtcDataChannel.onopen = () => {
+            console.log('💬 [WEBRTC] DataChannel OPEN! 0ms Touch, Control, and Audio ready.');
+        };
+        webrtcDataChannel.onmessage = (event) => {
+            if (event.data instanceof ArrayBuffer) {
+                const view = new DataView(event.data);
+                const packetType = view.getUint8(0);
+                const payload = event.data.slice(1);
+                if (packetType === PKT_TYPE_AUDIO) {
+                    playPcmAudio(payload);
+                } else if (packetType === PKT_TYPE_GPS) {
+                    handleGpsPacket(payload);
+                }
+            } else if (typeof event.data === 'string') {
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === 'app_list' && Array.isArray(data.apps)) {
+                        console.log('📱 [WEBRTC] Received app list from phone:', data.apps.length, 'apps. Shizuku:', data.shizuku);
+                        handleAppList(data.apps, data.shizuku, data.virtualDisplayId);
+                    } else if (data.type === 'gps' && window.mMirrorGps && window.mMirrorGps.onGpsUpdate) {
+                        window.mMirrorGps.onGpsUpdate(data.payload);
+                    }
+                } catch (_) {}
+            }
+        };
+    }
+
     // --- WebSocket 연결 및 스트림 수신 ---
     function connectWebSocket() {
         const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -707,15 +886,114 @@
         }
     }
 
-    // 전역 소켓 송신 래퍼 (touch.js 에서 활용)
+    // --- CarPlay 스타일 독립 가상 디스플레이 & App Palette Dock 제어 ---
+    let currentDisplayMode = 'standalone'; // 'standalone' (독립 가상화면) 또는 'mirror' (폰 화면 복제)
+    const btnDisplayMode = document.getElementById('btnDisplayMode');
+    const appDock = document.getElementById('appDock');
+    const btnToggleDock = document.getElementById('btnToggleDock');
+    const dockToggleBtn = document.getElementById('dockToggleBtn');
+
+    function updateDisplayModeUI() {
+        if (!btnDisplayMode) return;
+        if (currentDisplayMode === 'standalone') {
+            btnDisplayMode.textContent = '🖥️ 가상화면';
+            btnDisplayMode.title = '현재: 독립 가상화면 (스마트폰 자유 사용). 클릭 시 폰 미러링으로 전환';
+            btnDisplayMode.style.borderColor = '#2ecc71';
+            btnDisplayMode.style.color = '#2ecc71';
+        } else {
+            btnDisplayMode.textContent = '📱 폰 미러링';
+            btnDisplayMode.title = '현재: 스마트폰 화면 그대로 복제. 클릭 시 독립 가상화면으로 전환';
+            btnDisplayMode.style.borderColor = '#3498db';
+            btnDisplayMode.style.color = '#3498db';
+        }
+    }
+
+    if (btnDisplayMode) {
+        btnDisplayMode.addEventListener('click', () => {
+            currentDisplayMode = currentDisplayMode === 'standalone' ? 'mirror' : 'standalone';
+            updateDisplayModeUI();
+            console.log('🔄 디스플레이 모드 전환:', currentDisplayMode);
+        });
+        updateDisplayModeUI();
+    }
+
+    function toggleAppDock() {
+        if (!appDock) return;
+        appDock.classList.toggle('collapsed');
+    }
+
+    if (btnToggleDock) btnToggleDock.addEventListener('click', toggleAppDock);
+    if (dockToggleBtn) dockToggleBtn.addEventListener('click', toggleAppDock);
+
+    function handleAppList(apps, isShizuku, vdId) {
+        apps.forEach(app => {
+            const btn = document.querySelector(`.dock-item-btn[data-pkg="${app.package}"]`);
+            if (btn) {
+                if (app.installed === false) {
+                    btn.style.opacity = '0.35';
+                    btn.title = `${app.name} (스마트폰에 앱 미설치)`;
+                } else {
+                    btn.style.opacity = '1.0';
+                    btn.title = `${app.name} 단독 실행 (독립 가상화면)`;
+                }
+            }
+        });
+    }
+
+    // App Palette 버튼 클릭 시 앱 단독 런칭 명령 전송
+    document.querySelectorAll('.dock-item-btn[data-pkg]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const pkg = btn.getAttribute('data-pkg');
+            const appName = btn.querySelector('.dock-text')?.textContent || pkg;
+            console.log(`🚀 앱 단독 런칭 요청: ${appName} (${pkg}) [모드: ${currentDisplayMode}]`);
+            window.mMirror.sendControl({
+                type: 'launch_app',
+                package: pkg,
+                mode: currentDisplayMode
+            });
+            btn.style.transform = 'scale(0.9)';
+            setTimeout(() => { btn.style.transform = ''; }, 150);
+        });
+    });
+
+    // 원격 내비키(뒤로가기, 홈, 최근앱) 버튼 클릭 이벤트
+    document.querySelectorAll('.dock-key-btn[data-key]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const key = btn.getAttribute('data-key');
+            console.log(`⌨️ 원격 키 입력 전송: ${key} [모드: ${currentDisplayMode}]`);
+            window.mMirror.sendControl({
+                type: 'key',
+                key: key,
+                mode: currentDisplayMode
+            });
+            btn.style.transform = 'scale(0.9)';
+            setTimeout(() => { btn.style.transform = ''; }, 150);
+        });
+    });
+
+    // 전역 소켓/데이터채널 송신 래퍼 (touch.js 에서 활용)
     window.mMirror = {
         sendControl: function(msgObj) {
+            if (webrtcDataChannel && webrtcDataChannel.readyState === 'open') {
+                try {
+                    webrtcDataChannel.send(JSON.stringify(msgObj));
+                    return;
+                } catch (_) {}
+            }
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify(msgObj));
             }
         },
         getCanvas: function() {
             return canvas;
+        },
+        getVideo: function() {
+            return document.getElementById('webrtcVideo');
+        },
+        getDisplayMode: function() {
+            return currentDisplayMode;
         },
         emergencyRecover: emergencyRecover
     };
@@ -732,8 +1010,9 @@
         });
     }
 
-    // 앱 시작 시 소켓 연결 및 절전모드 방지 엔진 가동
+    // 앱 시작 시 소켓 연결, WebRTC P2P 시그널링 및 절전모드 방지 엔진 가동
     setupKeepAliveVideo();
     requestWakeLock();
+    connectWebRtc();
     connectWebSocket();
 })();

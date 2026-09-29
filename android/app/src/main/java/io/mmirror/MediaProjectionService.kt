@@ -49,9 +49,14 @@ class MediaProjectionService : Service() {
     private var relayWebSocket: WebSocket? = null
     @Volatile
     private var isRelayConnected = false
+    private var webRtcStreamer: io.mmirror.webrtc.WebRtcStreamer? = null
     private val okHttpClient = OkHttpClient.Builder()
         .retryOnConnectionFailure(true)
         .build()
+
+    fun sendWebRtcAudio(data: ByteArray, length: Int) {
+        webRtcStreamer?.sendAudio(data, length)
+    }
 
     fun sendRelayAudio(data: ByteArray, length: Int) {
         if (!enableRemoteRelay) return
@@ -322,35 +327,6 @@ class MediaProjectionService : Service() {
 
     private fun startMirroring(resultCode: Int, resultData: Intent, port: Int) {
         try {
-            val projectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-            mediaProjection = projectionManager.getMediaProjection(resultCode, resultData)
-
-            if (mediaProjection == null) {
-                Log.e(TAG, "MediaProjection is null!")
-                stopMirroring()
-                return
-            }
-
-            // Android 14 필수 요구사항: createVirtualDisplay 전에 반드시 MediaProjection.Callback 등록
-            mediaProjection?.registerCallback(object : MediaProjection.Callback() {
-                override fun onStop() {
-                    Log.i(TAG, "MediaProjection이 시스템에 의해 중지되었습니다.")
-                    stopMirroring()
-                }
-
-                override fun onCapturedContentResize(width: Int, height: Int) {
-                    Log.i(TAG, "MediaProjection onCapturedContentResize: ${width}x${height}")
-                    scheduleDisplayChangeCheck()
-                }
-
-                override fun onCapturedContentVisibilityChanged(isVisible: Boolean) {
-                    Log.i(TAG, "MediaProjection onCapturedContentVisibilityChanged: isVisible=$isVisible")
-                    if (isVisible) {
-                        requestSyncFrame()
-                    }
-                }
-            }, android.os.Handler(android.os.Looper.getMainLooper()))
-
             // 해상도 계산 (폴드 열림/닫힘 및 화면 비율 자동 적응)
             val (w, h, density) = computeScreenDimensions()
             screenWidth = w
@@ -365,21 +341,69 @@ class MediaProjectionService : Service() {
             registerScreenStateReceiver()
             registerDisplayListener()
 
-            // 1. Rust HTTP & WebSocket 서버 시작 (로컬용)
+            // 1. Rust HTTP & WebSocket 서버 시작 (로컬/대체용)
             NativeBridge.startServer(port)
             NativeBridge.updateConfig(screenWidth, screenHeight, 0, 60)
 
-            // 2. 비디오 하드웨어 인코더 설정
-            setupVideoEncoder()
-
-            // 2-1. 외부 릴레이 (기본 비활성화: 모바일 데이터 0MB & 로컬 초저지연 보장)
-            if (enableRemoteRelay) {
-                connectRelayWebSocket()
-            } else {
-                Log.i(TAG, "⚡ 로컬 가상 프록시 모드: 외부 릴레이 업로드 비활성화 (데이터 소모 0MB)")
+            // 2. WebRTC 로컬 P2P 스트리머 시작 (테슬라 브라우저 0MB 초저지연 표준)
+            try {
+                val streamer = io.mmirror.webrtc.WebRtcStreamer(
+                    context = applicationContext,
+                    resultData = resultData,
+                    width = screenWidth,
+                    height = screenHeight,
+                    fps = 60
+                )
+                streamer.start()
+                webRtcStreamer = streamer
+                mediaProjection = streamer.getMediaProjection()
+                virtualDisplayId = streamer.getVirtualDisplayId()
+                isStreaming = true
+                Log.i(TAG, "WebRtcStreamer started successfully (virtualDisplayId=$virtualDisplayId)")
+            } catch (e: Exception) {
+                Log.e(TAG, "WebRtcStreamer initialization error: ${e.message}", e)
             }
 
-            // 3. 오디오 캡처 서비스 시작 (권한 있는 경우만 안전하게 시작)
+            // 2-1. WebRTC 미가동 시 레거시 MediaProjection & MediaCodec 인코더 폴백
+            if (mediaProjection == null) {
+                Log.i(TAG, "Falling back to legacy MediaCodec encoder...")
+                val projectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+                mediaProjection = projectionManager.getMediaProjection(resultCode, resultData)
+
+                if (mediaProjection == null) {
+                    Log.e(TAG, "MediaProjection is null!")
+                    stopMirroring()
+                    return
+                }
+
+                // Android 14 필수: createVirtualDisplay 전에 Callback 등록
+                mediaProjection?.registerCallback(object : MediaProjection.Callback() {
+                    override fun onStop() {
+                        Log.i(TAG, "MediaProjection이 시스템에 의해 중지되었습니다.")
+                        stopMirroring()
+                    }
+
+                    override fun onCapturedContentResize(width: Int, height: Int) {
+                        Log.i(TAG, "MediaProjection onCapturedContentResize: ${width}x${height}")
+                        scheduleDisplayChangeCheck()
+                    }
+
+                    override fun onCapturedContentVisibilityChanged(isVisible: Boolean) {
+                        Log.i(TAG, "MediaProjection onCapturedContentVisibilityChanged: isVisible=$isVisible")
+                        if (isVisible) {
+                            requestSyncFrame()
+                        }
+                    }
+                }, android.os.Handler(android.os.Looper.getMainLooper()))
+
+                setupVideoEncoder()
+
+                if (enableRemoteRelay) {
+                    connectRelayWebSocket()
+                }
+            }
+
+            // 3. 오디오 캡처 서비스 시작 (WebRTC 및 로컬 서버 동시 송출)
             if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 mediaProjection?.let { mp ->
                     audioCaptureService = AudioCaptureService(mp)
@@ -389,7 +413,7 @@ class MediaProjectionService : Service() {
                 Log.i(TAG, "RECORD_AUDIO 권한이 없어 오디오 스트리밍을 건너뜁니다.")
             }
 
-            // 4. GPS 주행일지 추적 시작 (권한 있는 경우만 안전하게 시작)
+            // 4. GPS 주행일지 추적 시작
             if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 drivingLogManager = DrivingLogManager(this)
                 drivingLogManager?.startTrip()
@@ -659,7 +683,10 @@ class MediaProjectionService : Service() {
         NativeBridge.updateConfig(screenWidth, screenHeight, 0, 60)
         sendRelayConfig()
 
-        restartVideoEncoder()
+        webRtcStreamer?.changeResolution(screenWidth, screenHeight, 60)
+        if (mediaCodec != null) {
+            restartVideoEncoder()
+        }
     }
 
     private fun restartVideoEncoder() {
@@ -756,6 +783,9 @@ class MediaProjectionService : Service() {
         } catch (_: Exception) {}
         relayWebSocket = null
         isRelayConnected = false
+
+        webRtcStreamer?.stop()
+        webRtcStreamer = null
 
         audioCaptureService?.stop()
         audioCaptureService = null

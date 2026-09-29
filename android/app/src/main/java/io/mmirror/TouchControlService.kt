@@ -152,8 +152,12 @@ class TouchControlService : AccessibilityService(), NativeBridge.TouchListener {
         }
     }
 
-    // 단발 탭 주입 (전화기 메인 화면 DEFAULT_DISPLAY 대상)
+    // 단발 탭 주입 (무선 디버깅 ADB 우선, 접근성 서비스 폴백)
     private fun dispatchTap(x: Float, y: Float) {
+        if (io.mmirror.adb.AdbTouchManager.isShizukuAvailable) {
+            io.mmirror.adb.AdbTouchManager.injectTap(x, y)
+            return
+        }
         try {
             val path = Path().apply {
                 moveTo(x, y)
@@ -171,8 +175,12 @@ class TouchControlService : AccessibilityService(), NativeBridge.TouchListener {
         }
     }
 
-    // 스와이프/드래그 주입 (전화기 메인 화면 DEFAULT_DISPLAY 대상)
+    // 스와이프/드래그 주입 (무선 디버깅 ADB 우선, 접근성 서비스 폴백)
     private fun dispatchSwipe(startX: Float, startY: Float, endX: Float, endY: Float, durationMs: Long) {
+        if (io.mmirror.adb.AdbTouchManager.isShizukuAvailable) {
+            io.mmirror.adb.AdbTouchManager.injectSwipe(startX, startY, endX, endY, durationMs)
+            return
+        }
         try {
             val path = Path().apply {
                 moveTo(startX, startY)
