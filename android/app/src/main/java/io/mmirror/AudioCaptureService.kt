@@ -36,10 +36,6 @@ class AudioCaptureService(private val mediaProjection: MediaProjection) {
                 .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
                 .addMatchingUsage(AudioAttributes.USAGE_GAME)
                 .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN)
-                .addMatchingUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
-                .addMatchingUsage(AudioAttributes.USAGE_ASSISTANT)
-                .addMatchingUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
-                .addMatchingUsage(AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY)
                 .build()
 
             val audioFormat = AudioFormat.Builder()

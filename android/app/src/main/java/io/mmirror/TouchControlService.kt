@@ -60,113 +60,134 @@ class TouchControlService : AccessibilityService(), NativeBridge.TouchListener {
         Log.i(TAG, "Touch dimensions updated to: ${screenWidth}x${screenHeight}")
     }
 
+    private data class TouchSession(
+        val startX: Float,
+        val startY: Float,
+        var lastX: Float,
+        var lastY: Float,
+        val startTime: Long,
+        var isMoved: Boolean = false
+    )
+
+    private val activeTouchSessions = mutableMapOf<Int, TouchSession>()
+
     // --- NativeBridge.TouchListener 구현 ---
 
     override fun onTouch(action: String, id: Int, x: Float, y: Float) {
-        val pixelX = x * screenWidth
-        val pixelY = y * screenHeight
-
-        if (action == "down") {
-            ensureScreenInteractable()
-        }
+        val pixelX = (x * screenWidth).coerceIn(0f, screenWidth.toFloat())
+        val pixelY = (y * screenHeight).coerceIn(0f, screenHeight.toFloat())
 
         when (action) {
             "down" -> {
-                activeTouchPoints[id] = PointF(pixelX, pixelY)
-                // 즉시 탭 반응을 위한 짧은 제스처 디스패치
-                dispatchTap(pixelX, pixelY)
+                activeTouchSessions[id] = TouchSession(
+                    startX = pixelX,
+                    startY = pixelY,
+                    lastX = pixelX,
+                    lastY = pixelY,
+                    startTime = System.currentTimeMillis()
+                )
             }
             "move" -> {
-                val prev = activeTouchPoints[id]
-                if (prev != null) {
-                    dispatchSwipe(prev.x, prev.y, pixelX, pixelY, 60)
-                    activeTouchPoints[id] = PointF(pixelX, pixelY)
+                val session = activeTouchSessions[id] ?: return
+                val dist = kotlin.math.hypot(pixelX - session.lastX, pixelY - session.lastY)
+                if (dist > 8f) {
+                    session.isMoved = true
+                    dispatchSwipe(session.lastX, session.lastY, pixelX, pixelY, 60)
+                    session.lastX = pixelX
+                    session.lastY = pixelY
                 }
             }
             "up" -> {
-                activeTouchPoints.remove(id)
+                val session = activeTouchSessions.remove(id)
+                if (session != null) {
+                    val duration = System.currentTimeMillis() - session.startTime
+                    if (!session.isMoved && duration < 500) {
+                        // 이동이 거의 없는 단발 터치 -> 정확한 탭 주입
+                        dispatchTap(session.startX, session.startY)
+                    } else if (session.isMoved) {
+                        // 스와이프 마무리
+                        val dist = kotlin.math.hypot(pixelX - session.lastX, pixelY - session.lastY)
+                        if (dist > 4f) {
+                            dispatchSwipe(session.lastX, session.lastY, pixelX, pixelY, 40)
+                        }
+                    }
+                }
             }
         }
     }
 
     override fun onKey(key: String) {
-        when (key.uppercase()) {
-            "BACK" -> performGlobalAction(GLOBAL_ACTION_BACK)
-            "HOME" -> performGlobalAction(GLOBAL_ACTION_HOME)
-            "RECENTS" -> performGlobalAction(GLOBAL_ACTION_RECENTS)
-            "SPLIT_SCREEN" -> {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                    performGlobalAction(GLOBAL_ACTION_TOGGLE_SPLIT_SCREEN)
+        try {
+            when (key.uppercase()) {
+                "BACK" -> performGlobalAction(GLOBAL_ACTION_BACK)
+                "HOME" -> performGlobalAction(GLOBAL_ACTION_HOME)
+                "RECENTS" -> performGlobalAction(GLOBAL_ACTION_RECENTS)
+                "SPLIT_SCREEN" -> {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                        performGlobalAction(GLOBAL_ACTION_TOGGLE_SPLIT_SCREEN)
+                    }
                 }
-            }
-            "NOTIFICATIONS" -> performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS)
-            "LOCK" -> {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN)
+                "NOTIFICATIONS" -> performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS)
+                "LOCK" -> {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN)
+                    }
                 }
+                else -> Log.w(TAG, "Unhandled key action: $key")
             }
-            else -> Log.w(TAG, "Unhandled key action: $key")
+        } catch (e: Exception) {
+            Log.w(TAG, "onKey error: ${e.message}")
         }
     }
 
     override fun onCommand(cmd: String) {
         Log.i(TAG, "Command received: $cmd")
-        when (cmd.uppercase()) {
-            "ROTATE" -> MediaProjectionService.instance?.toggleOrientation()
-            else -> Log.w(TAG, "Unhandled command: $cmd")
-        }
-    }
-
-    // 단발 탭 주입
-    private fun dispatchTap(x: Float, y: Float) {
-        val path = Path().apply {
-            moveTo(x, y)
-        }
-        val stroke = GestureDescription.StrokeDescription(path, 0, 50)
-        val builder = GestureDescription.Builder()
-        builder.addStroke(stroke)
-
-        val vDisplayId = MediaProjectionService.virtualDisplayId
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && vDisplayId > 0) {
-            try {
-                builder.setDisplayId(vDisplayId)
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to setDisplayId on GestureDescription: ${e.message}")
-            }
-        }
-        dispatchGesture(builder.build(), null, null)
-    }
-
-    // 스와이프/드래그 주입
-    private fun dispatchSwipe(startX: Float, startY: Float, endX: Float, endY: Float, durationMs: Long) {
-        val path = Path().apply {
-            moveTo(startX, startY)
-            lineTo(endX, endY)
-        }
-        val stroke = GestureDescription.StrokeDescription(path, 0, durationMs)
-        val builder = GestureDescription.Builder()
-        builder.addStroke(stroke)
-
-        val vDisplayId = MediaProjectionService.virtualDisplayId
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && vDisplayId > 0) {
-            try {
-                builder.setDisplayId(vDisplayId)
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to setDisplayId on GestureDescription: ${e.message}")
-            }
-        }
-        dispatchGesture(builder.build(), null, null)
-    }
-
-    private fun ensureScreenInteractable() {
         try {
-            val km = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
-            if (km?.isKeyguardLocked == true) {
-                // 전원 버튼으로 화면이 잠겼을 때 키가드 해제 시도
-                performGlobalAction(GLOBAL_ACTION_HOME)
+            when (cmd.uppercase()) {
+                "ROTATE" -> MediaProjectionService.instance?.toggleOrientation()
+                else -> Log.w(TAG, "Unhandled command: $cmd")
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to ensure screen interactable", e)
+            Log.w(TAG, "onCommand error: ${e.message}")
+        }
+    }
+
+    // 단발 탭 주입 (전화기 메인 화면 DEFAULT_DISPLAY 대상)
+    private fun dispatchTap(x: Float, y: Float) {
+        try {
+            val path = Path().apply {
+                moveTo(x, y)
+            }
+            val stroke = GestureDescription.StrokeDescription(path, 0, 50)
+            val builder = GestureDescription.Builder().apply {
+                addStroke(stroke)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    setDisplayId(android.view.Display.DEFAULT_DISPLAY)
+                }
+            }
+            dispatchGesture(builder.build(), null, null)
+        } catch (t: Throwable) {
+            Log.w(TAG, "dispatchTap failed: ${t.message}")
+        }
+    }
+
+    // 스와이프/드래그 주입 (전화기 메인 화면 DEFAULT_DISPLAY 대상)
+    private fun dispatchSwipe(startX: Float, startY: Float, endX: Float, endY: Float, durationMs: Long) {
+        try {
+            val path = Path().apply {
+                moveTo(startX, startY)
+                lineTo(endX, endY)
+            }
+            val stroke = GestureDescription.StrokeDescription(path, 0, durationMs.coerceAtLeast(20L))
+            val builder = GestureDescription.Builder().apply {
+                addStroke(stroke)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    setDisplayId(android.view.Display.DEFAULT_DISPLAY)
+                }
+            }
+            dispatchGesture(builder.build(), null, null)
+        } catch (t: Throwable) {
+            Log.w(TAG, "dispatchSwipe failed: ${t.message}")
         }
     }
 }

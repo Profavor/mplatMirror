@@ -127,9 +127,24 @@
         activateAntiSleepAndAudio();
     });
 
+    // --- 오디오 디지털 볼륨 부스터 (스마트폰 볼륨 1칸 시에도 태블릿에서 풍부한 음량 재생) ---
+    let audioGainNode = null;
+    let audioGainLevel = 2.2; // 220% 디지털 증폭
+
+    function getAudioGainNode() {
+        if (!audioCtx) return null;
+        if (!audioGainNode) {
+            audioGainNode = audioCtx.createGain();
+            audioGainNode.gain.value = audioGainLevel;
+            audioGainNode.connect(audioCtx.destination);
+        }
+        return audioGainNode;
+    }
+
     btnAudioToggle.addEventListener('click', () => {
         isAudioMuted = !isAudioMuted;
         btnAudioToggle.textContent = isAudioMuted ? '🔇' : '🔊';
+        btnAudioToggle.title = isAudioMuted ? '오디오 음소거됨 (클릭하여 켜기)' : '오디오 켜짐 (2.2배 고음질 증폭)';
         if (!isAudioMuted && audioCtx && audioCtx.state === 'suspended') {
             audioCtx.resume();
         }
@@ -353,7 +368,12 @@
 
         const source = audioCtx.createBufferSource();
         source.buffer = audioBuffer;
-        source.connect(audioCtx.destination);
+        const gain = getAudioGainNode();
+        if (gain) {
+            source.connect(gain);
+        } else {
+            source.connect(audioCtx.destination);
+        }
 
         const currentTime = audioCtx.currentTime;
         // 딜레이가 너무 누적되었을 경우 리셋 (최대 0.08초 지연 허용)
