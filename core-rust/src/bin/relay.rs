@@ -55,15 +55,21 @@ struct RelayState {
 }
 
 async fn serve_mirror() -> impl IntoResponse {
-    Html(INDEX_HTML)
+    let mut headers = axum::http::HeaderMap::new();
+    headers.insert(header::CACHE_CONTROL, "no-cache, no-store, must-revalidate".parse().unwrap());
+    (StatusCode::OK, headers, Html(INDEX_HTML))
 }
 
 async fn serve_download() -> impl IntoResponse {
-    Html(DOWNLOAD_HTML)
+    let mut headers = axum::http::HeaderMap::new();
+    headers.insert(header::CACHE_CONTROL, "no-cache, no-store, must-revalidate".parse().unwrap());
+    (StatusCode::OK, headers, Html(DOWNLOAD_HTML))
 }
 
 async fn serve_tesla() -> impl IntoResponse {
-    Html(TESLA_HTML)
+    let mut headers = axum::http::HeaderMap::new();
+    headers.insert(header::CACHE_CONTROL, "no-cache, no-store, must-revalidate".parse().unwrap());
+    (StatusCode::OK, headers, Html(TESLA_HTML))
 }
 
 async fn get_trips() -> impl IntoResponse {
@@ -73,36 +79,42 @@ async fn get_trips() -> impl IntoResponse {
 async fn serve_css() -> impl IntoResponse {
     let mut headers = axum::http::HeaderMap::new();
     headers.insert(header::CONTENT_TYPE, "text/css; charset=utf-8".parse().unwrap());
+    headers.insert(header::CACHE_CONTROL, "no-cache, no-store, must-revalidate".parse().unwrap());
     (StatusCode::OK, headers, STYLE_CSS)
 }
 
 async fn serve_player() -> impl IntoResponse {
     let mut headers = axum::http::HeaderMap::new();
     headers.insert(header::CONTENT_TYPE, "application/javascript; charset=utf-8".parse().unwrap());
+    headers.insert(header::CACHE_CONTROL, "no-cache, no-store, must-revalidate".parse().unwrap());
     (StatusCode::OK, headers, PLAYER_JS)
 }
 
 async fn serve_touch() -> impl IntoResponse {
     let mut headers = axum::http::HeaderMap::new();
     headers.insert(header::CONTENT_TYPE, "application/javascript; charset=utf-8".parse().unwrap());
+    headers.insert(header::CACHE_CONTROL, "no-cache, no-store, must-revalidate".parse().unwrap());
     (StatusCode::OK, headers, TOUCH_JS)
 }
 
 async fn serve_triplog() -> impl IntoResponse {
     let mut headers = axum::http::HeaderMap::new();
     headers.insert(header::CONTENT_TYPE, "application/javascript; charset=utf-8".parse().unwrap());
+    headers.insert(header::CACHE_CONTROL, "no-cache, no-store, must-revalidate".parse().unwrap());
     (StatusCode::OK, headers, TRIPLOG_JS)
 }
 
 async fn serve_leaflet_css() -> impl IntoResponse {
     let mut headers = axum::http::HeaderMap::new();
     headers.insert(header::CONTENT_TYPE, "text/css; charset=utf-8".parse().unwrap());
+    headers.insert(header::CACHE_CONTROL, "no-cache, no-store, must-revalidate".parse().unwrap());
     (StatusCode::OK, headers, LEAFLET_CSS)
 }
 
 async fn serve_leaflet_js() -> impl IntoResponse {
     let mut headers = axum::http::HeaderMap::new();
     headers.insert(header::CONTENT_TYPE, "application/javascript; charset=utf-8".parse().unwrap());
+    headers.insert(header::CACHE_CONTROL, "no-cache, no-store, must-revalidate".parse().unwrap());
     (StatusCode::OK, headers, LEAFLET_JS)
 }
 
