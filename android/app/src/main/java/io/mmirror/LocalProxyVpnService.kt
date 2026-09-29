@@ -51,6 +51,8 @@ class LocalProxyVpnService : VpnService() {
     }
 
     private var vpnInterface: ParcelFileDescriptor? = null
+    private var connectivityManager: android.net.ConnectivityManager? = null
+    private var networkCallback: android.net.ConnectivityManager.NetworkCallback? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
@@ -107,18 +109,27 @@ class LocalProxyVpnService : VpnService() {
                 .setMtu(1500)
                 .setBlocking(false)
 
-            // 가상 인터페이스 주소 할당 (10.254.1.2/24)
-            // 호스트 IP 충돌 및 rp_filter 패킷 드롭 방지를 위해 전용 가상 서브넷 주소를 할당합니다.
-            try { builder.addAddress("10.254.1.2", 24) } catch (e: Throwable) { sendDebugLog("⚠ addAddress 10.254.1.2 실패: ${e.message}") }
+            // 가상 인터페이스 주소 할당 (100.99.9.2/24)
+            // 핫스팟 서브넷(10.x.x.x, 192.168.x.x)과 전혀 충돌하지 않는 CGNAT(100.64.0.0/10) 대역 사용
+            try { builder.addAddress("100.99.9.2", 24) } catch (e: Throwable) { sendDebugLog("⚠ addAddress 100.99.9.2 실패: ${e.message}") }
 
-            sendDebugLog("2/5 addAddress 완료, addRoute 설정 중")
+            sendDebugLog("2/5 addAddress 완료, 가상 프록시 IP만 1:1 정밀 라우팅 (/32) 설정 중")
 
-            // 테슬라 브라우저가 사용하는 가상 프록시 IP 대역을 로컬 VPN 터널로 유입
-            try { builder.addRoute("122.40.252.0", 24) } catch (e: Throwable) { sendDebugLog("⚠ addRoute 122.40.252.0 실패: ${e.message}") }
-            try { builder.addRoute("100.99.9.0", 24) } catch (e: Throwable) { sendDebugLog("⚠ addRoute 100.99.9.0 실패: ${e.message}") }
-            try { builder.addRoute("7.7.7.0", 24) } catch (e: Throwable) { sendDebugLog("⚠ addRoute 7.7.7.0 실패: ${e.message}") }
-            try { builder.addRoute("3.3.3.0", 24) } catch (e: Throwable) { sendDebugLog("⚠ addRoute 3.3.3.0 실패: ${e.message}") }
-            try { builder.addRoute("10.254.1.0", 24) } catch (e: Throwable) { sendDebugLog("⚠ addRoute 10.254.1.0 실패: ${e.message}") }
+            // 오직 테슬라 가상 프록시 대상 IP(/32)만 1:1 정밀 인터셉트 (일반 인터넷 및 핫스팟 트래픽 100% 정상 보장)
+            try { builder.addRoute("122.40.252.50", 32) } catch (e: Throwable) { sendDebugLog("⚠ addRoute 122.40.252.50 실패: ${e.message}") }
+            try { builder.addRoute("100.99.9.9", 32) } catch (e: Throwable) { sendDebugLog("⚠ addRoute 100.99.9.9 실패: ${e.message}") }
+            try { builder.addRoute("7.7.7.7", 32) } catch (e: Throwable) { sendDebugLog("⚠ addRoute 7.7.7.7 실패: ${e.message}") }
+
+            // Android 13+ (API 33+) 사설망(핫스팟/로컬 Wi-Fi) 라우팅 완전 배제 보장
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                try {
+                    builder.excludeRoute(android.net.IpPrefix(java.net.InetAddress.getByName("10.0.0.0"), 8))
+                    builder.excludeRoute(android.net.IpPrefix(java.net.InetAddress.getByName("172.16.0.0"), 12))
+                    builder.excludeRoute(android.net.IpPrefix(java.net.InetAddress.getByName("192.168.0.0"), 16))
+                } catch (e: Throwable) {
+                    Log.w(TAG, "excludeRoute not supported: ${e.message}")
+                }
+            }
 
             // 앱 자체(미러링 소켓) 및 삼성페이 앱들은 VPN 간섭 방지를 위해 우회
             val bypassPackages = listOf(
@@ -154,6 +165,10 @@ class LocalProxyVpnService : VpnService() {
                 val rawFd = pfd.fd
                 sendDebugLog("4/5 VPN TUN 생성 성공 fd=$rawFd, 서버포트 확인 중...")
 
+                // 물리 셀룰러/Wi-Fi 네트워크를 underlying network로 즉시 바인딩하여 핫스팟 인터넷 공유 유지
+                updateUnderlyingNetworks()
+                registerNetworkCallback()
+
                 val targetPort = NativeBridge.getServerPort().takeIf { it > 0 } ?: 8080
                 sendDebugLog("4/5 targetPort=$targetPort, TUN 프록시 시작 중...")
 
@@ -171,8 +186,64 @@ class LocalProxyVpnService : VpnService() {
         }
     }
 
+    private fun updateUnderlyingNetworks() {
+        try {
+            val cm = connectivityManager ?: (getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager).also { connectivityManager = it }
+            val physicalNetworks = cm.allNetworks.filter { net ->
+                val caps = cm.getNetworkCapabilities(net)
+                caps != null &&
+                    caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                    !caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN)
+            }.toTypedArray()
+
+            if (physicalNetworks.isNotEmpty()) {
+                setUnderlyingNetworks(physicalNetworks)
+                sendDebugLog("✓ 물리 네트워크(${physicalNetworks.size}개)를 기본 인터넷 업스트림으로 설정 완료")
+            } else if (cm.activeNetwork != null) {
+                setUnderlyingNetworks(arrayOf(cm.activeNetwork))
+                sendDebugLog("✓ activeNetwork를 기본 인터넷 업스트림으로 설정 완료")
+            }
+        } catch (e: Throwable) {
+            Log.w(TAG, "Failed to update underlying networks: ${e.message}")
+        }
+    }
+
+    private fun registerNetworkCallback() {
+        try {
+            val cm = connectivityManager ?: (getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager).also { connectivityManager = it }
+            val request = android.net.NetworkRequest.Builder()
+                .addCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .build()
+            val callback = object : android.net.ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: android.net.Network) {
+                    updateUnderlyingNetworks()
+                }
+                override fun onLost(network: android.net.Network) {
+                    updateUnderlyingNetworks()
+                }
+                override fun onCapabilitiesChanged(network: android.net.Network, networkCapabilities: android.net.NetworkCapabilities) {
+                    updateUnderlyingNetworks()
+                }
+            }
+            networkCallback = callback
+            cm.registerNetworkCallback(request, callback)
+        } catch (e: Throwable) {
+            Log.w(TAG, "Failed to register network callback: ${e.message}")
+        }
+    }
+
+    private fun unregisterNetworkCallback() {
+        try {
+            networkCallback?.let {
+                connectivityManager?.unregisterNetworkCallback(it)
+            }
+        } catch (_: Throwable) {}
+        networkCallback = null
+    }
+
     private fun stopVpn() {
         try {
+            unregisterNetworkCallback()
             NativeBridge.stopTunProxy()
             vpnInterface?.close()
             vpnInterface = null
