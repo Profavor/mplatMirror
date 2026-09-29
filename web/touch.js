@@ -175,31 +175,31 @@
         }
     });
 
-    // --- 가상 내비게이션 바 버튼 제어 ---
-    btnNavBack.addEventListener('click', (e) => {
-        e.stopPropagation();
-        window.mMirror.sendControl({ type: 'key', key: 'BACK' });
-    });
+    // --- 가상 내비게이션 바 버튼 제어 (더블탭/고스트 터치 방지 디바운스 적용) ---
+    let lastNavActionTime = 0;
+    function sendNavControl(controlPayload) {
+        const now = Date.now();
+        if (now - lastNavActionTime < 350) return;
+        lastNavActionTime = now;
+        window.mMirror.sendControl(controlPayload);
+    }
 
-    btnNavHome.addEventListener('click', (e) => {
-        e.stopPropagation();
-        window.mMirror.sendControl({ type: 'key', key: 'HOME' });
-    });
+    function bindNavButton(el, controlPayload) {
+        if (!el) return;
+        const handler = (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            sendNavControl(controlPayload);
+        };
+        el.addEventListener('click', handler);
+        el.addEventListener('touchend', handler);
+    }
 
-    btnNavRecents.addEventListener('click', (e) => {
-        e.stopPropagation();
-        window.mMirror.sendControl({ type: 'key', key: 'RECENTS' });
-    });
-
-    btnNavSplit.addEventListener('click', (e) => {
-        e.stopPropagation();
-        window.mMirror.sendControl({ type: 'key', key: 'SPLIT_SCREEN' });
-    });
-
-    btnRotate.addEventListener('click', (e) => {
-        e.stopPropagation();
-        window.mMirror.sendControl({ type: 'command', cmd: 'ROTATE' });
-    });
+    bindNavButton(btnNavBack, { type: 'key', key: 'BACK' });
+    bindNavButton(btnNavHome, { type: 'key', key: 'HOME' });
+    bindNavButton(btnNavRecents, { type: 'key', key: 'RECENTS' });
+    bindNavButton(btnNavSplit, { type: 'key', key: 'SPLIT_SCREEN' });
+    bindNavButton(btnRotate, { type: 'command', cmd: 'ROTATE' });
 
     // 키보드 이벤트 (PC 연결 또는 테슬라 물리 키보드 연결 시)
     window.addEventListener('keydown', (e) => {

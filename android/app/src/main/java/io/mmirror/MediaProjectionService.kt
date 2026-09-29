@@ -231,10 +231,10 @@ class MediaProjectionService : Service() {
         screenHeight = temp
 
         Log.i(TAG, "Toggling orientation to: ${screenWidth}x${screenHeight}")
-        virtualDisplay?.resize(screenWidth, screenHeight, screenDensity)
         NativeBridge.updateConfig(screenWidth, screenHeight, 0, 60)
         TouchControlService.instance?.updateDimensions(screenWidth, screenHeight)
-        requestSyncFrame()
+        sendRelayConfig()
+        restartVideoEncoder()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -334,7 +334,19 @@ class MediaProjectionService : Service() {
                     Log.i(TAG, "MediaProjection이 시스템에 의해 중지되었습니다.")
                     stopMirroring()
                 }
-            }, null)
+
+                override fun onCapturedContentResize(width: Int, height: Int) {
+                    Log.i(TAG, "MediaProjection onCapturedContentResize: ${width}x${height}")
+                    scheduleDisplayChangeCheck()
+                }
+
+                override fun onCapturedContentVisibilityChanged(isVisible: Boolean) {
+                    Log.i(TAG, "MediaProjection onCapturedContentVisibilityChanged: isVisible=$isVisible")
+                    if (isVisible) {
+                        requestSyncFrame()
+                    }
+                }
+            }, android.os.Handler(android.os.Looper.getMainLooper()))
 
             // 해상도 계산 (폴드 열림/닫힘 및 화면 비율 자동 적응)
             val (w, h, density) = computeScreenDimensions()
@@ -536,22 +548,51 @@ class MediaProjectionService : Service() {
     }
 
     private var displayListener: DisplayManager.DisplayListener? = null
+    private val displayChangeHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val displayChangeRunnable = Runnable {
+        checkAndApplyDisplayChanges()
+    }
+
+    private fun scheduleDisplayChangeCheck() {
+        displayChangeHandler.removeCallbacks(displayChangeRunnable)
+        displayChangeHandler.postDelayed(displayChangeRunnable, 150L)
+    }
 
     private fun computeScreenDimensions(): Triple<Int, Int, Int> {
         val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        val metrics = DisplayMetrics()
-        @Suppress("DEPRECATION")
-        wm.defaultDisplay.getRealMetrics(metrics)
+        var rawWidth: Int
+        var rawHeight: Int
+        var density: Int
 
-        var w = (metrics.widthPixels / 16) * 16
-        var h = (metrics.heightPixels / 16) * 16
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val windowMetrics = wm.currentWindowMetrics
+            val bounds = windowMetrics.bounds
+            rawWidth = bounds.width()
+            rawHeight = bounds.height()
+            density = resources.configuration.densityDpi
+        } else {
+            val metrics = DisplayMetrics()
+            @Suppress("DEPRECATION")
+            wm.defaultDisplay.getRealMetrics(metrics)
+            rawWidth = metrics.widthPixels
+            rawHeight = metrics.heightPixels
+            density = metrics.densityDpi
+        }
+
+        if (rawWidth <= 0 || rawHeight <= 0) {
+            rawWidth = 1080
+            rawHeight = 1920
+        }
+
+        var w = (rawWidth / 16) * 16
+        var h = (rawHeight / 16) * 16
         val maxDim = 1280
         if (w > maxDim || h > maxDim) {
             val scale = maxDim.toFloat() / maxOf(w, h)
             w = ((w * scale).toInt() / 16) * 16
             h = ((h * scale).toInt() / 16) * 16
         }
-        return Triple(maxOf(320, w), maxOf(320, h), metrics.densityDpi)
+        return Triple(maxOf(320, w), maxOf(320, h), maxOf(120, density))
     }
 
     private fun registerDisplayListener() {
@@ -561,7 +602,7 @@ class MediaProjectionService : Service() {
             override fun onDisplayRemoved(displayId: Int) {}
             override fun onDisplayChanged(displayId: Int) {
                 if (displayId == android.view.Display.DEFAULT_DISPLAY) {
-                    checkAndApplyDisplayChanges()
+                    scheduleDisplayChangeCheck()
                 }
             }
         }
@@ -569,6 +610,7 @@ class MediaProjectionService : Service() {
     }
 
     private fun unregisterDisplayListener() {
+        displayChangeHandler.removeCallbacks(displayChangeRunnable)
         try {
             displayListener?.let {
                 val dm = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
@@ -580,8 +622,8 @@ class MediaProjectionService : Service() {
 
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
         super.onConfigurationChanged(newConfig)
-        Log.i(TAG, "onConfigurationChanged 감지 (폴드 열림/닫힘/화면회전) -> 해상도 자동 동기화")
-        checkAndApplyDisplayChanges()
+        Log.i(TAG, "onConfigurationChanged 감지 (폴드 열림/닫힘/화면회전) -> 150ms 후 해상도 자동 동기화")
+        scheduleDisplayChangeCheck()
     }
 
     @Synchronized
@@ -589,7 +631,7 @@ class MediaProjectionService : Service() {
         if (!isStreaming || mediaProjection == null) return
 
         val (newW, newH, newDensity) = computeScreenDimensions()
-        if (newW == screenWidth && newH == screenHeight) {
+        if (newW == screenWidth && newH == screenHeight && newDensity == screenDensity) {
             return
         }
 
@@ -611,11 +653,24 @@ class MediaProjectionService : Service() {
             encodingThread?.interrupt()
             encodingThread = null
 
+            // 1. 기존 가상 디스플레이에서 서피스를 먼저 안전하게 분리하여 크래시 방지
+            try {
+                virtualDisplay?.setSurface(null)
+            } catch (e: Exception) {
+                Log.w(TAG, "Surface detach warning: ${e.message}")
+            }
+
+            // 2. 이전 비디오 코덱 안전하게 종료
             try {
                 mediaCodec?.stop()
                 mediaCodec?.release()
             } catch (_: Exception) {}
+            mediaCodec = null
 
+            // 3. 해상도 변경에 따른 새 SPS/PPS 생성 대기 위해 버퍼 초기화
+            spsPpsBuffer = null
+
+            // 4. 새로운 해상도 포맷으로 H.264 하드웨어 인코더 생성
             val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, screenWidth, screenHeight).apply {
                 setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
                 setInteger(MediaFormat.KEY_BIT_RATE, 4_000_000)
@@ -626,13 +681,15 @@ class MediaProjectionService : Service() {
                 } catch (_: Exception) {}
             }
 
-            mediaCodec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
-            mediaCodec?.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
-            val surface = mediaCodec?.createInputSurface()
+            val newCodec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
+            newCodec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+            val surface = newCodec.createInputSurface()
+            mediaCodec = newCodec
 
-            if (virtualDisplay != null && surface != null) {
-                virtualDisplay?.setSurface(surface)
+            // 5. 가상 디스플레이 크기 재설정 및 새 서피스 연결
+            if (virtualDisplay != null) {
                 virtualDisplay?.resize(screenWidth, screenHeight, screenDensity)
+                virtualDisplay?.setSurface(surface)
             } else {
                 virtualDisplay = mediaProjection?.createVirtualDisplay(
                     "mMirror-VirtualDisplay",
@@ -647,7 +704,7 @@ class MediaProjectionService : Service() {
             }
             virtualDisplayId = virtualDisplay?.display?.displayId ?: -1
 
-            mediaCodec?.start()
+            newCodec.start()
             isStreaming = true
             startEncodingLoop()
             requestSyncFrame()

@@ -90,6 +90,18 @@ class MainActivity : AppCompatActivity() {
         checkBatteryOptimization()
         setupListeners()
         ensureServerRunning()
+
+        // 뒤로가기 키 입력 시 앱이 종료되어 미러링이 중단되지 않고 백그라운드로 안전하게 전환
+        onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                moveTaskToBack(true)
+            }
+        })
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        moveTaskToBack(true)
     }
 
     private fun ensureServerRunning() {
@@ -243,6 +255,11 @@ class MainActivity : AppCompatActivity() {
             • 운전자 좌측 밀착 (기본): 운전석에서 티맵/카카오내비를 가장 편하게 볼 수 있도록 화면이 운전석 쪽(좌측)에 정렬됩니다.
             • 뷰 모드 변경: 좌측 상단 ⚙️ 플로팅 버튼을 눌러 '화면 꽉 채우기', '중앙 정렬' 등으로 변경할 수 있습니다.
             • 상단바 3초 자동 숨김: 3초 후 상단바가 자동으로 숨겨져 몰입감 있는 전체 화면을 제공합니다 (화면 가장자리 터치 시 다시 나타남).
+
+            【 5단계: 내비게이션 음성 & 차량 스피커 안내 】
+            • 테슬라 블루투스 연결: 스마트폰을 차량 '블루투스'로 연결하시면 티맵/카카오내비 음성이 차량 스피커로 지연 없이 가장 깨끗하게 나옵니다.
+            • 내비 앱 설정 확인: 티맵/카카오내비 [설정] → [소리/음성] → [안내 음성 출력]이 '미디어/블루투스'로 설정되어 있어야 차량 스피커로 나옵니다 ('휴대폰 스피커'로 되어 있으면 폰에서 소리가 납니다).
+            • 웹 브라우저 오디오: 테슬라 화면을 1회 터치하거나 상단 🔊 아이콘을 누르면 브라우저를 통한 실시간 사운드 스트리밍도 함께 재생됩니다.
         """.trimIndent()
 
         com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
@@ -331,7 +348,13 @@ class MainActivity : AppCompatActivity() {
     private fun requestScreenCapture() {
         try {
             val projectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-            screenCaptureLauncher.launch(projectionManager.createScreenCaptureIntent())
+            val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                val config = android.media.projection.MediaProjectionConfig.createConfigForDefaultDisplay()
+                projectionManager.createScreenCaptureIntent(config)
+            } else {
+                projectionManager.createScreenCaptureIntent()
+            }
+            screenCaptureLauncher.launch(intent)
         } catch (e: Exception) {
             android.util.Log.e("MainActivity", "Failed to launch screen capture intent", e)
             Toast.makeText(this, "화면 캡처 요청 실패: ${e.message}", Toast.LENGTH_LONG).show()

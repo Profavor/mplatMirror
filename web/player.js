@@ -33,6 +33,78 @@
     const PKT_TYPE_CONFIG = 0x03; // Metadata (Width, Height, FPS, etc.)
     const PKT_TYPE_GPS = 0x04; // 실시간 GPS 주행 데이터
 
+    // --- 절전모드 방지 (Dual Anti-Sleep Engine) & AudioContext 잠금 해제 ---
+    let wakeLockSentinel = null;
+
+    async function requestWakeLock() {
+        try {
+            if ('wakeLock' in navigator) {
+                wakeLockSentinel = await navigator.wakeLock.request('screen');
+                wakeLockSentinel.addEventListener('release', () => {
+                    console.log('Screen Wake Lock was released');
+                    wakeLockSentinel = null;
+                });
+                console.log('💡 Screen Wake Lock 획득 (태블릿 화면 꺼짐 방지)');
+            }
+        } catch (err) {
+            console.warn('Wake Lock 요청 실패:', err);
+        }
+    }
+
+    function setupKeepAliveVideo() {
+        let videoEl = document.getElementById('keepAliveVideo');
+        if (!videoEl) {
+            videoEl = document.createElement('video');
+            videoEl.id = 'keepAliveVideo';
+            videoEl.setAttribute('playsinline', '');
+            videoEl.setAttribute('muted', '');
+            videoEl.setAttribute('loop', '');
+            videoEl.muted = true;
+            videoEl.playsInline = true;
+            videoEl.loop = true;
+            videoEl.style.position = 'fixed';
+            videoEl.style.width = '1px';
+            videoEl.style.height = '1px';
+            videoEl.style.opacity = '0.001';
+            videoEl.style.pointerEvents = 'none';
+            videoEl.style.top = '0';
+            videoEl.style.left = '0';
+            videoEl.style.zIndex = '-999';
+            videoEl.src = 'data:video/mp4;base64,AAAAHGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAAAAsbWRhdAAEAAD//wAAABxzdHNzAAAAAAAAAAEAAAABAAAAHGN0dHMAAAAAAAAAAQAAAAAAAAAAAAAAACRzdHNjAAAAAAAAAAIAAAABAAAAAQAAAAEAAAACAAAAAQAAAAEAAAAic3RzegAAAAAAAAAAAAAAAgAAABAAAAAIAAAAFHN0Y28AAAAAAAAAAgAAAFAAAABwAAA=';
+            document.body.appendChild(videoEl);
+        }
+        playKeepAliveVideo();
+    }
+
+    function playKeepAliveVideo() {
+        const videoEl = document.getElementById('keepAliveVideo');
+        if (videoEl) {
+            videoEl.play().catch(() => {});
+        }
+    }
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            requestWakeLock();
+            playKeepAliveVideo();
+        }
+    });
+
+    function activateAntiSleepAndAudio() {
+        requestWakeLock();
+        playKeepAliveVideo();
+        if (audioCtx && audioCtx.state === 'suspended') {
+            audioCtx.resume().then(() => {
+                console.log('🔊 AudioContext 정상 활성화됨');
+                if (audioUnlockOverlay) audioUnlockOverlay.classList.add('hidden');
+            }).catch(() => {});
+        }
+    }
+
+    ['click', 'touchstart', 'pointerdown'].forEach(evt => {
+        document.addEventListener(evt, activateAntiSleepAndAudio, { passive: true });
+    });
+
     // --- Web Audio 시스템 초기화 ---
     function initAudio() {
         if (!audioCtx) {
@@ -52,13 +124,8 @@
 
     btnUnlockAudio.addEventListener('click', () => {
         initAudio();
+        activateAntiSleepAndAudio();
     });
-
-    document.body.addEventListener('click', () => {
-        if (audioCtx && audioCtx.state === 'suspended') {
-            audioCtx.resume();
-        }
-    }, { once: true });
 
     btnAudioToggle.addEventListener('click', () => {
         isAudioMuted = !isAudioMuted;
@@ -439,6 +506,9 @@
         }
     }
 
+    let lastConfigWidth = 0;
+    let lastConfigHeight = 0;
+
     function handleConfigPacket(payload) {
         try {
             const dec = new TextDecoder();
@@ -446,6 +516,16 @@
             console.log('서버 설정 수신:', config);
             if (config.width && config.height) {
                 resolutionInfo.textContent = `${config.width}x${config.height}`;
+
+                // 폴드 열림/닫힘 및 가로/세로 회전 시 비디오 디코더 안전하게 재초기화
+                if (lastConfigWidth !== 0 && (lastConfigWidth !== config.width || lastConfigHeight !== config.height)) {
+                    console.log(`🔄 해상도 변경 감지 (${lastConfigWidth}x${lastConfigHeight} -> ${config.width}x${config.height}): VideoDecoder 재설정`);
+                    videoConfigured = false;
+                    hasReceivedFirstKeyFrame = false;
+                    initVideoDecoder();
+                }
+                lastConfigWidth = config.width;
+                lastConfigHeight = config.height;
             }
         } catch (e) {
             console.warn('설정 패킷 파싱 오류:', e);
@@ -464,6 +544,8 @@
         }
     };
 
-    // 앱 시작 시 소켓 연결
+    // 앱 시작 시 소켓 연결 및 절전모드 방지 엔진 가동
+    setupKeepAliveVideo();
+    requestWakeLock();
     connectWebSocket();
 })();
