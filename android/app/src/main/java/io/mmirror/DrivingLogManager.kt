@@ -57,13 +57,6 @@ class DrivingLogManager(private val context: Context) : LocationListener {
                     1.0f,  // 1m 최소 변화
                     this
                 )
-            } else if (locationManager?.isProviderEnabled(LocationManager.NETWORK_PROVIDER) == true) {
-                locationManager.requestLocationUpdates(
-                    LocationManager.NETWORK_PROVIDER,
-                    1000L,
-                    1.0f,
-                    this
-                )
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to request location updates", e)

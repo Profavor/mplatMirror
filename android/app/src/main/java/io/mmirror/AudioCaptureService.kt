@@ -65,6 +65,10 @@ class AudioCaptureService(private val mediaProjection: MediaProjection) {
                     if (bytesRead > 0) {
                         NativeBridge.sendAudioData(buffer, 0, bytesRead)
                         MediaProjectionService.instance?.sendRelayAudio(buffer, bytesRead)
+                    } else {
+                        try {
+                            Thread.sleep(10)
+                        } catch (_: InterruptedException) {}
                     }
                 }
                 Log.i(TAG, "Audio capture loop ended")

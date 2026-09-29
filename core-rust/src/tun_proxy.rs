@@ -170,15 +170,21 @@ pub fn start_tun_proxy(fd: i32, target_port: u16) -> bool {
                                                     target_port
                                                 };
 
+                                                let target_addr = if local_port == 8088 {
+                                                    "122.40.252.50:8088".to_string()
+                                                } else {
+                                                    format!("127.0.0.1:{}", dest_port)
+                                                };
+
                                                 crate::server::log_android(
                                                     4,
                                                     &format!(
-                                                        "🔄 [TUN PROXY] 로컬 127.0.0.1:{} 로 전달 시작 (TLS={}, 수신포트={})",
-                                                        dest_port, is_tls, local_port
+                                                        "🔄 [TUN PROXY] {} 로 전달 시작 (TLS={}, 수신포트={})",
+                                                        target_addr, is_tls, local_port
                                                     ),
                                                 );
 
-                                                match TcpStream::connect(format!("127.0.0.1:{}", dest_port)).await {
+                                                match TcpStream::connect(&target_addr).await {
                                                     Ok(mut target_tcp) => {
                                                         if let Err(e) = target_tcp.write_all(&first_byte).await {
                                                             crate::server::log_android(6, &format!("❌ [TUN WRITE ERROR] 초기 바이트 전송 실패: {}", e));

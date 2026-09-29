@@ -373,6 +373,23 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun checkPermissionsAndStart() {
+        // 테슬라 브라우저 사설 IP(PNA) 차단 우회를 위해 로컬 가상 프록시(VPN) 가동
+        if (!LocalProxyVpnService.isRunning) {
+            try {
+                val vpnIntent = android.net.VpnService.prepare(this)
+                if (vpnIntent != null) {
+                    startMirroringAfterVpn = true
+                    vpnLauncher.launch(vpnIntent)
+                    return
+                } else {
+                    LocalProxyVpnService.start(this)
+                    updateUIState()
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("MainActivity", "Failed to start LocalProxyVpnService: ${e.message}")
+            }
+        }
+
         val needed = mutableListOf<String>()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
@@ -574,13 +591,8 @@ class MainActivity : AppCompatActivity() {
         val apEnabled = isWifiApEnabled()
         val hotspotIp = getHotspotIp()
 
-        if (LocalProxyVpnService.isRunning) {
-            binding.tvTeslaAddress.text = "https://mdm.mplat.store:9999"
-            binding.tvSecondaryAddress.text = "로컬 Wi-Fi 직접 주소: http://$hotspotIp:8080  |  https://$hotspotIp:9999"
-        } else {
-            binding.tvTeslaAddress.text = "http://$hotspotIp:8080"
-            binding.tvSecondaryAddress.text = "테슬라 HTTPS: https://$hotspotIp:9999  |  접속기: https://mdm.mplat.store:8088/tesla"
-        }
+        binding.tvTeslaAddress.text = "https://mdm.mplat.store:9999"
+        binding.tvSecondaryAddress.text = "보조(테슬라미러): https://teslamirror.net:9999 · 태블릿: http://$hotspotIp:8080"
 
         if (apEnabled) {
             binding.tvHotspotStatus.text = "✓ 핫스팟 켜짐 ($hotspotIp) - 태블릿/테슬라 Wi-Fi 연결 대기"
