@@ -69,8 +69,8 @@ class MediaProjectionService : Service() {
         if (!enableRemoteRelay) return
         val ws = relayWebSocket ?: return
         if (!isRelayConnected) return
-        // 큐가 256KB 넘으면 키프레임 외에는 드롭하여 지연시간 50ms 미만 유지
-        if (!isKeyFrame && ws.queueSize() > 256 * 1024L) return
+        // 큐가 48KB 넘으면 키프레임 외에는 드롭하여 지연시간 40ms 미만 유지
+        if (!isKeyFrame && ws.queueSize() > 48 * 1024L) return
 
         val packet = ByteArray(1 + data.size)
         packet[0] = 0x01 // PKT_TYPE_VIDEO
@@ -117,6 +117,15 @@ class MediaProjectionService : Service() {
                 override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                     Log.i(TAG, "Relay WebSocket closed: $reason")
                     isRelayConnected = false
+                    // 스트리밍 중이면 자동 재연결
+                    if (isStreaming) {
+                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                            if (isStreaming && !isRelayConnected) {
+                                Log.i(TAG, "🔄 Relay auto-reconnect after onClosed...")
+                                connectRelayWebSocket()
+                            }
+                        }, 2000)
+                    }
                 }
             })
         } catch (e: Exception) {
@@ -449,12 +458,22 @@ class MediaProjectionService : Service() {
         try {
             val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, screenWidth, screenHeight).apply {
                 setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-                setInteger(MediaFormat.KEY_BIT_RATE, 4_000_000) // 4 Mbps (테슬라 브라우저 권장 대역폭)
-                setInteger(MediaFormat.KEY_FRAME_RATE, 30) // 30 FPS 안정적 송출
+                setInteger(MediaFormat.KEY_BIT_RATE, 3_000_000) // 3 Mbps CBR (모바일 핫스팟 초저지연 대역폭 최적화)
+                setInteger(MediaFormat.KEY_FRAME_RATE, 60) // 60 FPS 부드러운 초고속 송출
                 setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1) // 1초마다 I-프레임
+                // Baseline Profile: B-프레임 100% 제거 -> 인코더/디코더 버퍼링 0ms
+                setInteger(MediaFormat.KEY_PROFILE, MediaCodecInfo.CodecProfileLevel.AVCProfileBaseline)
+                setInteger(MediaFormat.KEY_LEVEL, MediaCodecInfo.CodecProfileLevel.AVCLevel41)
                 try {
                     setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)
                 } catch (_: Exception) {}
+                // Android R+ 초저지연 실시간 모드
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    try {
+                        setInteger(MediaFormat.KEY_LATENCY, 0) // 퀄컴/엑시노스 0-레이턴시 모드
+                        setInteger(MediaFormat.KEY_PRIORITY, 0) // 실시간 우선순위
+                    } catch (_: Exception) {}
+                }
             }
 
             mediaCodec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)

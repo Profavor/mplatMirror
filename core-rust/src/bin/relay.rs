@@ -218,13 +218,23 @@ async fn handle_tesla_viewer(socket: WebSocket, state: RelayState) {
     let _ = state.control_tx.send("{\"type\":\"request_keyframe\"}".to_string());
 
     let mut broadcast_rx = state.broadcast_tx.subscribe();
-    let control_tx = state.control_tx.clone();
+    let send_control_tx = state.control_tx.clone();
+    let recv_control_tx = state.control_tx.clone();
 
-    // 폰 화면 스트림 -> 테슬라 화면
+    // 폰 화면 스트림 -> 테슬라 화면 (초저지연: 뒤처질 경우 낡은 프레임 즉시 드롭하고 실시간으로 스냅)
     let send_task = tokio::spawn(async move {
-        while let Ok(packet) = broadcast_rx.recv().await {
-            if let Err(_) = sender.send(Message::Binary((*packet).clone())).await {
-                break;
+        loop {
+            match broadcast_rx.recv().await {
+                Ok(packet) => {
+                    if let Err(_) = sender.send(Message::Binary((*packet).clone())).await {
+                        break;
+                    }
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
+                    println!("⚡ [RELAY] Viewer lagged, skipped {} stale frames to preserve 0ms latency!", skipped);
+                    let _ = send_control_tx.send("{\"type\":\"request_keyframe\"}".to_string());
+                }
+                Err(_) => break,
             }
         }
     });
@@ -233,7 +243,7 @@ async fn handle_tesla_viewer(socket: WebSocket, state: RelayState) {
     let recv_task = tokio::spawn(async move {
         while let Some(Ok(msg)) = receiver.next().await {
             if let Message::Text(text) = msg {
-                let _ = control_tx.send(text);
+                let _ = recv_control_tx.send(text);
             }
         }
     });
@@ -284,9 +294,9 @@ async fn handle_phone_publisher(socket: WebSocket, state: RelayState) {
                         } else if packet_type == 0x01 && bin.len() > 5 {
                             // H.264 NAL type 7(SPS) or 5(IDR Keyframe)
                             let is_keyframe = bin[1..].windows(5).any(|w| {
-                                (w[0..4] == [0, 0, 0, 1] && ((w[4] & 0x1F) == 7 || (w[4] & 0x1F) == 5))
+                                w[0..4] == [0, 0, 0, 1] && ((w[4] & 0x1F) == 7 || (w[4] & 0x1F) == 5)
                             }) || bin[1..].windows(4).any(|w| {
-                                (w[0..3] == [0, 0, 1] && ((w[3] & 0x1F) == 7 || (w[3] & 0x1F) == 5))
+                                w[0..3] == [0, 0, 1] && ((w[3] & 0x1F) == 7 || (w[3] & 0x1F) == 5)
                             });
                             if is_keyframe {
                                 println!("🔑 [RELAY] Cached IDR Keyframe from phone (len={})", bin.len());
@@ -317,7 +327,7 @@ async fn handle_phone_publisher(socket: WebSocket, state: RelayState) {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
 
-    let (broadcast_tx, _) = broadcast::channel(512);
+    let (broadcast_tx, _) = broadcast::channel(16);
     let (control_tx, _) = broadcast::channel(64);
 
     let state = RelayState {

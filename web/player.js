@@ -27,6 +27,13 @@
     let isConnected = false;
     let videoConfigured = false;
 
+    // --- Self-Healing Watchdog 엔진 상태 ---
+    let lastVideoPacketTime = 0;       // 마지막 비디오 패킷 수신 시각 (ms)
+    let watchdogInterval = null;       // 워치독 타이머 ID
+    let hasEverReceivedVideo = false;  // 최초 비디오 수신 여부
+    let watchdogKeyframeRequested = false; // 키프레임 재요청 중복 방지
+    let reconnectInProgress = false;   // 재연결 진행 중 중복 방지
+
     // 패킷 타입 식별자
     const PKT_TYPE_VIDEO = 0x01; // H.264 NAL Frame
     const PKT_TYPE_AUDIO = 0x02; // Raw PCM Audio (48000Hz, 16bit Stereo)
@@ -390,6 +397,110 @@
         audioNextPlayTime += audioBuffer.duration;
     }
 
+    // --- Self-Healing Watchdog 엔진: 스트림 동결 감지 및 3단계 자동 복구 ---
+    function startWatchdog() {
+        if (watchdogInterval) clearInterval(watchdogInterval);
+        watchdogInterval = setInterval(() => {
+            if (!hasEverReceivedVideo || !isConnected) return;
+
+            const idleMs = performance.now() - lastVideoPacketTime;
+
+            if (idleMs > 12000) {
+                // 3단계: 12초 이상 완전 불통 -> 브라우저 소프트 리프레시
+                console.error('🚨 [WATCHDOG] 12초 이상 스트림 완전 불통! 페이지 자동 새로고침...');
+                location.reload();
+                return;
+            }
+
+            if (idleMs > 5000 && !reconnectInProgress) {
+                // 2단계: 5초 이상 무응답 -> 웹소켓 강제 재연결
+                console.warn('⚡ [WATCHDOG] 5초 이상 비디오 무응답! WebSocket 강제 재연결...');
+                reconnectInProgress = true;
+                forceReconnect();
+                return;
+            }
+
+            if (idleMs > 2500 && !watchdogKeyframeRequested) {
+                // 1단계: 2.5초 이상 무응답 -> 키프레임 재요청
+                console.warn('🔑 [WATCHDOG] 2.5초 이상 비디오 무응답! 키프레임 재요청...');
+                watchdogKeyframeRequested = true;
+                statusText.textContent = '🔄 스트림 복구 중...';
+                statusDot.className = 'dot connecting';
+                try {
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({ type: 'request_keyframe' }));
+                    }
+                } catch (_) {}
+            }
+        }, 1000);
+    }
+
+    function forceReconnect() {
+        console.log('🔧 [RECOVERY] 스트림 강제 재연결 시작...');
+        try {
+            if (ws) {
+                ws.onclose = null;
+                ws.onerror = null;
+                ws.close();
+            }
+        } catch (_) {}
+        ws = null;
+        isConnected = false;
+        videoConfigured = false;
+        hasReceivedFirstKeyFrame = false;
+
+        try {
+            if (videoDecoder && videoDecoder.state !== 'closed') {
+                videoDecoder.close();
+            }
+        } catch (_) {}
+        videoDecoder = null;
+
+        statusDot.className = 'dot disconnected';
+        statusText.textContent = '🔄 자동 재연결 중...';
+
+        setTimeout(() => {
+            reconnectInProgress = false;
+            connectWebSocket();
+        }, 500);
+    }
+
+    // 수동 원클릭 비상 복구 함수
+    function emergencyRecover() {
+        console.log('🆘 [EMERGENCY] 사용자 수동 비상 복구 트리거!');
+        hasEverReceivedVideo = false;
+        watchdogKeyframeRequested = false;
+        reconnectInProgress = false;
+        forceReconnect();
+    }
+
+    // 화면 켜짐/탭 복귀 시 즉시 동기화
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && hasEverReceivedVideo) {
+            const idleMs = performance.now() - lastVideoPacketTime;
+            if (idleMs > 2000) {
+                console.log('📱 [WATCHDOG] 화면 복귀 감지! 키프레임 재요청...');
+                try {
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({ type: 'request_keyframe' }));
+                    }
+                } catch (_) {}
+            }
+            if (idleMs > 5000) {
+                forceReconnect();
+            }
+        }
+    });
+
+    window.addEventListener('pageshow', () => {
+        if (hasEverReceivedVideo) {
+            const idleMs = performance.now() - lastVideoPacketTime;
+            if (idleMs > 3000) {
+                forceReconnect();
+            }
+        }
+    });
+
     // --- WebSocket 연결 및 스트림 수신 ---
     function connectWebSocket() {
         const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -405,6 +516,7 @@
         ws.onopen = () => {
             console.log('WebSocket 연결 완료');
             isConnected = true;
+            reconnectInProgress = false;
             statusDot.className = 'dot connected';
             statusText.textContent = '스마트폰 송출 대기 중...';
             if (overlayTitle) overlayTitle.textContent = "스마트폰에서 '미러링 시작'을 눌러주세요";
@@ -415,6 +527,9 @@
             try {
                 ws.send(JSON.stringify({ type: 'request_keyframe' }));
             } catch (_) {}
+
+            // 워치독 시작
+            startWatchdog();
         };
 
         ws.onmessage = (event) => {
@@ -467,9 +582,14 @@
         };
     }
 
-    // NAL 패킷 처리
+    // NAL 패킷 처리 (초저지연 워치독 연동)
     function handleVideoPacket(payload) {
         if (!videoDecoder) return;
+
+        // 워치독: 비디오 패킷 수신 시각 갱신
+        lastVideoPacketTime = performance.now();
+        hasEverReceivedVideo = true;
+        watchdogKeyframeRequested = false;
 
         const bytes = new Uint8Array(payload);
         if (bytes.length < 5) return;
@@ -509,6 +629,11 @@
                 return; // 다음 1초 내 키프레임 도착 시까지 대기
             }
             hasReceivedFirstKeyFrame = true;
+        }
+
+        // 초저지연 프레임 드롭: 디코더 큐가 쌓이면 델타 프레임을 버려 실시간 유지
+        if (!isKeyFrame && videoDecoder.decodeQueueSize > 2) {
+            return; // 낡은 델타 프레임 드롭 -> 0ms 실시간 스냅
         }
 
         if (videoDecoder.state === 'configured') {
@@ -569,8 +694,21 @@
         },
         getCanvas: function() {
             return canvas;
-        }
+        },
+        emergencyRecover: emergencyRecover
     };
+
+    // 상태 표시 클릭 시 수동 비상 복구 (statusDot, statusText, 복구 버튼)
+    [statusDot, statusText].forEach(el => {
+        if (el) el.addEventListener('click', emergencyRecover);
+    });
+    const btnRecoverStream = document.getElementById('btnRecoverStream');
+    if (btnRecoverStream) {
+        btnRecoverStream.addEventListener('click', (e) => {
+            e.stopPropagation();
+            emergencyRecover();
+        });
+    }
 
     // 앱 시작 시 소켓 연결 및 절전모드 방지 엔진 가동
     setupKeepAliveVideo();
