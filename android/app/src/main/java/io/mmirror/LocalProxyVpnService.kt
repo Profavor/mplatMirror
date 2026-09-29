@@ -109,8 +109,11 @@ class LocalProxyVpnService : VpnService() {
                 .setMtu(1500)
                 .setBlocking(false)
 
-            // 가상 인터페이스 주소 할당 (100.99.9.2/24)
-            // 핫스팟 서브넷(10.x.x.x, 192.168.x.x)과 전혀 충돌하지 않는 CGNAT(100.64.0.0/10) 대역 사용
+            // 1. 가상 인터페이스 주소 직접 바인딩 (122.40.252.50, 100.99.9.9, 7.7.7.7, 100.99.9.2)
+            // 핫스팟 클라이언트(테슬라)가 접속할 타겟 IP를 기기 로컬 인터페이스 주소로 직접 등록하여 외부 셀룰러 유출 방지
+            try { builder.addAddress("122.40.252.50", 32) } catch (e: Throwable) { sendDebugLog("⚠ addAddress 122.40.252.50 실패: ${e.message}") }
+            try { builder.addAddress("100.99.9.9", 32) } catch (e: Throwable) { sendDebugLog("⚠ addAddress 100.99.9.9 실패: ${e.message}") }
+            try { builder.addAddress("7.7.7.7", 32) } catch (e: Throwable) { sendDebugLog("⚠ addAddress 7.7.7.7 실패: ${e.message}") }
             try { builder.addAddress("100.99.9.2", 24) } catch (e: Throwable) { sendDebugLog("⚠ addAddress 100.99.9.2 실패: ${e.message}") }
 
             sendDebugLog("2/5 addAddress 완료, 가상 프록시 IP만 1:1 정밀 라우팅 (/32) 설정 중")

@@ -314,8 +314,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         apk_path: PathBuf::from("/home/profavor/mMirror/dist/mplatMirror.apk"),
     };
 
-    let app = Router::new()
-        .route("/", get(serve_download))
+    let base_app = Router::new()
         .route("/mirror", get(serve_mirror))
         .route("/tesla", get(serve_tesla))
         .route("/tesla.html", get(serve_tesla))
@@ -345,11 +344,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await
         .map_err(|e| format!("Failed to load certs: {}", e))?;
 
-    let addr: SocketAddr = ([0, 0, 0, 0], 8088).into();
-    println!("🚀 mplat Mirror Official Relay Server running on https://0.0.0.0:8088 (mdm.mplat.store)");
+    let app_8088 = base_app.clone().route("/", get(serve_download));
+    let tls_8088 = tls_config.clone();
+    let addr_8088: SocketAddr = ([0, 0, 0, 0], 8088).into();
+    tokio::spawn(async move {
+        println!("🚀 mplat Mirror Relay & Download Server running on https://0.0.0.0:8088 (mdm.mplat.store:8088)");
+        if let Err(e) = axum_server::bind_rustls(addr_8088, tls_8088)
+            .serve(app_8088.into_make_service_with_connect_info::<SocketAddr>())
+            .await
+        {
+            eprintln!("Port 8088 server error: {}", e);
+        }
+    });
 
-    axum_server::bind_rustls(addr, tls_config)
-        .serve(app.into_make_service_with_connect_info::<SocketAddr>())
+    let app_9999 = base_app.route("/", get(serve_mirror));
+    let addr_9999: SocketAddr = ([0, 0, 0, 0], 9999).into();
+    println!("🚀 mplat Mirror Official Port 9999 HTTPS Server running on https://0.0.0.0:9999 (mdm.mplat.store:9999)");
+
+    axum_server::bind_rustls(addr_9999, tls_config)
+        .serve(app_9999.into_make_service_with_connect_info::<SocketAddr>())
         .await?;
 
     Ok(())
