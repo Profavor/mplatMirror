@@ -34,6 +34,7 @@ object NativeBridge {
     external fun stopServer()
     external fun startTunProxy(fd: Int, targetPort: Int): Boolean
     external fun stopTunProxy()
+    external fun getNativeLogs(): String
 
     fun isServerRunning(): Boolean = getServerPort() > 0
     external fun sendVideoFrame(data: ByteArray, offset: Int, length: Int)

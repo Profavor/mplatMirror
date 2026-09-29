@@ -5,7 +5,7 @@ pub mod web_assets;
 
 use std::sync::{Mutex, OnceLock};
 use jni::objects::{JClass, JString};
-use jni::sys::{jboolean, jbyteArray, jdouble, jfloat, jint, jlong};
+use jni::sys::{jboolean, jbyteArray, jdouble, jfloat, jint, jlong, jstring};
 use jni::{JNIEnv, JavaVM};
 use tokio::runtime::Runtime;
 use tracing::info;
@@ -296,4 +296,16 @@ pub extern "system" fn Java_io_mmirror_NativeBridge_stopTunProxy(
     _env: JNIEnv,
 ) {
     tun_proxy::stop_tun_proxy();
+}
+
+#[no_mangle]
+pub extern "system" fn Java_io_mmirror_NativeBridge_getNativeLogs(
+    env: JNIEnv,
+    _class: JClass,
+) -> jstring {
+    let logs = crate::server::get_rust_logs();
+    match env.new_string(logs) {
+        Ok(js) => js.into_raw(),
+        Err(_) => std::ptr::null_mut(),
+    }
 }

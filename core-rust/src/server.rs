@@ -4,9 +4,10 @@ use tokio::sync::broadcast;
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
-        Json, State,
+        Json, Request, State,
     },
     http::{header, HeaderMap, StatusCode},
+    middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::get,
     Router,
@@ -39,7 +40,23 @@ extern "C" {
     ) -> std::os::raw::c_int;
 }
 
+static RUST_LOGS: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
 pub fn log_android(prio: i32, msg: &str) {
+    if let Ok(mut logs) = RUST_LOGS.lock() {
+        if logs.len() > 300 {
+            logs.drain(0..50);
+        }
+        let prio_str = match prio {
+            3 => "DEBUG",
+            4 => "INFO",
+            5 => "WARN",
+            6 => "ERROR",
+            _ => "LOG",
+        };
+        logs.push(format!("[{}] {}", prio_str, msg));
+    }
+
     #[cfg(target_os = "android")]
     {
         use std::ffi::CString;
@@ -52,6 +69,14 @@ pub fn log_android(prio: i32, msg: &str) {
     #[cfg(not(target_os = "android"))]
     {
         eprintln!("[mMirrorRust] (level {}) {}", prio, msg);
+    }
+}
+
+pub fn get_rust_logs() -> String {
+    if let Ok(logs) = RUST_LOGS.lock() {
+        logs.join("\n")
+    } else {
+        String::new()
     }
 }
 
@@ -188,8 +213,10 @@ impl MirrorServer {
             .route("/leaflet.js", get(serve_leaflet_js))
             .route("/logo.png", get(serve_logo))
             .route("/api/info", get(serve_info))
+            .route("/api/logs", get(serve_logs))
             .route("/api/trips", get(get_trips).post(post_trip))
             .route("/ws", get(ws_handler))
+            .layer(middleware::from_fn(log_request_middleware))
             .layer(CorsLayer::permissive())
             .with_state(app_state);
 
@@ -238,8 +265,7 @@ impl MirrorServer {
                         key_pem.as_bytes().to_vec(),
                     ).await {
                         Ok(tls_config) => {
-                            let internal_tls_port = 9998;
-                            let https_ports = vec![internal_tls_port, 8443, 7679];
+                            let https_ports = vec![9999, 9998, 8443, 7679];
                             for https_port in https_ports {
                                 let addr: SocketAddr = ([0, 0, 0, 0], https_port).into();
                                 match create_socket_listener(&addr) {
@@ -284,9 +310,9 @@ impl MirrorServer {
                 }
             }
 
-            // 테슬라 가상 프록시 — 추가 HTTP 포트 직접 바인딩 (7777 [td9.cc], 9999 [teslamirror.net], 7678)
+            // 테슬라 가상 프록시 — 추가 HTTP 포트 직접 바인딩 (7777 [td9.cc], 7678)
             // 디스패처 대신 동일한 axum 앱을 직접 serve하여 안정성 확보
-            let extra_http_ports = vec![7777, 9999, 7678];
+            let extra_http_ports = vec![7777, 7678];
             for eport in extra_http_ports {
                 if eport != actual_port {
                     if let Ok(std_lis) = create_socket_listener(&([0, 0, 0, 0], eport).into()) {
@@ -381,6 +407,19 @@ fn create_socket_listener(addr: &SocketAddr) -> Result<std::net::TcpListener, St
     Ok(socket.into())
 }
 
+async fn log_request_middleware(
+    req: Request,
+    next: Next,
+) -> Response {
+    let method = req.method().to_string();
+    let uri = req.uri().to_string();
+    let host = req.headers().get("host").and_then(|h| h.to_str().ok()).unwrap_or("-").to_string();
+    log_android(4, &format!("🌐 [HTTP REQUEST] {} {} (Host: {})", method, uri, host));
+    let res = next.run(req).await;
+    log_android(4, &format!("📤 [HTTP RESPONSE] {} {} -> Status {}", method, uri, res.status().as_u16()));
+    res
+}
+
 // HTTP Static Handler
 async fn serve_index() -> impl IntoResponse {
     let mut headers = HeaderMap::new();
@@ -458,6 +497,14 @@ async fn serve_info() -> impl IntoResponse {
         copyright: "Copyright (c) 2026 mplat. All rights reserved.",
     };
     (StatusCode::OK, Json(info))
+}
+
+async fn serve_logs() -> impl IntoResponse {
+    let logs = get_rust_logs();
+    let mut headers = HeaderMap::new();
+    headers.insert(header::CONTENT_TYPE, "text/plain; charset=utf-8".parse().unwrap());
+    headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*".parse().unwrap());
+    (StatusCode::OK, headers, logs)
 }
 
 async fn get_trips(State(state): State<AppState>) -> impl IntoResponse {

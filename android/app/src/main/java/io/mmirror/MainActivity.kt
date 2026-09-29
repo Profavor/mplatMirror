@@ -252,6 +252,10 @@ class MainActivity : AppCompatActivity() {
             openHotspotSettings()
         }
 
+        binding.btnViewLogs.setOnClickListener {
+            showDiagnosticLogsDialog()
+        }
+
         binding.btnEnableAccessibility.setOnClickListener {
             val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
             startActivity(intent)
@@ -576,5 +580,73 @@ class MainActivity : AppCompatActivity() {
             binding.btnOpenHotspot.text = "핫스팟 켜기"
             binding.btnOpenHotspot.setBackgroundColor(0xFFE67E22.toInt())
         }
+    }
+
+    private fun showDiagnosticLogsDialog() {
+        val sb = StringBuilder()
+        val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
+        sb.append("=== mplat Mirror 연결 진단 리포트 ===\n")
+        sb.append("기기: ${Build.MANUFACTURER} ${Build.MODEL} (Android ${Build.VERSION.RELEASE}, API ${Build.VERSION.SDK_INT})\n")
+        sb.append("시간: ${dateFormat.format(java.util.Date())}\n")
+        sb.append("핫스팟 활성: ${if (isWifiApEnabled()) "ON" else "OFF"}\n")
+        sb.append("핫스팟 IP: ${getHotspotIp()}\n")
+        sb.append("가상 프록시(VPN) 가동여부: ${LocalProxyVpnService.isRunning}\n")
+        val sPort = NativeBridge.getServerPort()
+        sb.append("Rust HTTP 서버 포트: $sPort\n")
+        sb.append("화면 송출 서비스 가동여부: ${MediaProjectionService.isRunning}\n\n")
+
+        sb.append("--- [1] VPN 및 프록시 설정 단계 로그 ---\n")
+        if (debugLogs.isEmpty()) {
+            sb.append("(아직 VPN이 가동되지 않았거나 로그가 없습니다)\n")
+        } else {
+            debugLogs.forEach { sb.append("$it\n") }
+        }
+
+        sb.append("\n--- [2] Rust 코어 & HTTP/TUN 유입 로그 ---\n")
+        val nativeLogs = try {
+            NativeBridge.getNativeLogs()
+        } catch (e: Throwable) {
+            "네이티브 로그 호출 실패: ${e.message}"
+        }
+        if (nativeLogs.isBlank()) {
+            sb.append("(아직 유입된 HTTP/TUN 패킷이 없습니다)\n")
+        } else {
+            sb.append(nativeLogs).append("\n")
+        }
+
+        val fullLog = sb.toString()
+
+        // 클립보드에 자동 복사
+        try {
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val clip = ClipData.newPlainText("mMirror Diagnostic Log", fullLog)
+            clipboard.setPrimaryClip(clip)
+            Toast.makeText(this, "📋 진단 로그가 클립보드에 복사되었습니다!", Toast.LENGTH_LONG).show()
+        } catch (_: Exception) {}
+
+        // 다이얼로그 표시
+        val scrollView = android.widget.ScrollView(this).apply {
+            setPadding(32, 24, 32, 24)
+        }
+        val textView = TextView(this).apply {
+            text = fullLog
+            textSize = 11f
+            setTextColor(0xFFECF0F1.toInt())
+            setTextIsSelectable(true)
+            typeface = android.graphics.Typeface.MONOSPACE
+        }
+        scrollView.addView(textView)
+
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setTitle("🔍 실시간 연결 진단 로그")
+            .setView(scrollView)
+            .setPositiveButton("📋 다시 복사") { _, _ ->
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                val clip = ClipData.newPlainText("mMirror Diagnostic Log", fullLog)
+                clipboard.setPrimaryClip(clip)
+                Toast.makeText(this, "클립보드에 복사되었습니다.", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("닫기", null)
+            .show()
     }
 }

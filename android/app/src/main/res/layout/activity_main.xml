@@ -282,6 +282,20 @@
                         android:layout_height="wrap_content" />
                 </LinearLayout>
 
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnViewLogs"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:layout_marginTop="8dp"
+                    android:backgroundTint="#1f232d"
+                    android:text="🔍 실시간 연결 진단 로그 (원클릭 복사)"
+                    android:textColor="#3498db"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    app:cornerRadius="8dp"
+                    app:strokeColor="#3498db"
+                    app:strokeWidth="1dp" />
+
                 <View
                     android:layout_width="match_parent"
                     android:layout_height="1dp"

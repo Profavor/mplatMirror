@@ -148,7 +148,10 @@ pub fn start_tun_proxy(fd: i32, target_port: u16) -> bool {
                                     let peer = client_tcp.peer_addr();
                                     let local = client_tcp.local_addr();
                                     let local_port = local.port();
-                                    crate::server::log_android(4, &format!("TUN TCP connection: {:?} -> {:?}", local, peer));
+                                    crate::server::log_android(
+                                        4,
+                                        &format!("⚡ [TUN TCP INFLOW] 핫스팟 클라이언트 연결 감지! Dst={:?} Src={:?}", local, peer),
+                                    );
 
                                     tokio::spawn(async move {
                                         let mut first_byte = [0u8; 1];
@@ -156,21 +159,25 @@ pub fn start_tun_proxy(fd: i32, target_port: u16) -> bool {
                                             Ok(1) => {
                                                 let is_tls = first_byte[0] == 0x16;
                                                 let dest_port = if is_tls {
-                                                    // TLS / HTTPS 요청인 경우: 내부 TLS 포트 9998 (또는 8443, 7679)
-                                                    if local_port == 8443 || local_port == 7679 {
+                                                    // TLS / HTTPS 요청인 경우: 포트 9999 (또는 9998, 8443, 7679)
+                                                    if local_port == 8443 || local_port == 7679 || local_port == 9998 {
                                                         local_port
                                                     } else {
-                                                        9998
+                                                        9999
                                                     }
                                                 } else {
-                                                    // 일반 텍스트 HTTP 요청인 경우: target_port (8080)
-                                                    target_port
+                                                    // 일반 텍스트 HTTP 요청인 경우: 7777 또는 target_port (8080)
+                                                    if local_port == 7777 || local_port == 7678 {
+                                                        local_port
+                                                    } else {
+                                                        target_port
+                                                    }
                                                 };
 
                                                 crate::server::log_android(
                                                     4,
                                                     &format!(
-                                                        "TUN TCP proxying to 127.0.0.1:{} (tls={}) for incoming port {}",
+                                                        "🔄 [TUN PROXY] 로컬 127.0.0.1:{} 로 전달 시작 (TLS={}, 수신포트={})",
                                                         dest_port, is_tls, local_port
                                                     ),
                                                 );
@@ -178,27 +185,29 @@ pub fn start_tun_proxy(fd: i32, target_port: u16) -> bool {
                                                 match TcpStream::connect(format!("127.0.0.1:{}", dest_port)).await {
                                                     Ok(mut target_tcp) => {
                                                         if let Err(e) = target_tcp.write_all(&first_byte).await {
-                                                            crate::server::log_android(6, &format!("Failed to write initial byte: {}", e));
+                                                            crate::server::log_android(6, &format!("❌ [TUN WRITE ERROR] 초기 바이트 전송 실패: {}", e));
                                                             return;
                                                         }
+                                                        crate::server::log_android(4, &format!("✅ [TUN CONNECTED] 127.0.0.1:{} 연결 수립! 양방향 데이터 중계 시작", dest_port));
                                                         let _ = tokio::io::copy_bidirectional(&mut client_tcp, &mut target_tcp).await;
                                                         let _ = target_tcp.shutdown().await;
                                                         let _ = client_tcp.shutdown().await;
+                                                        crate::server::log_android(4, &format!("🏁 [TUN CLOSED] 127.0.0.1:{} 세션 종료", dest_port));
                                                     }
                                                     Err(e) => {
-                                                        crate::server::log_android(6, &format!("Failed to connect to local port {}: {}", dest_port, e));
+                                                        crate::server::log_android(6, &format!("❌ [TUN CONNECT FAIL] 127.0.0.1:{} 연결 실패: {}", dest_port, e));
                                                     }
                                                 }
                                             }
                                             Ok(_) => {}
                                             Err(e) => {
-                                                crate::server::log_android(6, &format!("Failed to read initial byte from TUN TCP: {}", e));
+                                                crate::server::log_android(6, &format!("❌ [TUN READ FAIL] 첫 바이트 수신 실패: {}", e));
                                             }
                                         }
                                     });
                                 }
                                 ipstack::IpStackStream::Udp(client_udp) => {
-                                    crate::server::log_android(3, &format!("TUN UDP packet from {:?}", client_udp.local_addr()));
+                                    crate::server::log_android(4, &format!("📡 [TUN UDP] 패킷 유입: Dst={:?} Src={:?}", client_udp.local_addr(), client_udp.peer_addr()));
                                 }
                                 _ => {}
                             }
