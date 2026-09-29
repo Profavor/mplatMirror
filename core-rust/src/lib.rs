@@ -16,6 +16,7 @@ use crate::server::MirrorServer;
 static RUNTIME: OnceLock<Runtime> = OnceLock::new();
 static SERVER: Mutex<Option<MirrorServer>> = Mutex::new(None);
 static JVM: OnceLock<JavaVM> = OnceLock::new();
+static NATIVE_BRIDGE_CLASS: OnceLock<jni::objects::GlobalRef> = OnceLock::new();
 
 fn get_runtime() -> &'static Runtime {
     RUNTIME.get_or_init(|| {
@@ -30,10 +31,15 @@ fn get_runtime() -> &'static Runtime {
 #[no_mangle]
 pub extern "system" fn Java_io_mmirror_NativeBridge_init(
     env: JNIEnv,
-    _class: JClass,
+    class: JClass,
 ) {
     if let Ok(vm) = env.get_java_vm() {
         let _ = JVM.set(vm);
+    }
+    if NATIVE_BRIDGE_CLASS.get().is_none() {
+        if let Ok(global_ref) = env.new_global_ref(class) {
+            let _ = NATIVE_BRIDGE_CLASS.set(global_ref);
+        }
     }
     let _ = tracing_subscriber::fmt()
         .with_env_filter("info")
@@ -43,10 +49,15 @@ pub extern "system" fn Java_io_mmirror_NativeBridge_init(
 
 #[no_mangle]
 pub extern "system" fn Java_io_mmirror_NativeBridge_startServer(
-    _env: JNIEnv,
-    _class: JClass,
+    env: JNIEnv,
+    class: JClass,
     port: jint,
 ) -> jint {
+    if NATIVE_BRIDGE_CLASS.get().is_none() {
+        if let Ok(global_ref) = env.new_global_ref(class) {
+            let _ = NATIVE_BRIDGE_CLASS.set(global_ref);
+        }
+    }
     let mut lock = SERVER.lock().unwrap();
     if let Some(ref server) = *lock {
         let current_port = server.bound_port();
@@ -61,43 +72,69 @@ pub extern "system" fn Java_io_mmirror_NativeBridge_startServer(
 
     let server = MirrorServer::new(port as u16);
 
-    // 안드로이드 Java 콜백 등록
+    // 안드로이드 Java 콜백 등록 (전역 참조 클래스 사용으로 ClassNotFoundException 및 ART abort 완벽 방지)
     server.set_control_callback(move |msg| {
         if let Some(jvm) = JVM.get() {
             if let Ok(mut env) = jvm.attach_current_thread() {
-                match msg {
-                    ControlMessage::Touch { action, id, x, y } => {
-                        let action_jstr = env.new_string(&action).unwrap();
-                        let _ = env.call_static_method(
-                            "io/mmirror/NativeBridge",
-                            "onTouchEvent",
-                            "(Ljava/lang/String;IFF)V",
-                            &[
-                                (&action_jstr).into(),
-                                (id as jint).into(),
-                                (x.unwrap_or(0.0) as jfloat).into(),
-                                (y.unwrap_or(0.0) as jfloat).into(),
-                            ],
-                        );
+                if let Some(global_class) = NATIVE_BRIDGE_CLASS.get() {
+                    let jclass = unsafe { JClass::from_raw(global_class.as_raw()) };
+                    match msg {
+                        ControlMessage::Touch { action, id, x, y } => {
+                            if let Ok(action_jstr) = env.new_string(&action) {
+                                let res = env.call_static_method(
+                                    &jclass,
+                                    "onTouchEvent",
+                                    "(Ljava/lang/String;IFF)V",
+                                    &[
+                                        (&action_jstr).into(),
+                                        (id as jint).into(),
+                                        (x.unwrap_or(0.0) as jfloat).into(),
+                                        (y.unwrap_or(0.0) as jfloat).into(),
+                                    ],
+                                );
+                                if let Err(e) = res {
+                                    crate::server::log_android(6, &format!("onTouchEvent JNI error: {}", e));
+                                    if let Ok(true) = env.exception_check() {
+                                        let _ = env.exception_clear();
+                                    }
+                                }
+                            }
+                        }
+                        ControlMessage::Key { key } => {
+                            if let Ok(key_jstr) = env.new_string(&key) {
+                                let res = env.call_static_method(
+                                    &jclass,
+                                    "onKeyEvent",
+                                    "(Ljava/lang/String;)V",
+                                    &[(&key_jstr).into()],
+                                );
+                                if let Err(e) = res {
+                                    crate::server::log_android(6, &format!("onKeyEvent JNI error: {}", e));
+                                    if let Ok(true) = env.exception_check() {
+                                        let _ = env.exception_clear();
+                                    }
+                                }
+                            }
+                        }
+                        ControlMessage::Command { cmd } => {
+                            if let Ok(cmd_jstr) = env.new_string(&cmd) {
+                                let res = env.call_static_method(
+                                    &jclass,
+                                    "onCommandEvent",
+                                    "(Ljava/lang/String;)V",
+                                    &[(&cmd_jstr).into()],
+                                );
+                                if let Err(e) = res {
+                                    crate::server::log_android(6, &format!("onCommandEvent JNI error: {}", e));
+                                    if let Ok(true) = env.exception_check() {
+                                        let _ = env.exception_clear();
+                                    }
+                                }
+                            }
+                        }
                     }
-                    ControlMessage::Key { key } => {
-                        let key_jstr = env.new_string(&key).unwrap();
-                        let _ = env.call_static_method(
-                            "io/mmirror/NativeBridge",
-                            "onKeyEvent",
-                            "(Ljava/lang/String;)V",
-                            &[(&key_jstr).into()],
-                        );
-                    }
-                    ControlMessage::Command { cmd } => {
-                        let cmd_jstr = env.new_string(&cmd).unwrap();
-                        let _ = env.call_static_method(
-                            "io/mmirror/NativeBridge",
-                            "onCommandEvent",
-                            "(Ljava/lang/String;)V",
-                            &[(&cmd_jstr).into()],
-                        );
-                    }
+                } else {
+                    crate::server::log_android(6, "mMirror NativeBridge: NATIVE_BRIDGE_CLASS not initialized");
                 }
             }
         }
