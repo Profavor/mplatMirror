@@ -226,8 +226,10 @@ async fn handle_tesla_viewer(socket: WebSocket, state: RelayState) {
         let _ = sender.send(Message::Binary((*keyframe_bytes).clone())).await;
     }
 
-    // 폰에 즉시 최신 키프레임 요청 전달
-    let _ = state.control_tx.send("{\"type\":\"request_keyframe\"}".to_string());
+    // 캐시된 키프레임이 없을 때만 폰에 키프레임 요청 (불필요한 IDR 폭주 방지)
+    if state.last_keyframe.read().await.is_none() {
+        let _ = state.control_tx.send("{\"type\":\"request_keyframe\"}".to_string());
+    }
 
     let mut broadcast_rx = state.broadcast_tx.subscribe();
     let send_control_tx = state.control_tx.clone();

@@ -398,32 +398,35 @@
     }
 
     // --- Self-Healing Watchdog 엔진: 스트림 동결 감지 및 3단계 자동 복구 ---
+    let isStreamActive = false;         // 폰이 실제로 스트림을 보내고 있는지 여부
+    let lastKeyframeRequestTime = 0;    // 키프레임 재요청 쿨타임 (5초 제한)
+    let watchdogReconnectCount = 0;     // 연속 재연결 횟수 (폭주 방지)
+
     function startWatchdog() {
         if (watchdogInterval) clearInterval(watchdogInterval);
         watchdogInterval = setInterval(() => {
+            // 한번이라도 비디오를 받은 적이 없으면 워치독 비활성
             if (!hasEverReceivedVideo || !isConnected) return;
 
-            const idleMs = performance.now() - lastVideoPacketTime;
+            const now = performance.now();
+            const idleMs = now - lastVideoPacketTime;
 
-            if (idleMs > 12000) {
-                // 3단계: 12초 이상 완전 불통 -> 브라우저 소프트 리프레시
-                console.error('🚨 [WATCHDOG] 12초 이상 스트림 완전 불통! 페이지 자동 새로고침...');
-                location.reload();
-                return;
+            // 스트림 활성 상태 판별: 최근 2초 이내에 패킷이 왔으면 활성
+            if (idleMs < 2000) {
+                isStreamActive = true;
+                watchdogReconnectCount = 0; // 정상이면 카운터 리셋
+                return; // 정상 수신 중이면 아무것도 안 함
             }
 
-            if (idleMs > 5000 && !reconnectInProgress) {
-                // 2단계: 5초 이상 무응답 -> 웹소켓 강제 재연결
-                console.warn('⚡ [WATCHDOG] 5초 이상 비디오 무응답! WebSocket 강제 재연결...');
-                reconnectInProgress = true;
-                forceReconnect();
-                return;
-            }
+            // 스트림이 한번 멈추면 비활성으로 전환
+            // 비활성 상태에서는 키프레임 1번만 요청하고 기다림 (재연결 폭풍 방지)
+            if (!isStreamActive) return;
 
-            if (idleMs > 2500 && !watchdogKeyframeRequested) {
-                // 1단계: 2.5초 이상 무응답 -> 키프레임 재요청
-                console.warn('🔑 [WATCHDOG] 2.5초 이상 비디오 무응답! 키프레임 재요청...');
+            // 1단계: 4초 이상 무응답 → 키프레임 재요청 (5초에 최대 1번)
+            if (idleMs > 4000 && !watchdogKeyframeRequested && (now - lastKeyframeRequestTime > 5000)) {
+                console.warn('🔑 [WATCHDOG] 4초 이상 비디오 무응답! 키프레임 재요청...');
                 watchdogKeyframeRequested = true;
+                lastKeyframeRequestTime = now;
                 statusText.textContent = '🔄 스트림 복구 중...';
                 statusDot.className = 'dot connecting';
                 try {
@@ -432,7 +435,27 @@
                     }
                 } catch (_) {}
             }
-        }, 1000);
+
+            // 2단계: 10초 이상 무응답 → 웹소켓 강제 재연결 (최대 3회 연속)
+            if (idleMs > 10000 && !reconnectInProgress) {
+                if (watchdogReconnectCount >= 3) {
+                    // 3회 연속 재연결 실패 → 폰이 송출 중단한 것으로 판단, 워치독 중지
+                    console.warn('⏸️ [WATCHDOG] 3회 연속 재연결 실패. 폰 송출 중단 판단, 대기 모드 전환.');
+                    isStreamActive = false;
+                    watchdogReconnectCount = 0;
+                    statusText.textContent = '스마트폰 송출 대기 중...';
+                    statusDot.className = 'dot connected';
+                    return;
+                }
+                console.warn('⚡ [WATCHDOG] 10초 이상 비디오 무응답! WebSocket 강제 재연결...');
+                watchdogReconnectCount++;
+                reconnectInProgress = true;
+                forceReconnect();
+                return;
+            }
+
+            // 3단계 제거: location.reload()는 테슬라에서 사용자 경험 파괴 → 사용하지 않음
+        }, 1500);
     }
 
     function forceReconnect() {
@@ -462,40 +485,41 @@
         setTimeout(() => {
             reconnectInProgress = false;
             connectWebSocket();
-        }, 500);
+        }, 3000); // 3초 쿨타임으로 재연결 폭풍 방지
     }
 
     // 수동 원클릭 비상 복구 함수
     function emergencyRecover() {
         console.log('🆘 [EMERGENCY] 사용자 수동 비상 복구 트리거!');
         hasEverReceivedVideo = false;
+        isStreamActive = false;
         watchdogKeyframeRequested = false;
         reconnectInProgress = false;
+        watchdogReconnectCount = 0;
         forceReconnect();
     }
 
     // 화면 켜짐/탭 복귀 시 즉시 동기화
     document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible' && hasEverReceivedVideo) {
-            const idleMs = performance.now() - lastVideoPacketTime;
-            if (idleMs > 2000) {
+        if (document.visibilityState === 'visible' && hasEverReceivedVideo && isStreamActive) {
+            const now = performance.now();
+            const idleMs = now - lastVideoPacketTime;
+            if (idleMs > 3000 && (now - lastKeyframeRequestTime > 5000)) {
                 console.log('📱 [WATCHDOG] 화면 복귀 감지! 키프레임 재요청...');
+                lastKeyframeRequestTime = now;
                 try {
                     if (ws && ws.readyState === WebSocket.OPEN) {
                         ws.send(JSON.stringify({ type: 'request_keyframe' }));
                     }
                 } catch (_) {}
             }
-            if (idleMs > 5000) {
-                forceReconnect();
-            }
         }
     });
 
     window.addEventListener('pageshow', () => {
-        if (hasEverReceivedVideo) {
+        if (hasEverReceivedVideo && isStreamActive) {
             const idleMs = performance.now() - lastVideoPacketTime;
-            if (idleMs > 3000) {
+            if (idleMs > 10000) {
                 forceReconnect();
             }
         }
@@ -524,9 +548,7 @@
             disconnectOverlay.classList.remove('hidden');
             initAudio();
             initVideoDecoder();
-            try {
-                ws.send(JSON.stringify({ type: 'request_keyframe' }));
-            } catch (_) {}
+            // 릴레이가 캐시된 키프레임을 자동 전송하므로 별도 요청 불필요
 
             // 워치독 시작
             startWatchdog();
