@@ -158,6 +158,10 @@ class MediaProjectionService : Service() {
                     val key = json.optString("key", "")
                     TouchControlService.instance?.onKey(key)
                 }
+                "keyframe", "request_keyframe" -> {
+                    Log.i(TAG, "🔑 Sync frame requested by viewer/relay, generating IDR...")
+                    requestSyncFrame()
+                }
             }
         } catch (e: Exception) {
             Log.w(TAG, "Failed to parse control message: $text", e)

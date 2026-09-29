@@ -199,18 +199,23 @@ async fn ws_handler(ws: WebSocketUpgrade, State(state): State<RelayState>) -> Re
 }
 
 async fn handle_tesla_viewer(socket: WebSocket, state: RelayState) {
-    info!("Tesla browser viewer connected");
+    println!("👀 [RELAY] Tesla/Tablet viewer connected to /ws");
     let (mut sender, mut receiver) = socket.split();
 
     // 초기 해상도 설정이 캐시되어 있으면 즉시 전달
     if let Some(config_bytes) = state.current_config.read().await.clone() {
+        println!("📤 [RELAY] Sending cached config to viewer (len={})", config_bytes.len());
         let _ = sender.send(Message::Binary((*config_bytes).clone())).await;
     }
 
     // 최신 키프레임(SPS/PPS + IDR)이 캐시되어 있으면 즉시 전달하여 1ms 즉시 렌더링
     if let Some(keyframe_bytes) = state.last_keyframe.read().await.clone() {
+        println!("🔑 [RELAY] Sending cached keyframe to viewer (len={})", keyframe_bytes.len());
         let _ = sender.send(Message::Binary((*keyframe_bytes).clone())).await;
     }
+
+    // 폰에 즉시 최신 키프레임 요청 전달
+    let _ = state.control_tx.send("{\"type\":\"request_keyframe\"}".to_string());
 
     let mut broadcast_rx = state.broadcast_tx.subscribe();
     let control_tx = state.control_tx.clone();
@@ -237,7 +242,7 @@ async fn handle_tesla_viewer(socket: WebSocket, state: RelayState) {
         _ = send_task => {},
         _ = recv_task => {},
     }
-    info!("Tesla browser viewer disconnected");
+    println!("👋 [RELAY] Tesla/Tablet viewer disconnected from /ws");
 }
 
 // 안드로이드 폰 (화면 송출자) WebSocket 핸들러
@@ -246,15 +251,15 @@ async fn publish_handler(ws: WebSocketUpgrade, State(state): State<RelayState>) 
 }
 
 async fn handle_phone_publisher(socket: WebSocket, state: RelayState) {
-    info!("Phone publisher connected to relay");
+    println!("📱 [RELAY] Phone publisher connected to /publish!");
     let (mut sender, mut receiver) = socket.split();
 
     let mut control_rx = state.control_tx.subscribe();
 
-    // 테슬라의 터치 명령을 폰으로 전송
+    // 테슬라의 터치 및 키프레임 요청을 폰으로 전송
     let send_task = tokio::spawn(async move {
-        while let Ok(touch_event) = control_rx.recv().await {
-            if let Err(_) = sender.send(Message::Text(touch_event)).await {
+        while let Ok(msg) = control_rx.recv().await {
+            if let Err(_) = sender.send(Message::Text(msg)).await {
                 break;
             }
         }
@@ -266,22 +271,31 @@ async fn handle_phone_publisher(socket: WebSocket, state: RelayState) {
     let last_keyframe = state.last_keyframe.clone();
 
     let recv_task = tokio::spawn(async move {
+        let mut frame_count = 0u64;
         while let Some(Ok(msg)) = receiver.next().await {
             match msg {
                 Message::Binary(bin) => {
                     if !bin.is_empty() {
                         let packet_type = bin[0];
                         if packet_type == 0x03 {
+                            println!("⚙️ [RELAY] Received DeviceConfig from phone (len={})", bin.len());
                             let mut lock = current_config.write().await;
                             *lock = Some(Arc::new(bin.clone()));
                         } else if packet_type == 0x01 && bin.len() > 5 {
                             // H.264 NAL type 7(SPS) or 5(IDR Keyframe)
-                            let is_keyframe = bin[1..].windows(4).any(|w| {
-                                w == [0, 0, 0, 1] && ((w[3] & 0x1F) == 7 || (w[3] & 0x1F) == 5)
+                            let is_keyframe = bin[1..].windows(5).any(|w| {
+                                (w[0..4] == [0, 0, 0, 1] && ((w[4] & 0x1F) == 7 || (w[4] & 0x1F) == 5))
+                            }) || bin[1..].windows(4).any(|w| {
+                                (w[0..3] == [0, 0, 1] && ((w[3] & 0x1F) == 7 || (w[3] & 0x1F) == 5))
                             });
                             if is_keyframe {
+                                println!("🔑 [RELAY] Cached IDR Keyframe from phone (len={})", bin.len());
                                 let mut lock = last_keyframe.write().await;
                                 *lock = Some(Arc::new(bin.clone()));
+                            }
+                            frame_count += 1;
+                            if frame_count % 300 == 1 {
+                                println!("🎬 [RELAY] Relayed {} video frames from phone to viewers", frame_count);
                             }
                         }
                         let _ = broadcast_tx.send(Arc::new(bin));
@@ -296,7 +310,7 @@ async fn handle_phone_publisher(socket: WebSocket, state: RelayState) {
         _ = send_task => {},
         _ = recv_task => {},
     }
-    info!("Phone publisher disconnected from relay");
+    println!("📱 [RELAY] Phone publisher disconnected from /publish");
 }
 
 #[tokio::main]

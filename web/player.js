@@ -412,6 +412,9 @@
             disconnectOverlay.classList.remove('hidden');
             initAudio();
             initVideoDecoder();
+            try {
+                ws.send(JSON.stringify({ type: 'request_keyframe' }));
+            } catch (_) {}
         };
 
         ws.onmessage = (event) => {
