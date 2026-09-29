@@ -62,6 +62,17 @@
 
 
 
+        <!-- 테슬라 로컬 가상 프록시 VPN 서비스 (0MB 초저지연 로컬 직결) -->
+        <service
+            android:name=".LocalProxyVpnService"
+            android:permission="android.permission.BIND_VPN_SERVICE"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice">
+            <intent-filter>
+                <action android:name="android.net.VpnService" />
+            </intent-filter>
+        </service>
+
     </application>
 
 </manifest>

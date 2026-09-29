@@ -79,12 +79,8 @@ pub fn start_tun_proxy(fd: i32, target_port: u16) -> bool {
                                                         9999
                                                     }
                                                 } else {
-                                                    // 일반 텍스트 HTTP 요청인 경우: 7777 또는 target_port (8080)
-                                                    if local_port == 7777 || local_port == 7678 {
-                                                        local_port
-                                                    } else {
-                                                        target_port
-                                                    }
+                                                    // 일반 텍스트 HTTP 요청인 경우: 항상 실제 구동 중인 target_port (8080)로 전달!
+                                                    target_port
                                                 };
 
                                                 crate::server::log_android(

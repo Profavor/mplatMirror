@@ -107,21 +107,24 @@ class LocalProxyVpnService : VpnService() {
                 .setMtu(1500)
                 .setBlocking(true)
 
-            // 가상 인터페이스 주소 직접 바인딩 (100.99.9.9, 7.7.7.7, 3.3.3.3, 10.254.1.2)
-            // /24 대역으로 바인딩하여 서브넷 전체가 tun0 인터페이스로 라우팅되도록 설정
-            try { builder.addAddress("100.99.9.9", 24) } catch (e: Throwable) { sendDebugLog("⚠ addAddress 100.99.9.9 실패: ${e.message}") }
-            try { builder.addAddress("7.7.7.7", 24) } catch (e: Throwable) { sendDebugLog("⚠ addAddress 7.7.7.7 실패: ${e.message}") }
-            try { builder.addAddress("3.3.3.3", 24) } catch (e: Throwable) { sendDebugLog("⚠ addAddress 3.3.3.3 실패: ${e.message}") }
+            // 가상 인터페이스 주소 직접 바인딩 (122.40.252.50, 100.99.9.9, 7.7.7.7, 3.3.3.3, 10.254.1.1, 10.254.1.2)
+            // 1. 공인 Let's Encrypt SSL 도메인 (mdm.mplat.store -> 122.40.252.50)
+            try { builder.addAddress("122.40.252.50", 32) } catch (e: Throwable) { sendDebugLog("⚠ addAddress 122.40.252.50 실패: ${e.message}") }
+            // 2. 테슬라미러 공식 규격 가상 IP (teslamirror.net -> 100.99.9.9)
+            try { builder.addAddress("100.99.9.9", 32) } catch (e: Throwable) { sendDebugLog("⚠ addAddress 100.99.9.9 실패: ${e.message}") }
+            // 3. 테슬라디스플레이 공식 규격 가상 IP (td9.cc -> 7.7.7.7)
+            try { builder.addAddress("7.7.7.7", 32) } catch (e: Throwable) { sendDebugLog("⚠ addAddress 7.7.7.7 실패: ${e.message}") }
+            // 4. 보조 가상 IP 대역
+            try { builder.addAddress("3.3.3.3", 32) } catch (e: Throwable) { sendDebugLog("⚠ addAddress 3.3.3.3 실패: ${e.message}") }
+            try { builder.addAddress("10.254.1.1", 32) } catch (e: Throwable) { sendDebugLog("⚠ addAddress 10.254.1.1 실패: ${e.message}") }
             try { builder.addAddress("10.254.1.2", 24) } catch (e: Throwable) { sendDebugLog("⚠ addAddress 10.254.1.2 실패: ${e.message}") }
 
             sendDebugLog("2/5 addAddress 완료, addRoute 설정 중")
 
             // 테슬라 브라우저가 사용하는 가상 프록시 IP 대역을 로컬 VPN 터널로 유입
-            // teslamirror.net -> 100.99.9.9
+            try { builder.addRoute("122.40.252.50", 32) } catch (e: Throwable) { sendDebugLog("⚠ addRoute 122.40.252.50 실패: ${e.message}") }
             try { builder.addRoute("100.99.9.0", 24) } catch (e: Throwable) { sendDebugLog("⚠ addRoute 100.99.9.0 실패: ${e.message}") }
-            // td9.cc -> 7.7.7.7
             try { builder.addRoute("7.7.7.0", 24) } catch (e: Throwable) { sendDebugLog("⚠ addRoute 7.7.7.0 실패: ${e.message}") }
-            // 보조 가상 대역
             try { builder.addRoute("3.3.3.0", 24) } catch (e: Throwable) { sendDebugLog("⚠ addRoute 3.3.3.0 실패: ${e.message}") }
             try { builder.addRoute("10.254.1.0", 24) } catch (e: Throwable) { sendDebugLog("⚠ addRoute 10.254.1.0 실패: ${e.message}") }
 
@@ -212,7 +215,7 @@ class LocalProxyVpnService : VpnService() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("⚡ 테슬라 로컬 가상 프록시 (데이터 0MB)")
-            .setContentText("접속 주소: http://td9.cc:7777 (또는 https://teslamirror.net:9999)")
+            .setContentText("접속: https://mdm.mplat.store:9999 (보조: https://teslamirror.net:9999)")
 
             .setOngoing(true)
             .setContentIntent(pendingIntent)

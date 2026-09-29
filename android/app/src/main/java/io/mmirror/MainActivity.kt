@@ -64,6 +64,26 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private var startMirroringAfterVpn = false
+
+    private val vpnLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            LocalProxyVpnService.start(this)
+            Toast.makeText(this, "⚡ 테슬라 로컬 가상 프록시(VPN)가 가동되었습니다!", Toast.LENGTH_SHORT).show()
+            updateUIState()
+            if (startMirroringAfterVpn) {
+                startMirroringAfterVpn = false
+                checkPermissionsAndStart()
+            }
+        } else {
+            startMirroringAfterVpn = false
+            Toast.makeText(this, "로컬 가상 프록시(VPN) 권한이 취소되었습니다.", Toast.LENGTH_SHORT).show()
+            updateUIState()
+        }
+    }
+
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { _ ->
@@ -140,6 +160,15 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         ensureServerRunning()
 
+        // VPN 권한이 이미 승인되어 있다면 즉시 로컬 가상 프록시 가동
+        if (!LocalProxyVpnService.isRunning) {
+            try {
+                if (android.net.VpnService.prepare(this) == null) {
+                    LocalProxyVpnService.start(this)
+                }
+            } catch (_: Exception) {}
+        }
+
         updateNetworkAddress()
         updateAccessibilityStatus()
         updateUIState()
@@ -169,10 +198,10 @@ class MainActivity : AppCompatActivity() {
         binding.btnCopyAddress.setOnClickListener {
             try {
                 val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                val textToCopy = "https://mdm.mplat.store:8088/tesla"
+                val textToCopy = "https://mdm.mplat.store:9999"
                 val clip = ClipData.newPlainText("Tesla Address", textToCopy)
                 clipboard.setPrimaryClip(clip)
-                Toast.makeText(this, "📋 테슬라 원클릭 주소(https://mdm.mplat.store:8088/tesla)가 복사되었습니다.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "📋 테슬라 초고속 로컬 주소($textToCopy)가 복사되었습니다.", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 Toast.makeText(this, "복사 실패: ${e.message}", Toast.LENGTH_SHORT).show()
             }
@@ -181,10 +210,10 @@ class MainActivity : AppCompatActivity() {
         binding.tvSecondaryAddress.setOnClickListener {
             try {
                 val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                val textToCopy = "https://${getHotspotIp()}:9999"
+                val textToCopy = "https://teslamirror.net:9999"
                 val clip = ClipData.newPlainText("Tesla Secondary Address", textToCopy)
                 clipboard.setPrimaryClip(clip)
-                Toast.makeText(this, "📋 로컬 직결 주소($textToCopy)가 복사되었습니다.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "📋 테슬라미러 주소($textToCopy)가 복사되었습니다.", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 Toast.makeText(this, "복사 실패: ${e.message}", Toast.LENGTH_SHORT).show()
             }
@@ -242,13 +271,13 @@ class MainActivity : AppCompatActivity() {
             ① 화면 아래 파란색 [미러링 시작] 버튼을 누르고 화면 캡처 권한 '지금 시작'을 허용합니다.
             ② 테슬라 화면 터치로 폰을 조작하려면 [양방향 터치 조작 (접근성)] 권한도 허용해 주세요.
 
-            【 3단계: 테슬라 모니터 원클릭 접속 (데이터 0MB) 】
+            【 3단계: 테슬라 모니터 접속 (데이터 0MB 초저지연) 】
             ① 테슬라 모니터 브라우저를 켭니다.
-            ② 주소창에 아래 게이트웨이 주소를 입력합니다:
-               👉 https://mdm.mplat.store:8088/tesla
-            ③ 테슬라 브라우저 상단 ★ (즐겨찾기)에 추가해 두시면, 다음 탑승부터 원클릭으로 스마트폰을 자동 감지하여 0.5초 만에 초고속 로컬 미러링(0MB)으로 바로 연결됩니다!
-            ★ 브라우저 보안 경고 안내:
-            최초 연결 시 보안 경고가 나타나면 [고급] → [계속 진행(안전하지 않음)]을 1회만 눌러주시면 이후 자동 접속됩니다.
+            ② 주소창에 아래 주소를 입력합니다:
+               👉 https://mdm.mplat.store:9999
+               (또는 보조: https://teslamirror.net:9999 / http://td9.cc:7777)
+            ③ 공인 Let's Encrypt SSL 인증서가 적용되어 보안 경고 없이 녹색 자물쇠와 함께 즉시 접속됩니다!
+            ④ 테슬라 브라우저 상단 ★ (즐겨찾기)에 추가해 두시면, 다음 탑승부터 원클릭으로 0.5초 만에 초저지연 로컬 미러링(0MB)으로 바로 연결됩니다!
 
             【 4단계: 갤럭시 폴드 & 편의기능 】
             • 화면 자동 조절: 갤럭시 폴드를 접거나 펼칠 때 앱을 재실행할 필요 없이 실시간으로 테슬라 화면 해상도와 비율이 자동 재설정됩니다.
@@ -328,6 +357,23 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun checkPermissionsAndStart() {
+        // 테슬라 로컬 가상 프록시(VPN)가 꺼져 있다면 먼저 권한 확인 및 가동
+        if (!LocalProxyVpnService.isRunning) {
+            try {
+                val vpnIntent = android.net.VpnService.prepare(this)
+                if (vpnIntent != null) {
+                    startMirroringAfterVpn = true
+                    vpnLauncher.launch(vpnIntent)
+                    return
+                } else {
+                    LocalProxyVpnService.start(this)
+                    updateUIState()
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("MainActivity", "Failed to start LocalProxyVpnService: ${e.message}")
+            }
+        }
+
         val needed = mutableListOf<String>()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
@@ -375,8 +421,9 @@ class MainActivity : AppCompatActivity() {
             action = MediaProjectionService.ACTION_STOP
         }
         startService(serviceIntent)
+        LocalProxyVpnService.stop(this)
         updateUIState()
-        Toast.makeText(this, "미러링이 중지되었습니다.", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "미러링 및 가상 프록시가 중지되었습니다.", Toast.LENGTH_SHORT).show()
     }
 
     private fun reportHotspotIpToRelay() {
@@ -412,17 +459,24 @@ class MainActivity : AppCompatActivity() {
 
         val apEnabled = isWifiApEnabled()
         val hotspotIp = getHotspotIp()
+        val vpnActive = LocalProxyVpnService.isRunning
 
-        binding.tvProxyBadge.text = "원클릭 스마트 게이트웨이"
-        binding.tvProxyBadge.setTextColor(0xFF2ECC71.toInt())
-        binding.tvProxyBadge.setBackgroundColor(0x1F2ECC71.toInt())
-
-        if (apEnabled) {
-            binding.tvProxyStatus.text = "🟢 테슬라 원클릭 자동 감지 대기 (IP: $hotspotIp)"
+        if (vpnActive) {
+            binding.tvProxyBadge.text = "가상 프록시(VPN) 활성화됨 (데이터 0MB)"
+            binding.tvProxyBadge.setTextColor(0xFF2ECC71.toInt())
+            binding.tvProxyBadge.setBackgroundColor(0x1F2ECC71.toInt())
+            binding.tvProxyStatus.text = "🟢 0MB 초저지연 로컬 터널 가동 중 (https://mdm.mplat.store:9999)"
             binding.tvProxyStatus.setTextColor(0xFF2ECC71.toInt())
         } else {
-            binding.tvProxyStatus.text = "⚠️ 핫스팟을 켜면 테슬라와 자동 매칭됩니다"
-            binding.tvProxyStatus.setTextColor(0xFFE67E22.toInt())
+            binding.tvProxyBadge.text = "가상 프록시 대기 중"
+            binding.tvProxyBadge.setTextColor(0xFFA0A5B1.toInt())
+            binding.tvProxyBadge.setBackgroundColor(0x1FA0A5B1.toInt())
+            if (apEnabled) {
+                binding.tvProxyStatus.text = "⚪ 삼성 핫스팟 차단 우회 터널 ([미러링 시작] 시 자동 가동)"
+            } else {
+                binding.tvProxyStatus.text = "⚠️ 핫스팟을 켠 후 [미러링 시작]을 눌러주세요"
+            }
+            binding.tvProxyStatus.setTextColor(0xFFA0A5B1.toInt())
         }
     }
 
@@ -515,8 +569,8 @@ class MainActivity : AppCompatActivity() {
         val apEnabled = isWifiApEnabled()
         val hotspotIp = getHotspotIp()
 
-        binding.tvTeslaAddress.text = "https://mdm.mplat.store:8088/tesla"
-        binding.tvSecondaryAddress.text = "로컬 직결: https://$hotspotIp:9999"
+        binding.tvTeslaAddress.text = "https://mdm.mplat.store:9999"
+        binding.tvSecondaryAddress.text = "보조(테슬라미러): https://teslamirror.net:9999  |  HTTP: http://td9.cc:7777"
 
         if (apEnabled) {
             binding.tvHotspotStatus.text = "✓ 핫스팟 켜짐 ($hotspotIp) - 테슬라 Wi-Fi 연결 대기"

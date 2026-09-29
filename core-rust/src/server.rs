@@ -236,44 +236,79 @@ impl MirrorServer {
                 });
         });
 
-        // 테슬라 브라우저 HTTPS(TLS) 전용 서버 가동 (내부 TLS 포트: 9998, 8443, 7679)
+        // 보조 HTTP 포트 7777 (테슬라디스플레이 td9.cc 호환)
+        let app_7777 = app.clone();
+        tokio::spawn(async move {
+            let addr_7777: SocketAddr = ([0, 0, 0, 0], 7777).into();
+            if let Ok(std_listener_7777) = create_socket_listener(&addr_7777) {
+                if let Ok(tokio_listener_7777) = tokio::net::TcpListener::from_std(std_listener_7777) {
+                    log_android(4, "mMirror HTTP server also listening on http://0.0.0.0:7777");
+                    let _ = axum::serve(tokio_listener_7777, app_7777).await;
+                }
+            }
+        });
+
+        // 테슬라 브라우저 HTTPS(TLS) 전용 서버 가동 (내부 TLS 포트: 9999, 9998, 8443, 7679)
         let app_https = app.clone();
         let tls_handles = self.tls_handles.clone();
         tokio::spawn(async move {
-            let subject_alt_names = vec![
-                "teslamirror.net".to_string(),
-                "*.teslamirror.net".to_string(),
-                "td9.cc".to_string(),
-                "*.td9.cc".to_string(),
-                "td7.cc".to_string(),
-                "*.td7.cc".to_string(),
-                "100.99.9.9".to_string(),
-                "7.7.7.7".to_string(),
-                "3.3.3.3".to_string(),
-                "10.254.1.1".to_string(),
-                "192.168.43.1".to_string(),
-                "127.0.0.1".to_string(),
-                "localhost".to_string(),
-                "tesla.local".to_string(),
-            ];
-            match rcgen::generate_simple_self_signed(subject_alt_names) {
-                Ok(certified_key) => {
+            // 1. 공인 Let's Encrypt SSL 인증서(mdm.mplat.store) 우선 로드
+            let official_tls = axum_server::tls_rustls::RustlsConfig::from_pem(
+                include_bytes!("../certs/fullchain.pem").to_vec(),
+                include_bytes!("../certs/privkey.pem").to_vec(),
+            ).await;
+
+            let tls_config_opt = match official_tls {
+                Ok(cfg) => {
+                    log_android(4, "✅ 공인 Let's Encrypt SSL 인증서 로드 성공 (mdm.mplat.store) - 테슬라 브라우저 보안경고 0건 보장");
+                    Some(cfg)
+                }
+                Err(e) => {
+                    log_android(5, &format!("공인 인증서 로드 실패 (자체서명 폴백 전환): {}", e));
+                    None
+                }
+            };
+
+            let tls_config = match tls_config_opt {
+                Some(cfg) => cfg,
+                None => {
+                    let subject_alt_names = vec![
+                        "mdm.mplat.store".to_string(),
+                        "teslamirror.net".to_string(),
+                        "*.teslamirror.net".to_string(),
+                        "td9.cc".to_string(),
+                        "*.td9.cc".to_string(),
+                        "td7.cc".to_string(),
+                        "*.td7.cc".to_string(),
+                        "122.40.252.50".to_string(),
+                        "100.99.9.9".to_string(),
+                        "7.7.7.7".to_string(),
+                        "3.3.3.3".to_string(),
+                        "10.254.1.1".to_string(),
+                        "192.168.43.1".to_string(),
+                        "127.0.0.1".to_string(),
+                        "localhost".to_string(),
+                        "tesla.local".to_string(),
+                    ];
+                    let certified_key = rcgen::generate_simple_self_signed(subject_alt_names).expect("Failed to gen self-signed cert");
                     let cert_pem = certified_key.cert.pem();
                     let key_pem = certified_key.signing_key.serialize_pem();
-                    match axum_server::tls_rustls::RustlsConfig::from_pem(
+                    axum_server::tls_rustls::RustlsConfig::from_pem(
                         cert_pem.as_bytes().to_vec(),
                         key_pem.as_bytes().to_vec(),
-                    ).await {
-                        Ok(tls_config) => {
-                            let https_ports = vec![9999, 9998, 8443, 7679];
-                            for https_port in https_ports {
-                                let addr: SocketAddr = ([0, 0, 0, 0], https_port).into();
-                                match create_socket_listener(&addr) {
-                                    Ok(std_listener) => {
-                                        let handle = axum_server::Handle::new();
-                                        if let Ok(mut lock) = tls_handles.lock() {
-                                            lock.push(handle.clone());
-                                        }
+                    ).await.expect("Failed to create self-signed tls config")
+                }
+            };
+
+            let https_ports = vec![9999, 9998, 8443, 7679];
+            for https_port in https_ports {
+                let addr: SocketAddr = ([0, 0, 0, 0], https_port).into();
+                match create_socket_listener(&addr) {
+                    Ok(std_listener) => {
+                        let handle = axum_server::Handle::new();
+                        if let Ok(mut lock) = tls_handles.lock() {
+                            lock.push(handle.clone());
+                        }
                                         let app_inst = app_https.clone();
                                         let config_inst = tls_config.clone();
                                         tokio::spawn(async move {
@@ -299,16 +334,6 @@ impl MirrorServer {
                                     }
                                 }
                             }
-                        }
-                        Err(e) => {
-                            log_android(6, &format!("Failed to create RustlsConfig: {}", e));
-                        }
-                    }
-                }
-                Err(e) => {
-                    log_android(6, &format!("Failed to generate self-signed cert: {}", e));
-                }
-            }
 
             // 테슬라 가상 프록시 — 추가 HTTP 포트 직접 바인딩 (7777 [td9.cc], 7678)
             // 디스패처 대신 동일한 axum 앱을 직접 serve하여 안정성 확보
