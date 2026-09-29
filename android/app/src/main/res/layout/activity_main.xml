@@ -127,7 +127,7 @@
                         android:paddingTop="3dp"
                         android:paddingEnd="8dp"
                         android:paddingBottom="3dp"
-                        android:text="가상 프록시 (데이터 0MB)"
+                        android:text="원클릭 자동 감지 (데이터 0MB)"
                         android:textColor="#2ecc71"
                         android:textSize="11sp"
                         android:textStyle="bold" />
@@ -138,9 +138,9 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="10dp"
-                    android:text="https://teslamirror.net:9999"
+                    android:text="https://mdm.mplat.store:8088/tesla"
                     android:textColor="#ffffff"
-                    android:textSize="24sp"
+                    android:textSize="20sp"
                     android:textStyle="bold" />
 
                 <TextView
@@ -148,7 +148,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
-                    android:text="보조 주소(HTTP): http://td9.cc:7777"
+                    android:text="로컬 직결: https://192.168.43.1:9999"
                     android:textColor="#3498db"
                     android:textSize="12sp" />
 
@@ -245,7 +245,7 @@
                     android:layout_marginBottom="12dp"
                     android:background="#22252e" />
 
-                <!-- 2. 테슬라 로컬 가상 프록시 -->
+                <!-- 2. 테슬라 스마트 게이트웨이 연동 -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -261,7 +261,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="⚡ 테슬라 로컬 가상 프록시"
+                            android:text="⚡ 테슬라 스마트 원클릭 게이트웨이"
                             android:textColor="#ecf0f1"
                             android:textSize="14sp"
                             android:textStyle="bold" />
@@ -271,15 +271,23 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="2dp"
-                            android:text="삼성 핫스팟 차단 우회 터널"
+                            android:text="원클릭 자동 매칭 대기 중"
                             android:textColor="#a0a5b1"
                             android:textSize="12sp" />
                     </LinearLayout>
 
-                    <com.google.android.material.switchmaterial.SwitchMaterial
-                        android:id="@+id/switchLocalProxy"
+                    <TextView
                         android:layout_width="wrap_content"
-                        android:layout_height="wrap_content" />
+                        android:layout_height="wrap_content"
+                        android:background="#1f2ecc71"
+                        android:paddingStart="8dp"
+                        android:paddingTop="3dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="3dp"
+                        android:text="자동 연동"
+                        android:textColor="#2ecc71"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
                 </LinearLayout>
 
                 <com.google.android.material.button.MaterialButton

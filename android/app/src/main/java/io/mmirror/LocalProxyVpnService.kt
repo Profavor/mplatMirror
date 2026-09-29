@@ -105,14 +105,13 @@ class LocalProxyVpnService : VpnService() {
             val builder = Builder()
                 .setSession("mplat Tesla Proxy")
                 .setMtu(1500)
-                .setBlocking(false)
+                .setBlocking(true)
 
-            // 가상 인터페이스 주소 직접 바인딩 (100.99.9.9, 7.7.7.7, 3.3.3.3, 10.254.1.1, 10.254.1.2)
-            // 안드로이드 커널이 해당 목적지 패킷을 호스트 로컬 수신으로 인식하여 테더링 방화벽 드롭 없이 즉시 처리하도록 /32 바인딩
-            try { builder.addAddress("100.99.9.9", 32) } catch (e: Throwable) { sendDebugLog("⚠ addAddress 100.99.9.9 실패: ${e.message}") }
-            try { builder.addAddress("7.7.7.7", 32) } catch (e: Throwable) { sendDebugLog("⚠ addAddress 7.7.7.7 실패: ${e.message}") }
-            try { builder.addAddress("3.3.3.3", 32) } catch (e: Throwable) { sendDebugLog("⚠ addAddress 3.3.3.3 실패: ${e.message}") }
-            try { builder.addAddress("10.254.1.1", 32) } catch (e: Throwable) { sendDebugLog("⚠ addAddress 10.254.1.1 실패: ${e.message}") }
+            // 가상 인터페이스 주소 직접 바인딩 (100.99.9.9, 7.7.7.7, 3.3.3.3, 10.254.1.2)
+            // /24 대역으로 바인딩하여 서브넷 전체가 tun0 인터페이스로 라우팅되도록 설정
+            try { builder.addAddress("100.99.9.9", 24) } catch (e: Throwable) { sendDebugLog("⚠ addAddress 100.99.9.9 실패: ${e.message}") }
+            try { builder.addAddress("7.7.7.7", 24) } catch (e: Throwable) { sendDebugLog("⚠ addAddress 7.7.7.7 실패: ${e.message}") }
+            try { builder.addAddress("3.3.3.3", 24) } catch (e: Throwable) { sendDebugLog("⚠ addAddress 3.3.3.3 실패: ${e.message}") }
             try { builder.addAddress("10.254.1.2", 24) } catch (e: Throwable) { sendDebugLog("⚠ addAddress 10.254.1.2 실패: ${e.message}") }
 
             sendDebugLog("2/5 addAddress 완료, addRoute 설정 중")

@@ -15,6 +15,10 @@ use tokio::sync::{broadcast, RwLock};
 use tower_http::cors::CorsLayer;
 use tracing::info;
 
+use axum::extract::ConnectInfo;
+use std::collections::HashMap;
+use std::net::IpAddr;
+
 const INDEX_HTML: &str = include_str!("../../../web/index.html");
 const STYLE_CSS: &str = include_str!("../../../web/style.css");
 const LEAFLET_CSS: &str = include_str!("../../../web/leaflet.css");
@@ -26,6 +30,18 @@ const LOGO_PNG: &[u8] = include_bytes!("../../../web/logo.png");
 const DOWNLOAD_HTML: &str = include_str!("../../../dist/index.html");
 const TESLA_HTML: &str = include_str!("../../../dist/tesla.html");
 
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+struct HostRegistration {
+    local_ip: String,
+    port: u16,
+    timestamp: u64,
+}
+
+#[derive(serde::Deserialize)]
+struct RegisterHostPayload {
+    local_ip: String,
+    port: Option<u16>,
+}
 
 #[derive(Clone)]
 struct RelayState {
@@ -33,6 +49,7 @@ struct RelayState {
     control_tx: broadcast::Sender<String>,
     current_config: Arc<RwLock<Option<Arc<Vec<u8>>>>>,
     last_keyframe: Arc<RwLock<Option<Arc<Vec<u8>>>>>,
+    hosts: Arc<RwLock<HashMap<IpAddr, HostRegistration>>>,
     apk_path: PathBuf,
 }
 
@@ -116,6 +133,63 @@ async fn serve_info() -> impl IntoResponse {
         "domain": "mdm.mplat.store:8088",
         "status": "online"
     }))
+}
+
+async fn register_host(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    State(state): State<RelayState>,
+    Json(payload): Json<RegisterHostPayload>,
+) -> impl IntoResponse {
+    let caller_ip = addr.ip();
+    let reg = HostRegistration {
+        local_ip: payload.local_ip.clone(),
+        port: payload.port.unwrap_or(9999),
+        timestamp: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs(),
+    };
+    info!("Registered host from {}: local_ip={}:{}", caller_ip, reg.local_ip, reg.port);
+    let mut lock = state.hosts.write().await;
+    lock.insert(caller_ip, reg);
+    (StatusCode::OK, Json(json!({"status": "ok", "caller_ip": caller_ip.to_string()})))
+}
+
+async fn discover_host(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    State(state): State<RelayState>,
+) -> impl IntoResponse {
+    let caller_ip = addr.ip();
+    let lock = state.hosts.read().await;
+    if let Some(host) = lock.get(&caller_ip) {
+        Json(json!({
+            "found": true,
+            "local_ip": host.local_ip,
+            "port": host.port,
+            "url": format!("https://{}:{}", host.local_ip, host.port),
+        }))
+    } else {
+        // 일치하는 공인 IP가 없을 경우 최근 5분 이내에 등록된 최신 호스트 fallback 제공
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let fallback = lock.values().filter(|h| now.saturating_sub(h.timestamp) < 300).last();
+        if let Some(host) = fallback {
+            Json(json!({
+                "found": true,
+                "local_ip": host.local_ip,
+                "port": host.port,
+                "url": format!("https://{}:{}", host.local_ip, host.port),
+                "fallback": true
+            }))
+        } else {
+            Json(json!({
+                "found": false,
+                "caller_ip": caller_ip.to_string(),
+            }))
+        }
+    }
 }
 
 // 테슬라 브라우저 (시청자) WebSocket 핸들러
@@ -236,6 +310,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         control_tx,
         current_config: Arc::new(RwLock::new(None)),
         last_keyframe: Arc::new(RwLock::new(None)),
+        hosts: Arc::new(RwLock::new(HashMap::new())),
         apk_path: PathBuf::from("/home/profavor/mMirror/dist/mplatMirror.apk"),
     };
 
@@ -246,6 +321,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/tesla.html", get(serve_tesla))
         .route("/download", get(serve_download))
         .route("/mplatMirror.apk", get(serve_apk))
+        .route("/api/register_host", axum::routing::post(register_host))
+        .route("/api/discover", get(discover_host))
         .route("/style.css", get(serve_css))
         .route("/player.js", get(serve_player))
         .route("/touch.js", get(serve_touch))
@@ -272,7 +349,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🚀 mplat Mirror Official Relay Server running on https://0.0.0.0:8088 (mdm.mplat.store)");
 
     axum_server::bind_rustls(addr, tls_config)
-        .serve(app.into_make_service())
+        .serve(app.into_make_service_with_connect_info::<SocketAddr>())
         .await?;
 
     Ok(())

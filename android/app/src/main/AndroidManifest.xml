@@ -57,16 +57,7 @@
                 android:resource="@xml/accessibility_service_config" />
         </service>
 
-        <!-- 테슬라 브라우저 로컬 가상 프록시 VPN 서비스 (핫스팟 차단 우회용) -->
-        <service
-            android:name=".LocalProxyVpnService"
-            android:permission="android.permission.BIND_VPN_SERVICE"
-            android:foregroundServiceType="connectedDevice"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.net.VpnService" />
-            </intent-filter>
-        </service>
+
 
     </application>
 
