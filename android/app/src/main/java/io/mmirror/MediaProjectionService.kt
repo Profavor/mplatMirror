@@ -300,17 +300,7 @@ class MediaProjectionService : Service() {
             .build()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val fgsType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
-            } else {
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
-            }
-            try {
-                startForeground(NOTIFICATION_ID, notification, fgsType)
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to start FGS with microphone type, fallback to mediaProjection only", e)
-                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
-            }
+            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
         } else {
             startForeground(NOTIFICATION_ID, notification)
         }
@@ -631,7 +621,9 @@ class MediaProjectionService : Service() {
         if (!isStreaming || mediaProjection == null) return
 
         val (newW, newH, newDensity) = computeScreenDimensions()
-        if (newW == screenWidth && newH == screenHeight && newDensity == screenDensity) {
+        val diffW = kotlin.math.abs(newW - screenWidth)
+        val diffH = kotlin.math.abs(newH - screenHeight)
+        if (diffW < 32 && diffH < 32 && newDensity == screenDensity) {
             return
         }
 
@@ -712,6 +704,7 @@ class MediaProjectionService : Service() {
             Log.i(TAG, "✅ 폴드 화면 전환 완료: ${screenWidth}x${screenHeight} 실시간 재설정됨")
         } catch (e: Exception) {
             Log.e(TAG, "비디오 인코더 재설정 실패: ${e.message}", e)
+            isStreaming = true
         }
     }
 

@@ -30,14 +30,18 @@ fn get_runtime() -> &'static Runtime {
 
 #[no_mangle]
 pub extern "system" fn Java_io_mmirror_NativeBridge_init(
-    env: JNIEnv,
+    mut env: JNIEnv,
     class: JClass,
 ) {
     if let Ok(vm) = env.get_java_vm() {
         let _ = JVM.set(vm);
     }
     if NATIVE_BRIDGE_CLASS.get().is_none() {
-        if let Ok(global_ref) = env.new_global_ref(class) {
+        let cls = match env.find_class("io/mmirror/NativeBridge") {
+            Ok(found) => found,
+            Err(_) => class,
+        };
+        if let Ok(global_ref) = env.new_global_ref(cls) {
             let _ = NATIVE_BRIDGE_CLASS.set(global_ref);
         }
     }
@@ -49,12 +53,16 @@ pub extern "system" fn Java_io_mmirror_NativeBridge_init(
 
 #[no_mangle]
 pub extern "system" fn Java_io_mmirror_NativeBridge_startServer(
-    env: JNIEnv,
+    mut env: JNIEnv,
     class: JClass,
     port: jint,
 ) -> jint {
     if NATIVE_BRIDGE_CLASS.get().is_none() {
-        if let Ok(global_ref) = env.new_global_ref(class) {
+        let cls = match env.find_class("io/mmirror/NativeBridge") {
+            Ok(found) => found,
+            Err(_) => class,
+        };
+        if let Ok(global_ref) = env.new_global_ref(cls) {
             let _ = NATIVE_BRIDGE_CLASS.set(global_ref);
         }
     }

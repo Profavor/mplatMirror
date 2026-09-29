@@ -45,7 +45,7 @@
             android:enabled="true"
             android:exported="false"
             android:stopWithTask="false"
-            android:foregroundServiceType="mediaProjection|microphone" />
+            android:foregroundServiceType="mediaProjection" />
 
         <!-- 테슬라 브라우저 양방향 원격 터치/제스처 제어 접근성 서비스 -->
         <service

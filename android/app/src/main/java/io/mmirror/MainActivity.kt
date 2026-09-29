@@ -348,12 +348,7 @@ class MainActivity : AppCompatActivity() {
     private fun requestScreenCapture() {
         try {
             val projectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-            val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                val config = android.media.projection.MediaProjectionConfig.createConfigForDefaultDisplay()
-                projectionManager.createScreenCaptureIntent(config)
-            } else {
-                projectionManager.createScreenCaptureIntent()
-            }
+            val intent = projectionManager.createScreenCaptureIntent()
             screenCaptureLauncher.launch(intent)
         } catch (e: Exception) {
             android.util.Log.e("MainActivity", "Failed to launch screen capture intent", e)

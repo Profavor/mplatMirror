@@ -28,19 +28,31 @@ object NativeBridge {
     }
 
     // --- Native Methods implemented in Rust ---
+    @JvmStatic
     private external fun init()
+    @JvmStatic
     external fun startServer(port: Int): Int
+    @JvmStatic
     external fun getServerPort(): Int
+    @JvmStatic
     external fun stopServer()
+    @JvmStatic
     external fun startTunProxy(fd: Int, targetPort: Int): Boolean
+    @JvmStatic
     external fun stopTunProxy()
+    @JvmStatic
     external fun getNativeLogs(): String
 
     fun isServerRunning(): Boolean = getServerPort() > 0
+    @JvmStatic
     external fun sendVideoFrame(data: ByteArray, offset: Int, length: Int)
+    @JvmStatic
     external fun sendAudioData(data: ByteArray, offset: Int, length: Int)
+    @JvmStatic
     external fun updateConfig(width: Int, height: Int, rotation: Int, fps: Int)
+    @JvmStatic
     external fun sendGpsData(lat: Double, lng: Double, speed: Float, heading: Float, distance: Double, duration: Long)
+    @JvmStatic
     external fun saveTripRecord(tripJson: String)
 
     // --- Called from Rust via JNI ---
