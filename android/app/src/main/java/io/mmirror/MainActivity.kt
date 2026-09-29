@@ -160,14 +160,8 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         ensureServerRunning()
 
-        // VPN 권한이 이미 승인되어 있다면 즉시 로컬 가상 프록시 가동
-        if (!LocalProxyVpnService.isRunning) {
-            try {
-                if (android.net.VpnService.prepare(this) == null) {
-                    LocalProxyVpnService.start(this)
-                }
-            } catch (_: Exception) {}
-        }
+        // 삼성페이 간섭 방지: onResume에서 VPN을 강제로 자동 가동하지 않고 UI 상태만 갱신합니다.
+        // VPN은 [미러링 시작] 또는 [VPN 켜기] 버튼을 누를 때 가동됩니다.
 
         updateNetworkAddress()
         updateAccessibilityStatus()
@@ -237,6 +231,27 @@ class MainActivity : AppCompatActivity() {
                 stopMirroringService()
             } else {
                 checkPermissionsAndStart()
+            }
+        }
+
+        binding.btnToggleVpn.setOnClickListener {
+            if (LocalProxyVpnService.isRunning) {
+                LocalProxyVpnService.stop(this)
+                Toast.makeText(this, "⚡ 테슬라 로컬 가상 프록시(VPN)를 껐습니다.\n삼성페이 결제가 가능합니다.", Toast.LENGTH_SHORT).show()
+                updateUIState()
+            } else {
+                try {
+                    val vpnIntent = android.net.VpnService.prepare(this)
+                    if (vpnIntent != null) {
+                        vpnLauncher.launch(vpnIntent)
+                    } else {
+                        LocalProxyVpnService.start(this)
+                        Toast.makeText(this, "⚡ 테슬라 로컬 가상 프록시(VPN)가 가동되었습니다.", Toast.LENGTH_SHORT).show()
+                        updateUIState()
+                    }
+                } catch (e: Exception) {
+                    Toast.makeText(this, "VPN 가동 실패: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
             }
         }
 
@@ -462,21 +477,29 @@ class MainActivity : AppCompatActivity() {
         val vpnActive = LocalProxyVpnService.isRunning
 
         if (vpnActive) {
+            binding.btnToggleVpn.text = "VPN 끄기"
+            binding.btnToggleVpn.setBackgroundColor(0xFFE74C3C.toInt())
             binding.tvProxyBadge.text = "가상 프록시(VPN) 활성화됨 (데이터 0MB)"
             binding.tvProxyBadge.setTextColor(0xFF2ECC71.toInt())
             binding.tvProxyBadge.setBackgroundColor(0x1F2ECC71.toInt())
             binding.tvProxyStatus.text = "🟢 0MB 초저지연 로컬 터널 가동 중 (https://mdm.mplat.store:9999)"
             binding.tvProxyStatus.setTextColor(0xFF2ECC71.toInt())
+            binding.tvVpnHint.text = "💡 삼성페이 결제 시에는 상단 [VPN 끄기]를 눌러주세요."
+            binding.tvVpnHint.setTextColor(0xFFF39C12.toInt())
         } else {
+            binding.btnToggleVpn.text = "VPN 켜기"
+            binding.btnToggleVpn.setBackgroundColor(0xFF3498DB.toInt())
             binding.tvProxyBadge.text = "가상 프록시 대기 중"
             binding.tvProxyBadge.setTextColor(0xFFA0A5B1.toInt())
             binding.tvProxyBadge.setBackgroundColor(0x1FA0A5B1.toInt())
             if (apEnabled) {
-                binding.tvProxyStatus.text = "⚪ 삼성 핫스팟 차단 우회 터널 ([미러링 시작] 시 자동 가동)"
+                binding.tvProxyStatus.text = "⚪ VPN 꺼짐 (삼성페이 결제 가능 · 테슬라 접속 시 켜기)"
             } else {
                 binding.tvProxyStatus.text = "⚠️ 핫스팟을 켠 후 [미러링 시작]을 눌러주세요"
             }
             binding.tvProxyStatus.setTextColor(0xFFA0A5B1.toInt())
+            binding.tvVpnHint.text = "✅ 현재 VPN이 꺼져 있어 삼성페이를 정상 사용할 수 있습니다."
+            binding.tvVpnHint.setTextColor(0xFF2ECC71.toInt())
         }
     }
 

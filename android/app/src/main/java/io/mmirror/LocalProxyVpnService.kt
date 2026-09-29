@@ -119,11 +119,21 @@ class LocalProxyVpnService : VpnService() {
             try { builder.addRoute("3.3.3.0", 24) } catch (e: Throwable) { sendDebugLog("⚠ addRoute 3.3.3.0 실패: ${e.message}") }
             try { builder.addRoute("10.254.1.0", 24) } catch (e: Throwable) { sendDebugLog("⚠ addRoute 10.254.1.0 실패: ${e.message}") }
 
-            // 앱 자체(미러링 소켓)는 VPN 루프에 빠지지 않도록 우회
-            try {
-                builder.addDisallowedApplication(packageName)
-            } catch (e: Throwable) {
-                sendDebugLog("⚠ addDisallowedApplication 실패: ${e.message}")
+            // 앱 자체(미러링 소켓) 및 삼성페이 앱들은 VPN 간섭 방지를 위해 우회
+            val bypassPackages = listOf(
+                packageName,
+                "com.samsung.android.spay",
+                "com.samsung.android.spayfw",
+                "com.samsung.android.rajaampat",
+                "com.samsung.android.samsungpay.gear",
+                "com.samsung.android.authfw"
+            )
+            for (pkg in bypassPackages) {
+                try {
+                    builder.addDisallowedApplication(pkg)
+                } catch (e: Throwable) {
+                    // 패키지가 설치되지 않았거나 시스템 패키지인 경우 무시
+                }
             }
             try {
                 builder.allowBypass()
@@ -203,11 +213,19 @@ class LocalProxyVpnService : VpnService() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val stopVpnIntent = Intent(this, LocalProxyVpnService::class.java).apply {
+            action = ACTION_STOP
+        }
+        val stopVpnPendingIntent = PendingIntent.getService(
+            this, 1, stopVpnIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("⚡ 테슬라 로컬 가상 프록시 (데이터 0MB)")
             .setContentText("접속: https://mdm.mplat.store:9999 (보조: https://teslamirror.net:9999)")
-
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "VPN 끄기 (삼성페이)", stopVpnPendingIntent)
             .setOngoing(true)
             .setContentIntent(pendingIntent)
             .setPriority(NotificationCompat.PRIORITY_LOW)

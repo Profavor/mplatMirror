@@ -276,19 +276,28 @@
                             android:textSize="12sp" />
                     </LinearLayout>
 
-                    <TextView
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnToggleVpn"
                         android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:background="#1f2ecc71"
-                        android:paddingStart="8dp"
-                        android:paddingTop="3dp"
-                        android:paddingEnd="8dp"
-                        android:paddingBottom="3dp"
-                        android:text="VPN 자동가동"
-                        android:textColor="#2ecc71"
-                        android:textSize="11sp"
-                        android:textStyle="bold" />
+                        android:layout_height="38dp"
+                        android:backgroundTint="#e74c3c"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
+                        android:text="VPN 끄기"
+                        android:textColor="#ffffff"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        app:cornerRadius="8dp" />
                 </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvVpnHint"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="💡 삼성페이 결제 시에는 [VPN 끄기]를 눌러 일시 해제하세요."
+                    android:textColor="#f39c12"
+                    android:textSize="11sp" />
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnViewLogs"
