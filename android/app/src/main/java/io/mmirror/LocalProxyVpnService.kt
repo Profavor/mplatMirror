@@ -67,6 +67,15 @@ class LocalProxyVpnService : VpnService() {
         return START_NOT_STICKY
     }
 
+    private fun sendDebugLog(msg: String) {
+        Log.i(TAG, "[DEBUG] $msg")
+        val intent = Intent("io.mmirror.VPN_DEBUG_LOG").apply {
+            putExtra("log", msg)
+            setPackage(packageName)
+        }
+        sendBroadcast(intent)
+    }
+
     private fun startVpn() {
         if (isRunning) {
             Log.i(TAG, "LocalProxyVpnService is already running")
@@ -90,6 +99,8 @@ class LocalProxyVpnService : VpnService() {
             Log.w(TAG, "startForeground non-fatal error: ${e.message}")
         }
 
+        sendDebugLog("1/5 VPN 빌더 생성 시작")
+
         try {
             val builder = Builder()
                 .setSession("mplat Tesla Proxy")
@@ -98,26 +109,28 @@ class LocalProxyVpnService : VpnService() {
 
             // 가상 인터페이스 주소 직접 바인딩 (100.99.9.9, 7.7.7.7, 3.3.3.3, 10.254.1.1, 10.254.1.2)
             // 안드로이드 커널이 해당 목적지 패킷을 호스트 로컬 수신으로 인식하여 테더링 방화벽 드롭 없이 즉시 처리하도록 /32 바인딩
-            try { builder.addAddress("100.99.9.9", 32) } catch (e: Throwable) { Log.w(TAG, "addAddress 100.99.9.9 failed: ${e.message}") }
-            try { builder.addAddress("7.7.7.7", 32) } catch (e: Throwable) { Log.w(TAG, "addAddress 7.7.7.7 failed: ${e.message}") }
-            try { builder.addAddress("3.3.3.3", 32) } catch (e: Throwable) { Log.w(TAG, "addAddress 3.3.3.3 failed: ${e.message}") }
-            try { builder.addAddress("10.254.1.1", 32) } catch (e: Throwable) { Log.w(TAG, "addAddress 10.254.1.1 failed: ${e.message}") }
-            try { builder.addAddress("10.254.1.2", 24) } catch (e: Throwable) { Log.w(TAG, "addAddress 10.254.1.2 failed: ${e.message}") }
+            try { builder.addAddress("100.99.9.9", 32) } catch (e: Throwable) { sendDebugLog("⚠ addAddress 100.99.9.9 실패: ${e.message}") }
+            try { builder.addAddress("7.7.7.7", 32) } catch (e: Throwable) { sendDebugLog("⚠ addAddress 7.7.7.7 실패: ${e.message}") }
+            try { builder.addAddress("3.3.3.3", 32) } catch (e: Throwable) { sendDebugLog("⚠ addAddress 3.3.3.3 실패: ${e.message}") }
+            try { builder.addAddress("10.254.1.1", 32) } catch (e: Throwable) { sendDebugLog("⚠ addAddress 10.254.1.1 실패: ${e.message}") }
+            try { builder.addAddress("10.254.1.2", 24) } catch (e: Throwable) { sendDebugLog("⚠ addAddress 10.254.1.2 실패: ${e.message}") }
+
+            sendDebugLog("2/5 addAddress 완료, addRoute 설정 중")
 
             // 테슬라 브라우저가 사용하는 가상 프록시 IP 대역을 로컬 VPN 터널로 유입
             // teslamirror.net -> 100.99.9.9
-            try { builder.addRoute("100.99.9.0", 24) } catch (e: Throwable) { Log.w(TAG, "addRoute 100.99.9.0 failed: ${e.message}") }
+            try { builder.addRoute("100.99.9.0", 24) } catch (e: Throwable) { sendDebugLog("⚠ addRoute 100.99.9.0 실패: ${e.message}") }
             // td9.cc -> 7.7.7.7
-            try { builder.addRoute("7.7.7.0", 24) } catch (e: Throwable) { Log.w(TAG, "addRoute 7.7.7.0 failed: ${e.message}") }
+            try { builder.addRoute("7.7.7.0", 24) } catch (e: Throwable) { sendDebugLog("⚠ addRoute 7.7.7.0 실패: ${e.message}") }
             // 보조 가상 대역
-            try { builder.addRoute("3.3.3.0", 24) } catch (e: Throwable) { Log.w(TAG, "addRoute 3.3.3.0 failed: ${e.message}") }
-            try { builder.addRoute("10.254.1.0", 24) } catch (e: Throwable) { Log.w(TAG, "addRoute 10.254.1.0 failed: ${e.message}") }
+            try { builder.addRoute("3.3.3.0", 24) } catch (e: Throwable) { sendDebugLog("⚠ addRoute 3.3.3.0 실패: ${e.message}") }
+            try { builder.addRoute("10.254.1.0", 24) } catch (e: Throwable) { sendDebugLog("⚠ addRoute 10.254.1.0 실패: ${e.message}") }
 
             // 앱 자체(미러링 소켓)는 VPN 루프에 빠지지 않도록 우회
             try {
                 builder.addDisallowedApplication(packageName)
             } catch (e: Throwable) {
-                Log.w(TAG, "Failed to disallow application package: ${e.message}")
+                sendDebugLog("⚠ addDisallowedApplication 실패: ${e.message}")
             }
             try {
                 builder.allowBypass()
@@ -129,23 +142,27 @@ class LocalProxyVpnService : VpnService() {
                 builder.setMetered(false)
             }
 
+            sendDebugLog("3/5 builder.establish() 호출 중...")
+
             val pfd = builder.establish()
             if (pfd != null) {
                 vpnInterface = pfd
                 val rawFd = pfd.fd
-                Log.i(TAG, "VPN TUN established successfully with fd: $rawFd")
+                sendDebugLog("4/5 VPN TUN 생성 성공 fd=$rawFd, 서버포트 확인 중...")
 
                 val targetPort = NativeBridge.getServerPort().takeIf { it > 0 } ?: 8080
+                sendDebugLog("4/5 targetPort=$targetPort, TUN 프록시 시작 중...")
+
                 val ok = NativeBridge.startTunProxy(rawFd, targetPort)
-                Log.i(TAG, "NativeBridge startTunProxy returned: $ok with targetPort: $targetPort")
+                sendDebugLog("5/5 startTunProxy 결과=$ok (targetPort=$targetPort)")
 
                 isRunning = true
             } else {
-                Log.e(TAG, "Builder.establish() returned null. VPN permission might be missing.")
+                sendDebugLog("❌ builder.establish() 반환값 null! VPN 권한 없음?")
                 stopSelf()
             }
         } catch (e: Throwable) {
-            Log.e(TAG, "Exception while establishing LocalProxyVpnService", e)
+            sendDebugLog("❌ VPN 시작 예외: ${e.message}")
             stopSelf()
         }
     }

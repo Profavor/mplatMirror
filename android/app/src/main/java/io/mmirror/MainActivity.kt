@@ -2,11 +2,13 @@ package io.mmirror
 
 import android.Manifest
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.content.BroadcastReceiver
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.media.projection.MediaProjectionManager
 import android.net.wifi.WifiManager
@@ -45,6 +47,19 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private var serverPort = 8080
     private var startMirroringAfterVpn = false
+    private val debugLogs = mutableListOf<String>()
+
+    private val vpnDebugReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val log = intent?.getStringExtra("log") ?: return
+            debugLogs.add(log)
+            // 화면에 토스트로 표시
+            Toast.makeText(this@MainActivity, "🔧 $log", Toast.LENGTH_LONG).show()
+            // 프록시 상태 텍스트에도 표시
+            binding.tvProxyStatus.text = "🔧 $log"
+            binding.tvProxyStatus.setTextColor(0xFFFFD700.toInt())
+        }
+    }
 
     private val screenCaptureLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -102,6 +117,13 @@ class MainActivity : AppCompatActivity() {
         checkBatteryOptimization()
         setupListeners()
         ensureServerRunning()
+
+        // VPN 디버그 로그 수신 등록
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(vpnDebugReceiver, IntentFilter("io.mmirror.VPN_DEBUG_LOG"), Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(vpnDebugReceiver, IntentFilter("io.mmirror.VPN_DEBUG_LOG"))
+        }
     }
 
     private fun ensureServerRunning() {
