@@ -154,56 +154,38 @@ pub fn start_tun_proxy(fd: i32, target_port: u16) -> bool {
                                     );
 
                                     tokio::spawn(async move {
-                                        let mut first_byte = [0u8; 1];
-                                        match client_tcp.read(&mut first_byte).await {
-                                            Ok(1) => {
-                                                let is_tls = first_byte[0] == 0x16;
-                                                let dest_port = if is_tls {
-                                                    // TLS / HTTPS 요청인 경우: 포트 9999 (또는 9998, 8443, 7679)
-                                                    if local_port == 8443 || local_port == 7679 || local_port == 9998 {
-                                                        local_port
-                                                    } else {
-                                                        9999
-                                                    }
-                                                } else {
-                                                    // 일반 텍스트 HTTP 요청인 경우: 항상 실제 구동 중인 target_port (8080)로 전달!
-                                                    target_port
-                                                };
+                                        let dest_port = match local_port {
+                                            9999 | 9998 | 8443 | 7679 => local_port,
+                                            7777 => 7777,
+                                            8080 => 8080,
+                                            8088 => 8088,
+                                            _ => 9999,
+                                        };
 
-                                                let target_addr = if local_port == 8088 {
-                                                    "122.40.252.50:8088".to_string()
-                                                } else {
-                                                    format!("127.0.0.1:{}", dest_port)
-                                                };
+                                        let target_addr = if local_port == 8088 {
+                                            "122.40.252.50:8088".to_string()
+                                        } else {
+                                            format!("127.0.0.1:{}", dest_port)
+                                        };
 
-                                                crate::server::log_android(
-                                                    4,
-                                                    &format!(
-                                                        "🔄 [TUN PROXY] {} 로 전달 시작 (TLS={}, 수신포트={})",
-                                                        target_addr, is_tls, local_port
-                                                    ),
-                                                );
+                                        crate::server::log_android(
+                                            4,
+                                            &format!(
+                                                "🔄 [TUN PROXY] {} 로 전달 시작 (수신포트={})",
+                                                target_addr, local_port
+                                            ),
+                                        );
 
-                                                match TcpStream::connect(&target_addr).await {
-                                                    Ok(mut target_tcp) => {
-                                                        if let Err(e) = target_tcp.write_all(&first_byte).await {
-                                                            crate::server::log_android(6, &format!("❌ [TUN WRITE ERROR] 초기 바이트 전송 실패: {}", e));
-                                                            return;
-                                                        }
-                                                        crate::server::log_android(4, &format!("✅ [TUN CONNECTED] 127.0.0.1:{} 연결 수립! 양방향 데이터 중계 시작", dest_port));
-                                                        let _ = tokio::io::copy_bidirectional(&mut client_tcp, &mut target_tcp).await;
-                                                        let _ = target_tcp.shutdown().await;
-                                                        let _ = client_tcp.shutdown().await;
-                                                        crate::server::log_android(4, &format!("🏁 [TUN CLOSED] 127.0.0.1:{} 세션 종료", dest_port));
-                                                    }
-                                                    Err(e) => {
-                                                        crate::server::log_android(6, &format!("❌ [TUN CONNECT FAIL] 127.0.0.1:{} 연결 실패: {}", dest_port, e));
-                                                    }
-                                                }
+                                        match TcpStream::connect(&target_addr).await {
+                                            Ok(mut target_tcp) => {
+                                                crate::server::log_android(4, &format!("✅ [TUN CONNECTED] {} 연결 수립! 양방향 데이터 중계 시작", target_addr));
+                                                let _ = tokio::io::copy_bidirectional(&mut client_tcp, &mut target_tcp).await;
+                                                let _ = target_tcp.shutdown().await;
+                                                let _ = client_tcp.shutdown().await;
+                                                crate::server::log_android(4, &format!("🏁 [TUN CLOSED] {} 세션 종료", target_addr));
                                             }
-                                            Ok(_) => {}
                                             Err(e) => {
-                                                crate::server::log_android(6, &format!("❌ [TUN READ FAIL] 첫 바이트 수신 실패: {}", e));
+                                                crate::server::log_android(6, &format!("❌ [TUN CONNECT FAIL] {} 연결 실패: {}", target_addr, e));
                                             }
                                         }
                                     });
