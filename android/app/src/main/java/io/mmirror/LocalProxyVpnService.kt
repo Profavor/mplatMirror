@@ -109,17 +109,15 @@ class LocalProxyVpnService : VpnService() {
                 .setMtu(1500)
                 .setBlocking(false)
 
-            // 1. 가상 인터페이스 주소 직접 바인딩 (122.40.252.50, 100.99.9.9, 7.7.7.7, 100.99.9.2)
-            // 핫스팟 클라이언트(테슬라)가 접속할 타겟 IP를 기기 로컬 인터페이스 주소로 직접 등록하여 외부 셀룰러 유출 방지
-            try { builder.addAddress("122.40.252.50", 32) } catch (e: Throwable) { sendDebugLog("⚠ addAddress 122.40.252.50 실패: ${e.message}") }
+            // 1. 가상 인터페이스 주소 직접 바인딩 (100.99.9.9, 7.7.7.7, 100.99.9.2)
+            // 참고: 실제 VPS 공인 IP(122.40.252.50)는 VPN으로 가로채면 안드로이드 커널 rp_filter에 의해 패킷이 드롭되므로 외부 셀룰러로 정상 통신 보장
             try { builder.addAddress("100.99.9.9", 32) } catch (e: Throwable) { sendDebugLog("⚠ addAddress 100.99.9.9 실패: ${e.message}") }
             try { builder.addAddress("7.7.7.7", 32) } catch (e: Throwable) { sendDebugLog("⚠ addAddress 7.7.7.7 실패: ${e.message}") }
             try { builder.addAddress("100.99.9.2", 24) } catch (e: Throwable) { sendDebugLog("⚠ addAddress 100.99.9.2 실패: ${e.message}") }
 
             sendDebugLog("2/5 addAddress 완료, 가상 프록시 IP만 1:1 정밀 라우팅 (/32) 설정 중")
 
-            // 오직 테슬라 가상 프록시 대상 IP(/32)만 1:1 정밀 인터셉트 (일반 인터넷 및 핫스팟 트래픽 100% 정상 보장)
-            try { builder.addRoute("122.40.252.50", 32) } catch (e: Throwable) { sendDebugLog("⚠ addRoute 122.40.252.50 실패: ${e.message}") }
+            // 가상 프록시 타겟 IP(/32)만 1:1 인터셉트 (실제 도메인 mdm.mplat.store는 릴레이 서버로 직통 연결)
             try { builder.addRoute("100.99.9.9", 32) } catch (e: Throwable) { sendDebugLog("⚠ addRoute 100.99.9.9 실패: ${e.message}") }
             try { builder.addRoute("7.7.7.7", 32) } catch (e: Throwable) { sendDebugLog("⚠ addRoute 7.7.7.7 실패: ${e.message}") }
 
