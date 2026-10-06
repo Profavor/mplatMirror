@@ -671,12 +671,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateWriteSettingsStatus() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val canOverlay = Settings.canDrawOverlays(this)
             val canWrite = Settings.System.canWrite(this)
-            val isA11y = TouchControlService.isAccessibilityServiceEnabled(this)
-            val isGranted = canOverlay || canWrite || isA11y
 
-            if (isGranted) {
+            if (canWrite) {
                 binding.tvWriteSettingsStatus.text = "✓ 절전 권한 활성 (티맵 실행 중 테슬라 절전 100% 가능)"
                 binding.tvWriteSettingsStatus.setTextColor(0xFF2ECC71.toInt())
                 binding.btnOpenWriteSettings.text = "설정 완료"
@@ -687,6 +684,11 @@ class MainActivity : AppCompatActivity() {
                 binding.btnOpenWriteSettings.text = "권한 허용"
                 binding.btnOpenWriteSettings.setBackgroundColor(0xFF9B59B6.toInt())
             }
+        } else {
+            binding.tvWriteSettingsStatus.text = "✓ 절전 권한 지원 (안드로이드 5 이하 기본 지원)"
+            binding.tvWriteSettingsStatus.setTextColor(0xFF2ECC71.toInt())
+            binding.btnOpenWriteSettings.text = "설정 완료"
+            binding.btnOpenWriteSettings.setBackgroundColor(0xFF27AE60.toInt())
         }
     }
 

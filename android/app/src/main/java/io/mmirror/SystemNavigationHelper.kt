@@ -14,6 +14,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
  * 시스템 설정 화면 및 외부 앱/마켓 인텐트 디스패처 헬퍼
  */
 object SystemNavigationHelper {
+    private const val TAG = "SystemNavHelper"
 
     fun openBluetoothSettings(context: Context) {
         try {
@@ -32,27 +33,43 @@ object SystemNavigationHelper {
 
     fun openWriteSettings(activity: Activity) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (!Settings.canDrawOverlays(activity)) {
-                try {
-                    val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION).apply {
-                        data = Uri.parse("package:${activity.packageName}")
-                    }
-                    activity.startActivity(intent)
-                    return
-                } catch (_: Exception) {}
-            }
-            if (!Settings.System.canWrite(activity)) {
-                try {
-                    val intent = Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS).apply {
-                        data = Uri.parse("package:${activity.packageName}")
-                    }
-                    activity.startActivity(intent)
-                    return
-                } catch (_: Exception) {}
+            val canWrite = Settings.System.canWrite(activity)
+            if (canWrite) {
+                Toast.makeText(activity, "✓ 이미 화면 절전(밝기 제어) 권한이 허용되어 있습니다.", Toast.LENGTH_SHORT).show()
             }
             try {
-                activity.startActivity(Intent(Settings.ACTION_SETTINGS))
-            } catch (_: Exception) {}
+                val intent = Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS).apply {
+                    data = Uri.parse("package:${activity.packageName}")
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                activity.startActivity(intent)
+                return
+            } catch (e: Exception) {
+                AppLogger.w(TAG, "ACTION_MANAGE_WRITE_SETTINGS with package URI failed: ${e.message}")
+            }
+
+            try {
+                val intent = Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                activity.startActivity(intent)
+                return
+            } catch (e: Exception) {
+                AppLogger.w(TAG, "ACTION_MANAGE_WRITE_SETTINGS generic failed: ${e.message}")
+            }
+
+            // 폴백: 앱 상세 정보 화면 (일반 설정이 아닌 mMirror 전용 설정 화면)
+            try {
+                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.parse("package:${activity.packageName}")
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                activity.startActivity(intent)
+            } catch (_: Exception) {
+                Toast.makeText(activity, "설정 화면을 열 수 없습니다.", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            Toast.makeText(activity, "이 안드로이드 버전에서는 별도 권한 허용이 필요하지 않습니다.", Toast.LENGTH_SHORT).show()
         }
     }
 

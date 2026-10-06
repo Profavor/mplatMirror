@@ -249,7 +249,17 @@ class WebRtcStreamer(
         val hotspotIp = getHotspotIp()
 
         val result = mutableListOf<String>()
+        var skipAudioBlock = false
         for (line in lines) {
+            if (line.startsWith("m=audio")) {
+                skipAudioBlock = true
+                continue
+            } else if (skipAudioBlock && line.startsWith("m=")) {
+                skipAudioBlock = false
+            }
+            if (skipAudioBlock) {
+                continue
+            }
             var l = line
             if (l.startsWith("c=IN IP4") && !l.contains("0.0.0.0") && hotspotIp.isNotEmpty()) {
                 l = "c=IN IP4 $hotspotIp"
@@ -490,16 +500,16 @@ class WebRtcStreamer(
                     AppLogger.w(TAG, "🔌 WebRTC peer disconnected/failed: $newState")
                     // 차량 연결 해제 → GPS 주행 기록 중지 & 저장
                     io.mmirror.DrivingLogManager.currentInstance?.onPeerDisconnected()
-                    // Android 능동적 자가치유: 연결 단절이 1800ms 이상 지속 시 폰에서 먼저 신규 Offer 생성 발행
+                    // Android 능동적 자가치유: 연결 단절이 4500ms 이상 지속 시 폰에서 먼저 신규 Offer 생성 발행
                     proactiveReconnectRunnable?.let { mainHandler.removeCallbacks(it) }
                     val r = Runnable {
                         if (isRunning && peerConnection?.connectionState() != PeerConnection.PeerConnectionState.CONNECTED) {
-                            AppLogger.i(TAG, "⚡ [SELF-HEALING] Connection lost for 1.8s -> Phone proactively generating fresh Offer!")
+                            AppLogger.i(TAG, "⚡ [SELF-HEALING] Connection lost for 4.5s -> Phone proactively generating fresh Offer!")
                             createPeerConnectionAndOffer(force = true)
                         }
                     }
                     proactiveReconnectRunnable = r
-                    mainHandler.postDelayed(r, 1800L)
+                    mainHandler.postDelayed(r, 4500L)
                 } else if (newState == PeerConnection.PeerConnectionState.CLOSED) {
                     proactiveReconnectRunnable?.let { mainHandler.removeCallbacks(it) }
                 }
@@ -511,17 +521,17 @@ class WebRtcStreamer(
             override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) {
                 AppLogger.i(TAG, "🧊 ICE Connection State: $state")
                 if (state == PeerConnection.IceConnectionState.FAILED || state == PeerConnection.IceConnectionState.DISCONNECTED) {
-                    AppLogger.w(TAG, "⚠️ [WEBRTC] ICE 연결 끊김/실패 (1.8s 대기 후 자가치유 Offer 가동)")
+                    AppLogger.w(TAG, "⚠️ [WEBRTC] ICE 연결 끊김/실패 (4.5s 대기 후 자가치유 Offer 가동)")
                     proactiveReconnectRunnable?.let { mainHandler.removeCallbacks(it) }
                     val r = Runnable {
                         val currIce = peerConnection?.iceConnectionState()
                         if (isRunning && currIce != PeerConnection.IceConnectionState.CONNECTED && currIce != PeerConnection.IceConnectionState.COMPLETED) {
-                            AppLogger.i(TAG, "⚡ [SELF-HEALING] ICE state=$currIce for 1.8s -> Phone proactively generating fresh Offer!")
+                            AppLogger.i(TAG, "⚡ [SELF-HEALING] ICE state=$currIce for 4.5s -> Phone proactively generating fresh Offer!")
                             createPeerConnectionAndOffer(force = true)
                         }
                     }
                     proactiveReconnectRunnable = r
-                    mainHandler.postDelayed(r, 1800L)
+                    mainHandler.postDelayed(r, 4500L)
                 } else if (state == PeerConnection.IceConnectionState.CONNECTED || state == PeerConnection.IceConnectionState.COMPLETED) {
                     AppLogger.i(TAG, "✓ [WEBRTC] ICE P2P 직결 바인딩 성공!")
                     proactiveReconnectRunnable?.let { mainHandler.removeCallbacks(it) }
