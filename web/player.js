@@ -46,7 +46,7 @@
         } catch (_) {}
     }
 
-    const CURRENT_WEB_VERSION = '1.2.8';
+    const CURRENT_WEB_VERSION = '1.2.9';
 
     function checkAppVersionMismatch(appVersion) {
         if (!appVersion) return;
@@ -356,13 +356,20 @@
     function triggerWebRtcAutoRecovery(reason) {
         const now = performance.now();
         if (now - lastWebRtcRecoveryTime < 4000) {
-            console.log('⏳ [WEBRTC-RECOVERY] Debouncing rapid recovery trigger:', reason);
+            console.log('⏳ [WEBRTC-RECOVERY] 복구 쿨다운 진행 중 (스킵):', reason);
             return;
         }
         lastWebRtcRecoveryTime = now;
-        console.warn('🔄 [WEBRTC-RECOVERY] Self-Healing 무중단 자동 복구 가동:', reason);
+        webRtcRecoveryCount++;
+        console.warn(`🔄 [WEBRTC-RECOVERY] (#${webRtcRecoveryCount}) Self-Healing 무중단 자동 복구 가동: ${reason}`);
 
-        statusText.textContent = '🔄 스트림 자동 복구 중...';
+        if (webRtcRecoveryCount > 3) {
+            console.warn('⚠️ [WEBRTC-RECOVERY] 자동 복구 3회 초과 실패 -> 초기 대기 화면으로 안전 복귀');
+            resetToInitialScreen('연결 자동 복구 실패 (스마트폰 재연결 대기)', true);
+            return;
+        }
+
+        statusText.textContent = `🔄 스트림 자동 복구 중... (#${webRtcRecoveryCount})`;
         statusDot.className = 'dot connecting';
 
         // 1. 디코더 재초기화 플래그 (키프레임 대기)
@@ -386,13 +393,24 @@
             const now = performance.now();
 
             // [A] WebRTC 로컬 P2P 직결 모드 전용 Self-Healing 워치독
-            if (isWebRtcConnected) {
+            if (isWebRtcConnected || hasEverReceivedWebRtcVideo) {
                 const rtcIdleMs = now - lastWebRtcFrameTime;
                 const packetIdleMs = now - lastVideoPacketTime;
+                const pongIdleMs = now - lastPongReceivedTime;
+                const pc = peerConnection;
+                const pcState = pc ? pc.connectionState : 'closed';
+                const iceState = pc ? pc.iceConnectionState : 'closed';
+                const dcState = webrtcDataChannel ? webrtcDataChannel.readyState : 'closed';
 
-                // 2.0초 이내 프레임 렌더링 중이면 정상 수신 상태 (복구 문구 즉시 자동 원복)
-                if (rtcIdleMs < 2000) {
-                    if (statusText.textContent.includes('복구') || statusText.textContent.includes('대기') || statusText.textContent.includes('지연')) {
+                // 주기적(5초마다) 생존 및 품질 텔레메트리 콘솔 로깅
+                if (now - lastHealthLogTime >= 5000) {
+                    lastHealthLogTime = now;
+                    console.log(`📡 [HEALTH] 0MB 로컬 WebRTC 상태 점검 | 렌더링: ${Math.round(rtcIdleMs)}ms 전, 패킷: ${Math.round(packetIdleMs)}ms 전, PONG: ${Math.round(pongIdleMs)}ms 전 | PC: ${pcState}, ICE: ${iceState}, DC: ${dcState}`);
+                }
+
+                // 정상 수신 상태: 2.0초 이내 프레임 렌더링 및 패킷 수신 중
+                if (rtcIdleMs < 2000 && packetIdleMs < 2000) {
+                    if (statusText && (statusText.textContent.includes('복구') || statusText.textContent.includes('대기') || statusText.textContent.includes('지연') || statusText.textContent.includes('동기화') || statusText.textContent.includes('단절'))) {
                         statusText.textContent = '0MB 로컬 WebRTC 스트리밍 중';
                         statusDot.className = 'dot connected';
                     }
@@ -400,42 +418,37 @@
                     return;
                 }
 
-                // 패킷은 수신되는데 화면이 렌더링되지 않는 경우 -> 디코더 이상 감지 및 2.0초 내 즉각 복구
-                if (packetIdleMs < 1000 && rtcIdleMs > 2000) {
-                    console.warn(`⚠️ [WATCHDOG-WebRTC] 패킷 정상 수신 중이나 렌더링 지연 감지 (${Math.round(rtcIdleMs)}ms). 디코더 재설정 및 키프레임 요청`);
+                // 이상 1: 패킷은 정상 수신되는데 화면이 2.0초 이상 멈춤 -> 비디오 디코더 이상 감지 및 즉각 복구
+                if (packetIdleMs < 1000 && rtcIdleMs >= 2000) {
+                    console.warn(`⚠️ [WATCHDOG-WebRTC] 패킷 정상 수신 중이나 렌더링 지연 감지 (${Math.round(rtcIdleMs)}ms) -> 디코더 재설정 및 키프레임 요청`);
                     hasReceivedFirstKeyFrame = false;
                     initVideoDecoder();
                     requestKeyframe();
                     return;
                 }
 
-                // 1단계: 2.0초 이상 프레임 무응답 시 백그라운드로 키프레임 및 화면 갱신 재요청 (쿨다운 1.5초)
-                if (rtcIdleMs > 2000 && (now - lastKeyframeRequestTime > 1500)) {
-                    console.log(`🔑 [WATCHDOG-WebRTC] ${Math.round(rtcIdleMs)}ms 간 프레임 무응답, 키프레임 갱신 요청`);
+                // 이상 2: 2.2초 이상 프레임/패킷 무응답 시 백그라운드로 키프레임 및 화면 갱신 재요청 (쿨다운 1.5초)
+                if ((rtcIdleMs >= 2200 || packetIdleMs >= 2200) && (now - lastKeyframeRequestTime > 1500)) {
+                    console.log(`🔑 [WATCHDOG-WebRTC] 스트림 패킷 지연 감지 (패킷: ${Math.round(packetIdleMs)}ms, 화면: ${Math.round(rtcIdleMs)}ms) -> 키프레임 갱신 요청`);
+                    if (statusText && !statusText.textContent.includes('대기') && !statusText.textContent.includes('복구')) {
+                        statusText.textContent = '스마트폰 화면 동기화 중 (키프레임 요청)';
+                    }
                     requestKeyframe();
                 }
 
-                // 2단계: 전송 계층 상태 판별
-                const isTransportAlive = peerConnection &&
-                    (peerConnection.connectionState === 'connected' || peerConnection.iceConnectionState === 'connected' || peerConnection.iceConnectionState === 'completed');
+                // 이상 3: 전송 계층 단절 또는 4.0초 이상 완전 무응답 감지 -> Self-Healing 자동 재협상 실행
+                const isTransportDead = dcState !== 'open' || pcState === 'disconnected' || pcState === 'failed' || iceState === 'disconnected' || iceState === 'failed';
+                const isStreamFrozen = rtcIdleMs >= 4000 || packetIdleMs >= 4000;
 
-                if (isTransportAlive) {
-                    // P2P UDP 소켓이 정상이면 정적 화면(화면 미변경)일 수 있으므로 연결을 유지하며 상태 표시
-                    if (!statusText.textContent.includes('화면 대기') && !statusText.textContent.includes('복구')) {
-                        statusText.textContent = '스마트폰 화면 대기 중 (0MB 로컬 연결)';
-                        statusDot.className = 'dot connected';
-                    }
-                    // ★ 핵심 수정: P2P 전송 계층이 정상인 경우 연결을 절대 강제 종료(재협상)하지 않고 백그라운드 키프레임 요청만 유지
-                    if (rtcIdleMs > 3000 && (now - lastKeyframeRequestTime > 3000)) {
-                        console.log(`🔑 [WATCHDOG-WebRTC] 정상 연결 상태에서 프레임 지연 감지 (${Math.round(rtcIdleMs)}ms) -> 백그라운드 키프레임 요청`);
-                        requestKeyframe();
-                    }
-                } else {
-                    // 소켓이 실제로 끊겼거나(disconnected/failed) 실패한 경우에만 3.0초 후 자동 복구 가동
-                    if (rtcIdleMs > 3000) {
-                        console.warn(`⚡ [WATCHDOG-WebRTC] 소켓 단절 감지! 자동 재협상(Self-Healing) 시작...`);
-                        triggerWebRtcAutoRecovery('소켓 단절 감지');
-                    }
+                if (isStreamFrozen || isTransportDead) {
+                    console.warn(`⚡ [WATCHDOG-WebRTC] 스트림 단절 감지! (무응답: ${Math.round(Math.max(rtcIdleMs, packetIdleMs))}ms, DC: ${dcState}, PC: ${pcState}, ICE: ${iceState}) -> 즉각 Self-Healing 재협상 실행`);
+                    triggerWebRtcAutoRecovery(`스트림 단절 감지 (무응답: ${Math.round(Math.max(rtcIdleMs, packetIdleMs))}ms, DC: ${dcState})`);
+                }
+
+                // 이상 4: 10초 이상 완전 무응답 지속 시 대기 화면으로 안전 복구
+                if (rtcIdleMs >= 10000 && packetIdleMs >= 10000) {
+                    console.warn('⏸️ [WATCHDOG-WebRTC] 10초 이상 스트림 무응답 지속 -> 스마트폰 대기 화면으로 안전 복구');
+                    resetToInitialScreen('스마트폰 스트림 응답 없음 (재연결 대기)', true);
                 }
                 return;
             }
@@ -720,6 +733,7 @@
             console.log('🔥 [FIREBASE] Realtime Database signaling initialized for room:', roomName);
             isFirebaseSignaling = true;
             setupPeerConnection();
+            startWatchdog();
 
             publisherOnline = false;
             publisherOnlineTimestamp = 0;
@@ -960,13 +974,17 @@
     let webrtcLastRfcTime = performance.now();
     let webrtcStatsInterval = null;
     let pingInterval = null;
+    let lastPingTime = performance.now();
+    let lastPongReceivedTime = performance.now();
+    let lastHealthLogTime = 0;
 
     function startPingPong() {
         if (pingInterval) clearInterval(pingInterval);
         pingInterval = setInterval(() => {
             if (webrtcDataChannel && webrtcDataChannel.readyState === 'open') {
                 try {
-                    webrtcDataChannel.send(JSON.stringify({ type: 'ping', t: performance.now() }));
+                    lastPingTime = performance.now();
+                    webrtcDataChannel.send(JSON.stringify({ type: 'ping', t: lastPingTime }));
                 } catch (_) {}
             }
         }, 1200);
@@ -1212,22 +1230,18 @@
                     if (typeof showMirrorView === 'function') showMirrorView();
                     startWebRtcStats(null);
                 } else if (state === 'disconnected') {
-                    console.warn('⚡ [WEBRTC] Connection disconnected, attempting auto-recovery in 2.5s...');
+                    console.warn('⚡ [WEBRTC] Connection disconnected, attempting auto-recovery in 1.5s...');
                     if (statusText) statusText.textContent = '⚠️ 일시 연결 지연 (자동 복구 중...)';
                     if (statusDot) statusDot.className = 'dot connecting';
                     setTimeout(() => {
                         if (peerConnection && (peerConnection.connectionState === 'disconnected' || peerConnection.connectionState === 'failed')) {
-                            console.warn('🔄 [WEBRTC] Disconnected 상태 지속 감지 -> 자동 재협상(Self-Healing) 실행');
+                            console.warn('🔄 [WEBRTC] Disconnected 상태 지속 감지 -> 즉각 Self-Healing 재협상 실행');
                             triggerWebRtcAutoRecovery('WebRTC 끊김 자동 복구');
                         }
-                    }, 2500);
+                    }, 1500);
                 } else if (state === 'failed') {
-                    console.warn('⚡ [WEBRTC] Connection failed, validating in 3.0s...');
-                    setTimeout(() => {
-                        if (peerConnection && peerConnection.connectionState === 'failed') {
-                            triggerWebRtcAutoRecovery('WebRTC 연결 실패 자동 복구');
-                        }
-                    }, 3000);
+                    console.warn('⚡ [WEBRTC] Connection failed -> 즉각 Self-Healing 자동 복구 실행');
+                    triggerWebRtcAutoRecovery('WebRTC 연결 실패 자동 복구');
                 } else if (state === 'closed') {
                     console.log('🔌 [WEBRTC] Connection closed');
                 }
@@ -1255,12 +1269,8 @@
                     if (typeof showMirrorView === 'function') showMirrorView();
                     webRtcRecoveryCount = 0;
                 } else if (iceState === 'failed') {
-                    console.warn('⚡ [WEBRTC] ICE failed, validating in 3.0s...');
-                    setTimeout(() => {
-                        if (peerConnection && peerConnection.iceConnectionState === 'failed') {
-                            triggerWebRtcAutoRecovery('ICE 연결 실패');
-                        }
-                    }, 3000);
+                    console.warn('⚡ [WEBRTC] ICE failed -> 즉각 Self-Healing 자동 복구 실행');
+                    triggerWebRtcAutoRecovery('ICE 연결 실패');
                 }
             } catch (err) {
                 console.error('⚠️ [WEBRTC] Error in oniceconnectionstatechange handler:', err);
@@ -1397,6 +1407,7 @@
             if (disconnectOverlay) disconnectOverlay.classList.add('hidden');
             if (typeof showMirrorView === 'function') showMirrorView();
             startPingPong();
+            startWatchdog();
             try {
                 webrtcDataChannel.send(JSON.stringify({ type: 'request_keyframe' }));
                 webrtcDataChannel.send(JSON.stringify({ type: 'get_touch_status' }));
@@ -1408,13 +1419,17 @@
             handleChannelOpen();
         }
         webrtcDataChannel.onclose = () => {
-            console.warn('💬 [WEBRTC] DataChannel CLOSED -> 자동 복구 대기');
+            console.warn('💬 [WEBRTC] DataChannel CLOSED -> 즉각 Self-Healing 자동 복구 가동');
             stopPingPong();
             if (isWebRtcConnected || hasEverReceivedWebRtcVideo) {
                 statusText.textContent = '🔄 데이터 채널 복구 중...';
                 statusDot.className = 'dot connecting';
-                triggerWebRtcAutoRecovery('DataChannel 닫힘 복구');
+                triggerWebRtcAutoRecovery('DataChannel 닫힘 감지');
             }
+        };
+        webrtcDataChannel.onerror = (err) => {
+            console.warn('💬 [WEBRTC] DataChannel ERROR:', err);
+            triggerWebRtcAutoRecovery('DataChannel 오류 감지');
         };
         webrtcDataChannel.onmessage = (event) => {
             if (event.data instanceof ArrayBuffer) {
@@ -1440,6 +1455,7 @@
                         isPhoneScreenOn = data.on;
                         updateScreenPowerUI();
                     } else if (data.type === 'pong' && typeof data.t === 'number') {
+                        lastPongReceivedTime = performance.now();
                         const rtt = Math.round(performance.now() - data.t);
                         if (latencyInfo) latencyInfo.textContent = `${rtt} ms`;
                     } else if (data.type === 'toast' && data.message) {
@@ -2817,6 +2833,7 @@
 
     // 앱 시작 시 소켓 연결, WebRTC P2P 시그널링 가동
     requestWakeLock();
+    startWatchdog();
     connectWebRtc();
     connectWebSocket();
 })();

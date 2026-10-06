@@ -1004,6 +1004,10 @@ class WebRtcStreamer(
                         AppLogger.d(TAG, "Added remote ICE candidate from viewer")
                     }
                 }
+                "request_keyframe" -> {
+                    AppLogger.i(TAG, "🔑 시그널링 request_keyframe 수신 -> 키프레임 강제 생성")
+                    io.mmirror.MediaProjectionService.instance?.requestKeyFrame()
+                }
             }
         } catch (e: Exception) {
             AppLogger.w(TAG, "⚠️ handleSignalingMessage error: ${e.message}")
@@ -1153,7 +1157,9 @@ class WebRtcStreamer(
             System.arraycopy(data, 0, packet, 1, data.size)
             val buffer = DataChannel.Buffer(java.nio.ByteBuffer.wrap(packet), true)
             dc.send(buffer)
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            AppLogger.w(TAG, "⚠️ sendVideoPacket 실패: ${e.message}")
+        }
     }
 
     fun sendAudio(@Suppress("UNUSED_PARAMETER") data: ByteArray, @Suppress("UNUSED_PARAMETER") length: Int) {
