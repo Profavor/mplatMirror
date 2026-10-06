@@ -46,7 +46,7 @@
         } catch (_) {}
     }
 
-    const CURRENT_WEB_VERSION = '1.2.9';
+    const CURRENT_WEB_VERSION = '1.3.0';
 
     function checkAppVersionMismatch(appVersion) {
         if (!appVersion) return;
@@ -355,7 +355,7 @@
 
     function triggerWebRtcAutoRecovery(reason) {
         const now = performance.now();
-        if (now - lastWebRtcRecoveryTime < 4000) {
+        if (now - lastWebRtcRecoveryTime < 2000) {
             console.log('⏳ [WEBRTC-RECOVERY] 복구 쿨다운 진행 중 (스킵):', reason);
             return;
         }
@@ -363,13 +363,8 @@
         webRtcRecoveryCount++;
         console.warn(`🔄 [WEBRTC-RECOVERY] (#${webRtcRecoveryCount}) Self-Healing 무중단 자동 복구 가동: ${reason}`);
 
-        if (webRtcRecoveryCount > 3) {
-            console.warn('⚠️ [WEBRTC-RECOVERY] 자동 복구 3회 초과 실패 -> 초기 대기 화면으로 안전 복귀');
-            resetToInitialScreen('연결 자동 복구 실패 (스마트폰 재연결 대기)', true);
-            return;
-        }
-
-        statusText.textContent = `🔄 스트림 자동 복구 중... (#${webRtcRecoveryCount})`;
+        // 내비게이션 전용 무한 자가치유: 3회 실패 후 대기 화면으로 이탈하지 않고 복구 지속
+        statusText.textContent = `🔄 내비게이션 스트림 자동 복구 중... (#${webRtcRecoveryCount})`;
         statusDot.className = 'dot connecting';
 
         // 1. 디코더 재초기화 플래그 (키프레임 대기)
@@ -408,8 +403,8 @@
                     console.log(`📡 [HEALTH] 0MB 로컬 WebRTC 상태 점검 | 렌더링: ${Math.round(rtcIdleMs)}ms 전, 패킷: ${Math.round(packetIdleMs)}ms 전, PONG: ${Math.round(pongIdleMs)}ms 전 | PC: ${pcState}, ICE: ${iceState}, DC: ${dcState}`);
                 }
 
-                // 정상 수신 상태: 2.0초 이내 프레임 렌더링 및 패킷 수신 중
-                if (rtcIdleMs < 2000 && packetIdleMs < 2000) {
+                // 정상 수신 상태: 1.5초 이내 프레임 렌더링 및 패킷 수신 중
+                if (rtcIdleMs < 1500 && packetIdleMs < 1500) {
                     if (statusText && (statusText.textContent.includes('복구') || statusText.textContent.includes('대기') || statusText.textContent.includes('지연') || statusText.textContent.includes('동기화') || statusText.textContent.includes('단절'))) {
                         statusText.textContent = '0MB 로컬 WebRTC 스트리밍 중';
                         statusDot.className = 'dot connected';
@@ -418,8 +413,8 @@
                     return;
                 }
 
-                // 이상 1: 패킷은 정상 수신되는데 화면이 2.0초 이상 멈춤 -> 비디오 디코더 이상 감지 및 즉각 복구
-                if (packetIdleMs < 1000 && rtcIdleMs >= 2000) {
+                // 이상 1: 패킷은 정상 수신되는데 화면이 1.5초 이상 멈춤 -> 비디오 디코더 이상 감지 및 즉각 복구
+                if (packetIdleMs < 1000 && rtcIdleMs >= 1500) {
                     console.warn(`⚠️ [WATCHDOG-WebRTC] 패킷 정상 수신 중이나 렌더링 지연 감지 (${Math.round(rtcIdleMs)}ms) -> 디코더 재설정 및 키프레임 요청`);
                     hasReceivedFirstKeyFrame = false;
                     initVideoDecoder();
@@ -427,8 +422,8 @@
                     return;
                 }
 
-                // 이상 2: 2.2초 이상 프레임/패킷 무응답 시 백그라운드로 키프레임 및 화면 갱신 재요청 (쿨다운 1.5초)
-                if ((rtcIdleMs >= 2200 || packetIdleMs >= 2200) && (now - lastKeyframeRequestTime > 1500)) {
+                // 이상 2: 1.5초 이상 프레임/패킷 무응답 시 백그라운드로 키프레임 및 화면 갱신 재요청 (쿨다운 1.0초)
+                if ((rtcIdleMs >= 1500 || packetIdleMs >= 1500) && (now - lastKeyframeRequestTime > 1000)) {
                     console.log(`🔑 [WATCHDOG-WebRTC] 스트림 패킷 지연 감지 (패킷: ${Math.round(packetIdleMs)}ms, 화면: ${Math.round(rtcIdleMs)}ms) -> 키프레임 갱신 요청`);
                     if (statusText && !statusText.textContent.includes('대기') && !statusText.textContent.includes('복구')) {
                         statusText.textContent = '스마트폰 화면 동기화 중 (키프레임 요청)';
@@ -436,19 +431,13 @@
                     requestKeyframe();
                 }
 
-                // 이상 3: 전송 계층 단절 또는 4.0초 이상 완전 무응답 감지 -> Self-Healing 자동 재협상 실행
+                // 이상 3: 전송 계층 단절 또는 2.5초 이상 완전 무응답 감지 -> 즉각 Self-Healing 자동 재협상 실행
                 const isTransportDead = dcState !== 'open' || pcState === 'disconnected' || pcState === 'failed' || iceState === 'disconnected' || iceState === 'failed';
-                const isStreamFrozen = rtcIdleMs >= 4000 || packetIdleMs >= 4000;
+                const isStreamFrozen = rtcIdleMs >= 2500 || packetIdleMs >= 2500;
 
                 if (isStreamFrozen || isTransportDead) {
                     console.warn(`⚡ [WATCHDOG-WebRTC] 스트림 단절 감지! (무응답: ${Math.round(Math.max(rtcIdleMs, packetIdleMs))}ms, DC: ${dcState}, PC: ${pcState}, ICE: ${iceState}) -> 즉각 Self-Healing 재협상 실행`);
                     triggerWebRtcAutoRecovery(`스트림 단절 감지 (무응답: ${Math.round(Math.max(rtcIdleMs, packetIdleMs))}ms, DC: ${dcState})`);
-                }
-
-                // 이상 4: 10초 이상 완전 무응답 지속 시 대기 화면으로 안전 복구
-                if (rtcIdleMs >= 10000 && packetIdleMs >= 10000) {
-                    console.warn('⏸️ [WATCHDOG-WebRTC] 10초 이상 스트림 무응답 지속 -> 스마트폰 대기 화면으로 안전 복구');
-                    resetToInitialScreen('스마트폰 스트림 응답 없음 (재연결 대기)', true);
                 }
                 return;
             }
@@ -789,7 +778,7 @@
                     if (val.config) {
                         applySignalingConfig(val.config);
                     }
-                    await handleWebRtcOffer(val.sdp);
+                    await handleWebRtcOffer(val.sdp, val.offerId || String(val.timestamp || ''));
                 }
             });
 
@@ -850,10 +839,11 @@
                 if (msg.type === 'answer') {
                     firebaseRoomRef.child('answer').set({
                         type: 'answer',
+                        offerId: msg.offerId || '',
                         sdp: msg.sdp,
                         timestamp: Date.now()
                     });
-                    console.log('🔥 [FIREBASE] Sent Answer to phone');
+                    console.log('🔥 [FIREBASE] Sent Answer to phone (offerId:', msg.offerId || 'none', ')');
                 } else if (msg.type === 'candidate' && msg.candidate) {
                     const candStr = msg.candidate.candidate || '';
                     if (candStr.includes(' tcp ')) return;
@@ -874,11 +864,17 @@
                 } else if (msg.type === 'reconnect') {
                     firebaseRoomRef.child('answer').remove();
                     firebaseRoomRef.child('viewer_candidates').remove();
+                    const now = Date.now();
                     firebaseRoomRef.child('reconnect_request').set({
-                        timestamp: Date.now(),
+                        timestamp: now,
                         reason: msg.reason || 'watchdog'
                     });
-                    console.log('🔥 [FIREBASE] Sent Reconnect request to phone');
+                    // 안드로이드 SSE 스냅샷 및 뷰어 준비 리스너 양방향 즉각 수용을 위해 viewer_ready도 함께 갱신
+                    firebaseRoomRef.child('viewer_ready').set({
+                        ready: true,
+                        timestamp: now
+                    });
+                    console.log('🔥 [FIREBASE] Sent Reconnect & ViewerReady request to phone');
                 } else if (msg.type === 'request_keyframe') {
                     firebaseRoomRef.child('keyframe_request').set({
                         timestamp: Date.now()
@@ -1293,10 +1289,10 @@
         };
     }
 
-    async function handleWebRtcOffer(sdp) {
+    async function handleWebRtcOffer(sdp, offerId = '') {
         const ufragMatch = sdp.match(/a=ice-ufrag:([^\r\n]+)/);
         currentOfferUfrag = ufragMatch ? ufragMatch[1].trim() : null;
-        console.log(`🔄 WebRTC resetting PeerConnection for fresh incoming offer (ufrag: ${currentOfferUfrag})`);
+        console.log(`🔄 WebRTC resetting PeerConnection for fresh incoming offer (offerId: ${offerId || 'none'}, ufrag: ${currentOfferUfrag})`);
 
         // 새 세션 오퍼 수신 시 디코더 및 키프레임 상태 초기화 (참조 프레임 꼬임 및 디코더 큐 밀림 방지)
         hasReceivedFirstKeyFrame = false;
@@ -1333,10 +1329,9 @@
             }
         }
 
-        // Firebase RTDB에 이미 존재하는 후보들을 직접 1회 쿼리하여 즉시 추가 (child_added 이벤트 누락 방지)
+        // Firebase RTDB에 이미 존재하는 후보들을 비동기로 즉시 추가 (createAnswer 전송을 차단하지 않음)
         if (firebaseRoomRef) {
-            try {
-                const candSnapshot = await firebaseRoomRef.child('phone_candidates').once('value');
+            firebaseRoomRef.child('phone_candidates').once('value').then((candSnapshot) => {
                 if (candSnapshot && candSnapshot.exists()) {
                     candSnapshot.forEach((child) => {
                         const cand = child.val();
@@ -1345,17 +1340,18 @@
                         }
                     });
                 }
-            } catch (err) {
+            }).catch((err) => {
                 console.warn('⚠️ Error querying snapshot phone_candidates:', err);
-            }
+            });
         }
 
         const answer = await peerConnection.createAnswer();
         await peerConnection.setLocalDescription(answer);
 
-        console.log('📡 [WEBRTC] Sending Answer to phone');
+        console.log('📡 [WEBRTC] Sending Answer to phone (offerId:', offerId || 'none', ')');
         sendSignalingMessage({
             type: 'answer',
+            offerId: offerId,
             sdp: answer.sdp,
             timestamp: Date.now()
         });

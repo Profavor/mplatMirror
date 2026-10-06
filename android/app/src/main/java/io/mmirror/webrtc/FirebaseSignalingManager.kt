@@ -36,6 +36,7 @@ class FirebaseSignalingManager(
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
     @Volatile private var currentOfferTimestamp = 0L
+    @Volatile private var currentOfferId = ""
     @Volatile private var lastProcessedAnswerTimestamp = 0L
     @Volatile private var lastProcessedViewerReadyTimestamp = 0L
     @Volatile private var lastProcessedReconnectTimestamp = 0L
@@ -60,6 +61,7 @@ class FirebaseSignalingManager(
     fun stop() {
         isRunning = false
         currentOfferTimestamp = 0L
+        currentOfferId = ""
         lastProcessedAnswerTimestamp = 0L
         handler.removeCallbacksAndMessages(null)
         try {
@@ -98,7 +100,7 @@ class FirebaseSignalingManager(
                 android.util.Log.d(TAG, "Firebase SSE connection idle/closed: ${e.message}")
                 handler.postDelayed({
                     if (isRunning) startSseStream()
-                }, 5000)
+                }, 1000)
             }
 
             override fun onResponse(call: Call, response: Response) {
@@ -108,11 +110,11 @@ class FirebaseSignalingManager(
                 }
 
                 if (!response.isSuccessful) {
-                    android.util.Log.d(TAG, "Firebase SSE response HTTP ${response.code}. Retrying in 5s...")
+                    android.util.Log.d(TAG, "Firebase SSE response HTTP ${response.code}. Retrying in 1s...")
                     response.close()
                     handler.postDelayed({
                         if (isRunning) startSseStream()
-                    }, 5000)
+                    }, 1000)
                     return
                 }
 
@@ -121,7 +123,7 @@ class FirebaseSignalingManager(
                     response.close()
                     handler.postDelayed({
                         if (isRunning) startSseStream()
-                    }, 5000)
+                    }, 1000)
                     return
                 }
 
@@ -143,7 +145,7 @@ class FirebaseSignalingManager(
                         android.util.Log.d(TAG, "Firebase SSE read finished: ${e.message}")
                         handler.postDelayed({
                             if (isRunning) startSseStream()
-                        }, 5000)
+                        }, 1000)
                     }
                 } finally {
                     try {
@@ -189,19 +191,22 @@ class FirebaseSignalingManager(
             if (path == "/" && data is JSONObject) {
                 // 루트 스냅샷 파싱: 뷰어 대기 신호 수용 (기발행 Answer 및 후보는 현재 유효한 Offer 발행 이후 것만 수용)
                 val answerObj = data.optJSONObject("answer")
-                if (answerObj != null && currentOfferTimestamp > 0L) {
-                    val ts = answerObj.optLong("timestamp", 0L)
-                    val age = Math.abs(System.currentTimeMillis() - ts)
-                    if (ts >= currentOfferTimestamp && (ts == 0L || age < 120_000L)) {
-                        lastProcessedAnswerTimestamp = ts
-                        onMessage(answerObj.toString())
+                if (answerObj != null && (currentOfferId.isNotEmpty() || currentOfferTimestamp > 0L)) {
+                    val ansOfferId = answerObj.optString("offerId", "")
+                    if (ansOfferId.isNotEmpty() && currentOfferId.isNotEmpty() && ansOfferId != currentOfferId) {
+                        android.util.Log.d(TAG, "⏳ Ignoring answer for mismatched offerId in snapshot ($ansOfferId != $currentOfferId)")
                     } else {
-                        android.util.Log.d(TAG, "⏳ Ignoring stale answer in root snapshot (ts=$ts < offerTs=$currentOfferTimestamp)")
+                        val ts = answerObj.optLong("timestamp", 0L)
+                        if (ts == 0L || ts != lastProcessedAnswerTimestamp) {
+                            if (ts > 0L) lastProcessedAnswerTimestamp = ts
+                            android.util.Log.i(TAG, "📥 Fresh answer detected in root snapshot (offerId: $ansOfferId, ts=$ts)")
+                            onMessage(answerObj.toString())
+                        }
                     }
                 }
 
                 val viewerCands = data.optJSONObject("viewer_candidates")
-                if (viewerCands != null && currentOfferTimestamp > 0L) {
+                if (viewerCands != null && (currentOfferId.isNotEmpty() || currentOfferTimestamp > 0L)) {
                     val keys = viewerCands.keys()
                     while (keys.hasNext()) {
                         val k = keys.next()
@@ -209,6 +214,17 @@ class FirebaseSignalingManager(
                         if (c != null && c.has("candidate")) {
                             onMessage(JSONObject().put("type", "candidate").put("candidate", c).toString())
                         }
+                    }
+                }
+
+                if (data.has("reconnect_request")) {
+                    val rr = data.optJSONObject("reconnect_request")
+                    val ts = rr?.optLong("timestamp") ?: data.optLong("reconnect_request", 0L)
+                    val age = Math.abs(System.currentTimeMillis() - ts)
+                    if (ts > 0L && ts != lastProcessedReconnectTimestamp && age < 60_000L) {
+                        lastProcessedReconnectTimestamp = ts
+                        android.util.Log.i(TAG, "🔄 Fresh reconnect_request detected in room snapshot (age: ${age}ms, ts=$ts)")
+                        onMessage(JSONObject().put("type", "reconnect").put("timestamp", ts).toString())
                     }
                 }
 
@@ -224,24 +240,17 @@ class FirebaseSignalingManager(
                     }
                 }
             } else if (path.startsWith("/answer") && data is JSONObject) {
+                val ansOfferId = data.optString("offerId", "")
+                if (ansOfferId.isNotEmpty() && currentOfferId.isNotEmpty() && ansOfferId != currentOfferId) {
+                    android.util.Log.d(TAG, "⏳ Ignoring stale answer via SSE (mismatched offerId: $ansOfferId != $currentOfferId)")
+                    return
+                }
                 val ts = data.optLong("timestamp", 0L)
-                if (currentOfferTimestamp > 0L && ts > 0L && ts < currentOfferTimestamp) {
-                    android.util.Log.d(TAG, "⏳ Ignoring stale answer (ts=$ts < offerTs=$currentOfferTimestamp)")
-                    return
-                }
-                if (currentOfferTimestamp == 0L) {
-                    android.util.Log.d(TAG, "⏳ Ignoring answer before offer was published")
-                    return
-                }
                 if (ts > 0L && ts == lastProcessedAnswerTimestamp) return
                 if (ts > 0L) lastProcessedAnswerTimestamp = ts
 
-                val age = Math.abs(System.currentTimeMillis() - ts)
-                if (ts == 0L || age < 120_000L) {
-                    onMessage(data.toString())
-                } else {
-                    android.util.Log.d(TAG, "⏳ Ignoring stale answer (age: ${age}ms)")
-                }
+                android.util.Log.i(TAG, "📥 Realtime answer received via SSE (offerId: $ansOfferId, ts=$ts)")
+                onMessage(data.toString())
             } else if (path.startsWith("/viewer_candidates") && data is JSONObject) {
                 if (data.has("candidate")) {
                     onMessage(JSONObject().put("type", "candidate").put("candidate", data).toString())
@@ -304,6 +313,8 @@ class FirebaseSignalingManager(
                 "offer" -> {
                     val offerTs = json.optLong("timestamp", System.currentTimeMillis())
                     currentOfferTimestamp = if (offerTs > 0L) offerTs else System.currentTimeMillis()
+                    val offerId = json.optString("offerId", "").ifEmpty { currentOfferTimestamp.toString() }
+                    currentOfferId = offerId
                     lastProcessedAnswerTimestamp = 0L
                     val patchJson = JSONObject().apply {
                         put("offer", JSONObject(message))
@@ -315,7 +326,7 @@ class FirebaseSignalingManager(
                         .patch(patchJson.toString().toRequestBody(jsonMediaType))
                         .build()
                     client.newCall(req).enqueue(EmptyCallback)
-                    android.util.Log.i(TAG, "🧹 Published new Offer (Atomic PATCH, offerTs=$currentOfferTimestamp)")
+                    android.util.Log.i(TAG, "🧹 Published new Offer (Atomic PATCH, offerId=$currentOfferId, offerTs=$currentOfferTimestamp)")
                 }
                 "candidate" -> {
                     val candidateObj = json.optJSONObject("candidate") ?: return
@@ -359,6 +370,7 @@ class FirebaseSignalingManager(
 
     fun clearSessionForNewOffer() {
         currentOfferTimestamp = 0L
+        currentOfferId = ""
         lastProcessedAnswerTimestamp = 0L
         try {
             val patchJson = JSONObject().apply {

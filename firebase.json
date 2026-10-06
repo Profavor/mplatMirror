@@ -12,22 +12,22 @@
     "redirects": [
       {
         "source": "/dist/mplatMirror.apk",
-        "destination": "https://github.com/Profavor/mplatMirror/releases/download/v1.2.9/mplatMirror.apk",
+        "destination": "https://github.com/Profavor/mplatMirror/releases/download/v1.3.0/mplatMirror.apk",
         "type": 302
       },
       {
         "source": "/mplatMirror.apk",
-        "destination": "https://github.com/Profavor/mplatMirror/releases/download/v1.2.9/mplatMirror.apk",
+        "destination": "https://github.com/Profavor/mplatMirror/releases/download/v1.3.0/mplatMirror.apk",
         "type": 302
       },
       {
         "source": "/dist/mplatMirror.aab",
-        "destination": "https://github.com/Profavor/mplatMirror/releases/download/v1.2.9/mplatMirror.aab",
+        "destination": "https://github.com/Profavor/mplatMirror/releases/download/v1.3.0/mplatMirror.aab",
         "type": 302
       },
       {
         "source": "/mplatMirror.aab",
-        "destination": "https://github.com/Profavor/mplatMirror/releases/download/v1.2.9/mplatMirror.aab",
+        "destination": "https://github.com/Profavor/mplatMirror/releases/download/v1.3.0/mplatMirror.aab",
         "type": 302
       }
     ],

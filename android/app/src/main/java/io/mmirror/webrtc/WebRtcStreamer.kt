@@ -388,9 +388,12 @@ class WebRtcStreamer(
     }
 
     private var lastOfferTimestamp = 0L
+    @Volatile private var currentOfferId: String = ""
     @Volatile private var hasSynthesizedHotspotCandidate = false
     @Volatile private var hasNativeHotspotCandidate = false
     @Volatile private var lastRemoteAnswerUfrag: String? = null
+    private var pendingReconnectRunnable: Runnable? = null
+    private var proactiveReconnectRunnable: Runnable? = null
 
     private fun createPeerConnectionAndOffer(force: Boolean = false) {
         val existingPc = peerConnection
@@ -407,6 +410,7 @@ class WebRtcStreamer(
             return
         }
         lastOfferTimestamp = now
+        currentOfferId = java.util.UUID.randomUUID().toString()
         hasSynthesizedHotspotCandidate = false
         hasNativeHotspotCandidate = false
         lastRemoteAnswerUfrag = null
@@ -477,15 +481,27 @@ class WebRtcStreamer(
                 AppLogger.i(TAG, "⚡ WebRTC Connection State: $newState")
                 if (newState == PeerConnection.PeerConnectionState.CONNECTED) {
                     AppLogger.i(TAG, "🎉 [WEBRTC] Direct P2P Connected to Tesla! 0MB Local Streaming Active!")
+                    proactiveReconnectRunnable?.let { mainHandler.removeCallbacks(it) }
                     // 차량 연결됨 → GPS 주행 기록 시작
                     io.mmirror.DrivingLogManager.currentInstance?.onPeerConnected()
                     io.mmirror.MediaProjectionService.instance?.requestKeyFrame()
                 } else if (newState == PeerConnection.PeerConnectionState.DISCONNECTED ||
-                           newState == PeerConnection.PeerConnectionState.FAILED ||
-                           newState == PeerConnection.PeerConnectionState.CLOSED) {
+                           newState == PeerConnection.PeerConnectionState.FAILED) {
                     AppLogger.w(TAG, "🔌 WebRTC peer disconnected/failed: $newState")
                     // 차량 연결 해제 → GPS 주행 기록 중지 & 저장
                     io.mmirror.DrivingLogManager.currentInstance?.onPeerDisconnected()
+                    // Android 능동적 자가치유: 연결 단절이 1800ms 이상 지속 시 폰에서 먼저 신규 Offer 생성 발행
+                    proactiveReconnectRunnable?.let { mainHandler.removeCallbacks(it) }
+                    val r = Runnable {
+                        if (isRunning && peerConnection?.connectionState() != PeerConnection.PeerConnectionState.CONNECTED) {
+                            AppLogger.i(TAG, "⚡ [SELF-HEALING] Connection lost for 1.8s -> Phone proactively generating fresh Offer!")
+                            createPeerConnectionAndOffer(force = true)
+                        }
+                    }
+                    proactiveReconnectRunnable = r
+                    mainHandler.postDelayed(r, 1800L)
+                } else if (newState == PeerConnection.PeerConnectionState.CLOSED) {
+                    proactiveReconnectRunnable?.let { mainHandler.removeCallbacks(it) }
                 }
             }
 
@@ -494,12 +510,21 @@ class WebRtcStreamer(
             }
             override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) {
                 AppLogger.i(TAG, "🧊 ICE Connection State: $state")
-                if (state == PeerConnection.IceConnectionState.FAILED) {
-                    AppLogger.e(TAG, "❌ [WEBRTC] ICE 연결 실패 (로컬 P2P 소켓 차단 또는 주소 미도달)")
-                } else if (state == PeerConnection.IceConnectionState.DISCONNECTED) {
-                    AppLogger.w(TAG, "⚠️ [WEBRTC] ICE 연결 끊김 (브라우저 또는 핫스팟 일시 단절)")
+                if (state == PeerConnection.IceConnectionState.FAILED || state == PeerConnection.IceConnectionState.DISCONNECTED) {
+                    AppLogger.w(TAG, "⚠️ [WEBRTC] ICE 연결 끊김/실패 (1.8s 대기 후 자가치유 Offer 가동)")
+                    proactiveReconnectRunnable?.let { mainHandler.removeCallbacks(it) }
+                    val r = Runnable {
+                        val currIce = peerConnection?.iceConnectionState()
+                        if (isRunning && currIce != PeerConnection.IceConnectionState.CONNECTED && currIce != PeerConnection.IceConnectionState.COMPLETED) {
+                            AppLogger.i(TAG, "⚡ [SELF-HEALING] ICE state=$currIce for 1.8s -> Phone proactively generating fresh Offer!")
+                            createPeerConnectionAndOffer(force = true)
+                        }
+                    }
+                    proactiveReconnectRunnable = r
+                    mainHandler.postDelayed(r, 1800L)
                 } else if (state == PeerConnection.IceConnectionState.CONNECTED || state == PeerConnection.IceConnectionState.COMPLETED) {
                     AppLogger.i(TAG, "✓ [WEBRTC] ICE P2P 직결 바인딩 성공!")
+                    proactiveReconnectRunnable?.let { mainHandler.removeCallbacks(it) }
                 }
             }
             override fun onIceConnectionReceivingChange(receiving: Boolean) {
@@ -552,6 +577,7 @@ class WebRtcStreamer(
                         AppLogger.i(TAG, "✓ LocalDescription 설정 완료 (3.5Mbps 저지연 SDP), Offer 전송 중...")
                         val json = JSONObject().apply {
                             put("type", "offer")
+                            put("offerId", currentOfferId)
                             put("sdp", mungedSdp)
                             put("timestamp", System.currentTimeMillis())
                             put("config", JSONObject().apply {
@@ -887,7 +913,7 @@ class WebRtcStreamer(
                     } else {
                         val now = System.currentTimeMillis()
                         val state = existingPc?.signalingState()
-                        if (state == PeerConnection.SignalingState.HAVE_LOCAL_OFFER && (now - lastOfferTimestamp < 3500L)) {
+                        if (state == PeerConnection.SignalingState.HAVE_LOCAL_OFFER && (now - lastOfferTimestamp < 2500L)) {
                             AppLogger.i(TAG, "⏳ 뷰어 ready 수신: 이미 Offer 발행 후 핸드셰이크 진행 중 (${now - lastOfferTimestamp}ms 전). 대기.")
                         } else {
                             AppLogger.i(TAG, "📥 테슬라 뷰어 ready 수신 -> 새 SDP Offer 생성")
@@ -897,18 +923,27 @@ class WebRtcStreamer(
                 }
                 "reconnect" -> {
                     val now = System.currentTimeMillis()
-                    if (now - lastOfferTimestamp < 2000L) {
-                        AppLogger.i(TAG, "Debouncing rapid reconnect (${now - lastOfferTimestamp}ms)")
+                    val elapsed = now - lastOfferTimestamp
+                    if (elapsed < 1200L) {
+                        AppLogger.i(TAG, "Debouncing rapid reconnect (${elapsed}ms) - scheduling delayed retry in ${1200L - elapsed}ms")
+                        pendingReconnectRunnable?.let { mainHandler.removeCallbacks(it) }
+                        val r = Runnable {
+                            AppLogger.i(TAG, "Executing debounced reconnect after cooldown")
+                            createPeerConnectionAndOffer(force = true)
+                        }
+                        pendingReconnectRunnable = r
+                        mainHandler.postDelayed(r, 1200L - elapsed)
                     } else {
+                        pendingReconnectRunnable?.let { mainHandler.removeCallbacks(it) }
                         AppLogger.i(TAG, "🔄 테슬라 뷰어 reconnect 요청 수신 -> 세션 재설정 및 새 Offer 생성")
                         createPeerConnectionAndOffer(force = true)
                     }
                 }
                 "answer" -> {
                     val sdp = json.optString("sdp")
-                    val answerTs = json.optLong("timestamp", 0L)
-                    if (lastOfferTimestamp > 0L && answerTs > 0L && answerTs < lastOfferTimestamp) {
-                        AppLogger.w(TAG, "⏳ Stale answer ignored in WebRtcStreamer (answerTs=$answerTs < lastOfferTimestamp=$lastOfferTimestamp)")
+                    val ansOfferId = json.optString("offerId")
+                    if (ansOfferId.isNotEmpty() && currentOfferId.isNotEmpty() && ansOfferId != currentOfferId) {
+                        AppLogger.w(TAG, "⏳ Stale answer ignored in WebRtcStreamer (offerId: $ansOfferId != $currentOfferId)")
                         return
                     }
                     val pc = peerConnection ?: return
@@ -919,7 +954,7 @@ class WebRtcStreamer(
                     }
                     val ufragMatch = Regex("a=ice-ufrag:([^\\r\\n]+)").find(sdp)
                     lastRemoteAnswerUfrag = ufragMatch?.groupValues?.get(1)?.trim()
-                    AppLogger.i(TAG, "📥 테슬라 뷰어로부터 SDP Answer 수신 (ufrag: $lastRemoteAnswerUfrag), RemoteDescription 설정 중...")
+                    AppLogger.i(TAG, "📥 테슬라 뷰어로부터 SDP Answer 수신 (offerId: $ansOfferId, ufrag: $lastRemoteAnswerUfrag), RemoteDescription 설정 중...")
                     val desc = SessionDescription(SessionDescription.Type.ANSWER, sdp)
                     pc.setRemoteDescription(object : SdpObserver {
                         override fun onCreateSuccess(p0: SessionDescription?) {}
@@ -1032,7 +1067,12 @@ class WebRtcStreamer(
             firebaseSignaling?.stop()
         } catch (_: Exception) {}
         firebaseSignaling = null
+        pendingReconnectRunnable?.let { mainHandler.removeCallbacks(it) }
+        pendingReconnectRunnable = null
+        proactiveReconnectRunnable?.let { mainHandler.removeCallbacks(it) }
+        proactiveReconnectRunnable = null
         lastOfferTimestamp = 0L
+        currentOfferId = ""
         lastRemoteAnswerUfrag = null
         hasSynthesizedHotspotCandidate = false
         hasNativeHotspotCandidate = false
