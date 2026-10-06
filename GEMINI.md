@@ -25,8 +25,8 @@
   - 테슬라 브라우저는 공식 Firebase Hosting 도메인(**`https://mplat-mirror.web.app`**)에서 공인 Let's Encrypt / Google SSL 인증서로 웹 플레이어를 로드합니다 (Secure Context 충족, 녹색 자물쇠).
   - 스마트폰과 테슬라 간 시그널링(SDP/ICE)은 **Firebase Realtime Database 전용**으로 교환되며, 실제 비디오/오디오/터치 스트림은 **핫스팟 로컬 Wi-Fi 서브넷(UDP 10.x.x.x)으로 직접 P2P 연결**됩니다.
   - 이 방식은 안드로이드 14~16의 eBPF 테더링 오프로드 제약을 완전히 우회하며, **VPN 없이도 0MB 모바일 데이터 및 초저지연(<50ms) 60 FPS 미러링**을 완벽히 달성합니다.
-- **포트 8088 임시 서버 (`https://mdm.mplat.store:8088`):**
-  - 스마트폰에서 최신 APK(`mplatMirror.apk`)를 내려받기 위한 임시 다운로드 서버로만 사용됩니다.
+- **공식 다운로드 및 배포 (GitHub Releases & Firebase CDN):**
+  - 최신 APK 및 AAB는 **GitHub Releases** (`https://github.com/Profavor/mplatMirror/releases/latest/download/mplatMirror.apk`) 및 Firebase Hosting CDN(`https://mplat-mirror.web.app/mplatMirror.apk`)을 통해 표준 HTTPS 443 포트로 안전하고 빠르게 배포됩니다. (레거시 8088 포트는 보안/방화벽 제약으로 완전 폐기됨)
 - **로컬 IP 직접 접속 방식 (태블릿/PC):**
   - 핫스팟 게이트웨이 IP(`http://<핫스팟IP>:8282`)로 일반 태블릿/PC 브라우저가 직접 접속하는 방식도 완벽히 지원됩니다.
 
@@ -59,18 +59,22 @@
 
 ---
 
-### 6. 답변 시 최신 APK 다운로드 링크 항시 제공 원칙 (사용자 필수 지침)
-- 스마트폰에서 즉시 최신 빌드를 내려받아 설치할 수 있도록, **모든 답변 시 항상 최신 APK 다운로드 링크(`https://mdm.mplat.store:8088/dist/mplatMirror.apk`)를 안내**할 것.
+### 6. 답변 시 최신 GitHub 다운로드 링크 항시 제공 원칙 (사용자 필수 지침)
+- 스마트폰 및 PC에서 즉시 최신 빌드를 내려받아 설치할 수 있도록, **모든 답변 시 항상 GitHub 최신 릴리즈 다운로드 링크를 안내**할 것:
+  - **APK**: `https://github.com/Profavor/mplatMirror/releases/latest/download/mplatMirror.apk`
+  - **AAB**: `https://github.com/Profavor/mplatMirror/releases/latest/download/mplatMirror.aab`
+  - (8088 포트는 방화벽 차단 이슈로 폐기되었으므로 사용 금지)
 
 ---
 
-### 7. 8088 웹 플레이어 & APK 버전 항시 100% 동기화 원칙 (사용자 필수 지침)
-- 앱 버전(예: `v1.6.8`) 업데이트 시, 테슬라/웹 브라우저가 접속하는 **8088 포트의 웹 플레이어 버전도 반드시 동일하게 동기화**할 것.
+### 7. 웹 플레이어 & APK/AAB 버전 항시 100% 동기화 원칙 (사용자 필수 지침)
+- 앱 버전(예: `v1.3.1`) 업데이트 시, 테슬라/웹 브라우저가 접속하는 **웹 플레이어 버전 및 GitHub 릴리즈도 반드시 동일하게 동기화**할 것.
 - **동기화 대상 파일 목록:**
   1. `android/app/build.gradle.kts` (`versionCode`, `versionName`)
-  2. `web/index.html` (`.app-version-badge`, `.badge-version`, footer 법적 고지 버전 텍스트)
+  2. `web/index.html` (`.app-version-badge`, `.badge-version`, footer 법적 고지 버전 텍스트, 스크립트 캐시 쿼리)
   3. `dist/index.html` 및 `index.html`
   4. `web/download.html`, `dist/download.html`, `download.html` (다운로드 페이지 버전 및 변경 내역)
   5. `core-rust/Cargo.toml` (`version`)
-  6. `mplat-relay` 재컴파일(`cargo build --release --bin mplat-relay`) 및 재기동 (내장 정적 에셋 최신화)
-- 사용자가 테슬라 화면(`https://mdm.mplat.store:8088`) 또는 다운로드 페이지(`https://mplat-mirror.web.app/download`)를 열었을 때 안내되는 버전 배지와 스마트폰에 설치된 앱 버전이 1자리도 틀림없이 완벽히 일치해야 함.
+  6. `firebase.json` (`redirects` 대상 버전 태그)
+  7. GitHub 릴리즈 발행 (`gh release create <tag> ...`) 및 Firebase Hosting 배포 (`npx firebase-tools deploy --only hosting`)
+- 사용자가 테슬라 화면(`https://mplat-mirror.web.app`) 또는 다운로드 페이지(`https://mplat-mirror.web.app/download`)를 열었을 때 안내되는 버전 배지와 스마트폰에 설치된 앱 버전이 1자리도 틀림없이 완벽히 일치해야 함.
