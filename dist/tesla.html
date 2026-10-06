@@ -161,7 +161,7 @@
                     detectedLocalIp = data.local_ip;
                     detectedPort = data.port || 9999;
                     const httpsUrl = `https://${detectedLocalIp}:${detectedPort}`;
-                    const httpUrl = `http://${detectedLocalIp}:8080`;
+                    const httpUrl = `http://${detectedLocalIp}:8282`;
 
                     statusBox.innerHTML = `🟢 <b>스마트폰 핫스팟 감지 성공! (${detectedLocalIp})</b><br><small style="color:#a0a5b1">앱에서 [미러링 시작] 확인 후 아래 버튼을 눌러주세요.</small>`;
                     statusBox.style.color = "#2ecc71";
@@ -173,7 +173,7 @@
                     }
                     if (btnHttp) {
                         btnHttp.href = httpUrl;
-                        btnHttp.innerHTML = `⚡ 보안경고 없는 로컬 연결 (HTTP:8080)`;
+                        btnHttp.innerHTML = `⚡ 보안경고 없는 로컬 연결 (HTTP:8282)`;
                         btnHttp.style.display = "block";
                     }
                     return;

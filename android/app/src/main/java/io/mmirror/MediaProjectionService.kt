@@ -3,6 +3,7 @@ package io.mmirror
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -11,14 +12,19 @@ import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
+import android.media.AudioManager
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
 import android.media.MediaFormat
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
+import android.net.wifi.WifiManager
+import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
 import android.util.DisplayMetrics
 import android.util.Log
@@ -33,18 +39,18 @@ class MediaProjectionService : Service() {
     private var mediaProjection: MediaProjection? = null
     private var virtualDisplay: VirtualDisplay? = null
     private var mediaCodec: MediaCodec? = null
-    private var audioCaptureService: AudioCaptureService? = null
     private var isStreaming = false
     private var encodingThread: Thread? = null
 
-    private var wakeLock: PowerManager.WakeLock? = null
-    private var screenStateReceiver: BroadcastReceiver? = null
+    private var wakeLockManager: MirrorWakeLockManager? = null
     private var drivingLogManager: DrivingLogManager? = null
 
     private var spsPpsBuffer: ByteArray? = null
     private var screenWidth = 1080
     private var screenHeight = 1920
     private var screenDensity = 320
+    private var rawScreenWidth = 1080
+    private var rawScreenHeight = 2400
 
     private var relayWebSocket: WebSocket? = null
     @Volatile
@@ -53,21 +59,30 @@ class MediaProjectionService : Service() {
     private val okHttpClient = OkHttpClient.Builder()
         .retryOnConnectionFailure(true)
         .build()
+    private var isStandaloneModeRequested = false
+    private var isAutoMirrorUnsupported = false
+    private var resolutionPreset: ResolutionPreset = ResolutionPreset.DEFAULT
+    private var carExitRunnable: Runnable? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
 
-    fun sendWebRtcAudio(data: ByteArray, length: Int) {
-        webRtcStreamer?.sendAudio(data, length)
-    }
-
-    fun sendRelayAudio(data: ByteArray, length: Int) {
-        if (!enableRemoteRelay) return
-        val ws = relayWebSocket ?: return
-        if (!isRelayConnected) return
-        if (ws.queueSize() > 128 * 1024L) return
-
-        val packet = ByteArray(1 + length)
-        packet[0] = 0x02 // PKT_TYPE_AUDIO
-        System.arraycopy(data, 0, packet, 1, length)
-        ws.send(packet.toByteString())
+    private fun handleBluetoothDisconnectedOnExit() {
+        carExitRunnable?.let { mainHandler.removeCallbacks(it) }
+        val r = Runnable {
+            val isWebRtcConnected = webRtcStreamer?.isPeerConnected() == true
+            if (!isWebRtcConnected && isStreaming) {
+                AppLogger.i(TAG, "🚗 [차량 하차 감지] 테슬라 브라우저 연결 단절 확인 -> 스마트폰 배터리 보호를 위해 미러링 자동 종료")
+                android.widget.Toast.makeText(
+                    applicationContext,
+                    "🚗 차량 하차가 감지되어 미러링을 자동 종료했습니다 (배터리 보호)",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+                stopMirroring()
+                stopSelf()
+            }
+        }
+        carExitRunnable = r
+        AppLogger.w(TAG, "🚗 차량 블루투스 해제 감지 -> 45초간 테슬라 브라우저 연결 유지 여부 감시")
+        mainHandler.postDelayed(r, 45_000L)
     }
 
     private fun sendRelayVideo(data: ByteArray, isKeyFrame: Boolean) {
@@ -87,12 +102,12 @@ class MediaProjectionService : Service() {
         if (!enableRemoteRelay || !isStreaming) return
         try {
             val request = Request.Builder()
-                .url("wss://mdm.mplat.store:9999/publish")
+                .url("wss://mdm.mplat.store:8088/publish")
                 .build()
 
             relayWebSocket = okHttpClient.newWebSocket(request, object : WebSocketListener() {
                 override fun onOpen(webSocket: WebSocket, response: Response) {
-                    Log.i(TAG, "🟢 Connected to mplat Relay Server (wss://mdm.mplat.store:9999/publish)")
+                    Log.i(TAG, "🟢 Connected to mplat Relay Server (wss://mdm.mplat.store:8088/publish)")
                     isRelayConnected = true
                     sendRelayConfig()
                     spsPpsBuffer?.let { sps ->
@@ -161,17 +176,6 @@ class MediaProjectionService : Service() {
             val json = org.json.JSONObject(text)
             val type = json.optString("type")
             when (type) {
-                "touch" -> {
-                    val action = json.optString("action", "down")
-                    val id = json.optInt("id", 0)
-                    val x = json.optDouble("x", 0.0).toFloat()
-                    val y = json.optDouble("y", 0.0).toFloat()
-                    TouchControlService.instance?.onTouch(action, id, x, y)
-                }
-                "key" -> {
-                    val key = json.optString("key", "")
-                    TouchControlService.instance?.onKey(key)
-                }
                 "keyframe", "request_keyframe" -> {
                     Log.i(TAG, "🔑 Sync frame requested by viewer/relay, generating IDR...")
                     requestSyncFrame()
@@ -189,11 +193,20 @@ class MediaProjectionService : Service() {
 
         const val ACTION_START = "io.mmirror.action.START"
         const val ACTION_STOP = "io.mmirror.action.STOP"
+        const val ACTION_SET_STANDALONE = "io.mmirror.action.SET_STANDALONE"
+        const val ACTION_TOGGLE_DIM = "io.mmirror.action.TOGGLE_DIM"
         const val EXTRA_RESULT_CODE = "result_code"
         const val EXTRA_RESULT_DATA = "result_data"
         const val EXTRA_PORT = "port"
+        const val EXTRA_STANDALONE = "is_standalone"
+        const val EXTRA_RESOLUTION_PRESET = "extra_resolution_preset"
+        const val EXTRA_AUTO_MIRROR_UNSUPPORTED = "extra_auto_mirror_unsupported"
 
         var isRunning = false
+            private set
+
+        @Volatile
+        var isStandalone: Boolean = false
             private set
 
         var instance: MediaProjectionService? = null
@@ -205,6 +218,8 @@ class MediaProjectionService : Service() {
         @Volatile
         var enableRemoteRelay: Boolean = false // 0MB 모바일 데이터 원칙: 외부 릴레이 완전 차단 (기본값 false)
     }
+
+    fun getMediaProjection(): MediaProjection? = mediaProjection
 
     /**
      * 가상 디스플레이에 앱을 실행합니다.
@@ -222,7 +237,7 @@ class MediaProjectionService : Service() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 options.launchDisplayId = displayId
             }
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             applicationContext.startActivity(intent, options.toBundle())
             Log.i(TAG, "App launched on virtual display successfully (displayId=$displayId)")
             true
@@ -240,6 +255,7 @@ class MediaProjectionService : Service() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        ScreenDimmerManager.init(applicationContext)
         createNotificationChannel()
     }
 
@@ -248,16 +264,28 @@ class MediaProjectionService : Service() {
         screenWidth = screenHeight
         screenHeight = temp
 
-        Log.i(TAG, "Toggling orientation to: ${screenWidth}x${screenHeight}")
+        val tempRaw = rawScreenWidth
+        rawScreenWidth = rawScreenHeight
+        rawScreenHeight = tempRaw
+
+        Log.i(TAG, "Toggling orientation to: ${screenWidth}x${screenHeight} (raw: ${rawScreenWidth}x${rawScreenHeight})")
+        TouchControlService.instance?.updateDimensions(rawScreenWidth, rawScreenHeight)
         NativeBridge.updateConfig(screenWidth, screenHeight, 0, 60)
-        TouchControlService.instance?.updateDimensions(screenWidth, screenHeight)
         sendRelayConfig()
         restartVideoEncoder()
     }
 
+    private fun isWifiApEnabled(): Boolean = NetworkUtils.isWifiApEnabled(this)
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_START -> {
+                if (!isWifiApEnabled()) {
+                    AppLogger.w(TAG, "⛔ 모바일 핫스팟이 비활성화되어 있어 미러링 시작을 차단합니다 (0MB 원칙 준수)")
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
+                AppLogger.clear()
                 val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, 0)
                 val resultData: Intent? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     intent.getParcelableExtra(EXTRA_RESULT_DATA, Intent::class.java)
@@ -265,21 +293,35 @@ class MediaProjectionService : Service() {
                     @Suppress("DEPRECATION")
                     intent.getParcelableExtra(EXTRA_RESULT_DATA)
                 }
-                val port = intent.getIntExtra(EXTRA_PORT, 8080)
+                val port = intent.getIntExtra(EXTRA_PORT, 8282)
+                isStandaloneModeRequested = intent.getBooleanExtra(EXTRA_STANDALONE, true)
+                isStandalone = isStandaloneModeRequested
+                isAutoMirrorUnsupported = intent.getBooleanExtra(EXTRA_AUTO_MIRROR_UNSUPPORTED, true)
+                val presetId = intent.getStringExtra(EXTRA_RESOLUTION_PRESET)
+                resolutionPreset = ResolutionPreset.fromId(presetId)
+                val effectiveData = resultData ?: Intent()
 
-                if (resultData != null) {
-                    try {
-                        startForegroundServiceWithNotification()
-                        startMirroring(resultCode, resultData, port)
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to start mirroring service", e)
-                        stopMirroring()
-                        stopSelf()
-                    }
-                } else {
-                    Log.e(TAG, "EXTRA_RESULT_DATA is null!")
+                try {
+                    startForegroundServiceWithNotification()
+                    AppLogger.i(TAG, "🚀 미러링 서비스 시작 요청 (port=$port, standalone=$isStandaloneModeRequested, preset=$presetId)")
+                    startMirroring(resultCode, effectiveData, port)
+                } catch (e: Exception) {
+                    AppLogger.e(TAG, "❌ Failed to start mirroring service", e)
+                    stopMirroring()
                     stopSelf()
                 }
+            }
+            ACTION_SET_STANDALONE -> {
+                val isStandaloneMode = intent.getBooleanExtra(EXTRA_STANDALONE, true)
+                Log.i(TAG, "ACTION_SET_STANDALONE received: $isStandaloneMode")
+                isStandaloneModeRequested = isStandaloneMode
+                isStandalone = isStandaloneMode
+                webRtcStreamer?.setStandaloneMode(isStandaloneMode)
+                startForegroundServiceWithNotification()
+            }
+            ACTION_TOGGLE_DIM -> {
+                ScreenDimmerManager.toggleDim()
+                startForegroundServiceWithNotification()
             }
             ACTION_STOP -> {
                 stopMirroring()
@@ -302,7 +344,7 @@ class MediaProjectionService : Service() {
                 "mMirror Streaming Service",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "테슬라 차량으로 화면 및 오디오를 스트리밍 중입니다."
+                description = "테슬라 차량으로 0MB 화면을 스트리밍 중입니다 (오디오는 차량 블루투스 직결)."
             }
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(channel)
@@ -310,15 +352,42 @@ class MediaProjectionService : Service() {
     }
 
     private fun startForegroundServiceWithNotification() {
+        val title = "mplat Mirror 테슬라 미러링 중 (0MB P2P)"
+        val desc = "⚠️ 폰 전원(화면 끄기) 버튼 금지 · 테슬라의 [절전] 버튼을 이용하세요"
+
+        val stopIntent = Intent(this, MediaProjectionService::class.java).apply {
+            action = ACTION_STOP
+        }
+        val stopPendingIntent = PendingIntent.getService(
+            this, 101, stopIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val isDimmed = ScreenDimmerManager.isDimmed
+        val dimText = if (isDimmed) "☀️ 절전 해제" else "🌙 초절전 암전"
+        val dimIntent = Intent(this, MediaProjectionService::class.java).apply {
+            action = ACTION_TOGGLE_DIM
+        }
+        val dimPendingIntent = PendingIntent.getService(
+            this, 102, dimIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         val notification: Notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
-            .setContentTitle("mMirror 테슬라 미러링 중")
-            .setContentText("테슬라 브라우저로 화면 및 오디오를 송출하고 있습니다.")
+            .setContentTitle(title)
+            .setContentText(desc)
+            .setStyle(NotificationCompat.BigTextStyle().bigText("테슬라 브라우저로 0MB 로컬 P2P 화면 송출 중입니다.\n⚠️ 스마트폰의 물리 전원(화면 끄기) 버튼을 누르면 안드로이드 보안 정책으로 미러링이 즉시 종료됩니다. 화면을 어둡게 하려면 테슬라 화면의 [절전] 버튼이나 아래 [암전] 버튼을 이용하세요."))
             .setSmallIcon(android.R.drawable.ic_menu_slideshow)
             .setOngoing(true)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "🛑 미러링 종료", stopPendingIntent)
+            .addAction(android.R.drawable.ic_lock_power_off, dimText, dimPendingIntent)
             .build()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
+            val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION or ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+            } else {
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+            }
+            startForeground(NOTIFICATION_ID, notification, type)
         } else {
             startForeground(NOTIFICATION_ID, notification)
         }
@@ -327,101 +396,144 @@ class MediaProjectionService : Service() {
 
     private fun startMirroring(resultCode: Int, resultData: Intent, port: Int) {
         try {
-            // 해상도 계산 (폴드 열림/닫힘 및 화면 비율 자동 적응)
             val (w, h, density) = computeScreenDimensions()
             screenWidth = w
             screenHeight = h
             screenDensity = density
 
-            Log.i(TAG, "Streaming resolution: ${screenWidth}x${screenHeight}, density: $screenDensity")
-            TouchControlService.instance?.updateDimensions(screenWidth, screenHeight)
+            Log.i(TAG, "Streaming resolution: ${screenWidth}x${screenHeight}, density: $screenDensity (raw: ${rawScreenWidth}x${rawScreenHeight}, preset: ${resolutionPreset.id})")
+            TouchControlService.instance?.updateDimensions(rawScreenWidth, rawScreenHeight, screenWidth, screenHeight)
 
-            // 0. CPU WakeLock 획득 및 화면/폴드 변경 리스너 등록
-            acquireWakeLock()
-            registerScreenStateReceiver()
+            // 0. 전원 및 WakeLock 관리자 가동 및 디스플레이 변경 리스너 등록
+            wakeLockManager = MirrorWakeLockManager(
+                context = this,
+                onScreenOff = { requestSyncFrame() },
+                onScreenOn = {
+                    scheduleDisplayChangeCheck()
+                    requestSyncFrame()
+                },
+                onUserPresent = {
+                    scheduleDisplayChangeCheck()
+                    requestSyncFrame()
+                },
+                onHotspotDisabled = {
+                    stopMirroring()
+                    stopSelf()
+                },
+                onBluetoothDisconnected = {
+                    handleBluetoothDisconnectedOnExit()
+                }
+            ).apply { acquireLocks() }
             registerDisplayListener()
 
             // 1. Rust HTTP & WebSocket 서버 시작 (로컬/대체용)
             NativeBridge.startServer(port)
             NativeBridge.updateConfig(screenWidth, screenHeight, 0, 60)
 
-            // 2. WebRTC 로컬 P2P 스트리머 시작 (테슬라 브라우저 0MB 초저지연 표준)
+            // 1-1. MediaProjection 사전 생성 및 Callback 등록 (Android 14+ 필수: createVirtualDisplay 전 등록 필수)
+            if (mediaProjection == null) {
+                try {
+                    val projectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+                    mediaProjection = projectionManager.getMediaProjection(resultCode, resultData)
+                    mediaProjection?.registerCallback(object : MediaProjection.Callback() {
+                        override fun onStop() {
+                            AppLogger.w(TAG, "⚠️ MediaProjection이 중지되었습니다 (물리 전원 버튼 또는 시스템 정책)")
+                            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                android.widget.Toast.makeText(
+                                    applicationContext,
+                                    "⚠️ 화면 송출이 중단되었습니다.\n(물리 전원 버튼을 누르면 안드로이드 보안 정책으로 중단됩니다. 절전 시 테슬라 화면의 [절전] 버튼을 이용하세요)",
+                                    android.widget.Toast.LENGTH_LONG
+                                ).show()
+                            }
+                            stopMirroring()
+                            stopSelf()
+                        }
+
+                        override fun onCapturedContentResize(width: Int, height: Int) {
+                            Log.i(TAG, "MediaProjection onCapturedContentResize: ${width}x${height}")
+                            scheduleDisplayChangeCheck()
+                        }
+
+                        override fun onCapturedContentVisibilityChanged(isVisible: Boolean) {
+                            Log.i(TAG, "MediaProjection onCapturedContentVisibilityChanged: isVisible=$isVisible")
+                            if (isVisible) {
+                                scheduleDisplayChangeCheck()
+                            }
+                        }
+                    }, Handler(Looper.getMainLooper()))
+                    Log.i(TAG, "✓ MediaProjection created and callback registered in MediaProjectionService")
+                } catch (e: Exception) {
+                    Log.w(TAG, "MediaProjection init in service warning: ${e.message}")
+                }
+            }
+
+            if (mediaProjection == null) {
+                AppLogger.e(TAG, "❌ MediaProjection is null!")
+                stopMirroring()
+                return
+            }
+
+            // 1-2. MediaCodec 하드웨어 인코더 시작 (WebRTC DataChannel 및 Rust 웹소켓 공용 H.264 소스)
+            setupVideoEncoder()
+
+            // 2. WebRTC 로컬 P2P 스트리머 시작 (테슬라 브라우저 0MB 초저지연 표준 - 순수 DataChannel 모드)
             try {
                 val streamer = io.mmirror.webrtc.WebRtcStreamer(
                     context = applicationContext,
-                    resultData = resultData,
+                    resultData = null, // 단일 MediaProjection 보장 (Android 14+ 1회용 토큰 재사용 차단)
+                    mediaProjection = null, // MediaCodec 단일 인코더 사용 -> DataChannel로 프레임 직접 전송
                     width = screenWidth,
                     height = screenHeight,
-                    fps = 60
+                    density = screenDensity,
+                    fps = 60,
+                    isStandalone = isStandaloneModeRequested,
+                    isAutoMirrorUnsupported = isAutoMirrorUnsupported
                 )
+                val prefs = getSharedPreferences("mmirror_prefs", Context.MODE_PRIVATE)
+                streamer.isAbrEnabled = prefs.getBoolean("pref_adaptive_bitrate", true)
                 streamer.start()
                 webRtcStreamer = streamer
-                mediaProjection = streamer.getMediaProjection()
-                virtualDisplayId = streamer.getVirtualDisplayId()
-                isStreaming = true
-                Log.i(TAG, "WebRtcStreamer started successfully (virtualDisplayId=$virtualDisplayId)")
+                AppLogger.i(TAG, "✓ WebRtcStreamer started successfully in DataChannel mode (virtualDisplayId=$virtualDisplayId, isStandalone=$isStandaloneModeRequested, abr=${streamer.isAbrEnabled})")
             } catch (e: Exception) {
-                Log.e(TAG, "WebRtcStreamer initialization error: ${e.message}", e)
+                AppLogger.e(TAG, "❌ WebRtcStreamer initialization error: ${e.message}", e)
             }
 
-            // 2-1. WebRTC 미가동 시 레거시 MediaProjection & MediaCodec 인코더 폴백
-            if (mediaProjection == null) {
-                Log.i(TAG, "Falling back to legacy MediaCodec encoder...")
-                val projectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-                mediaProjection = projectionManager.getMediaProjection(resultCode, resultData)
+            if (enableRemoteRelay) {
+                connectRelayWebSocket()
+            }
 
-                if (mediaProjection == null) {
-                    Log.e(TAG, "MediaProjection is null!")
-                    stopMirroring()
-                    return
-                }
-
-                // Android 14 필수: createVirtualDisplay 전에 Callback 등록
-                mediaProjection?.registerCallback(object : MediaProjection.Callback() {
-                    override fun onStop() {
-                        Log.i(TAG, "MediaProjection이 시스템에 의해 중지되었습니다.")
-                        stopMirroring()
+            // 3. 오디오: 차량 블루투스(A2DP) 고음질 직결 + 웹 브라우저 오디오 하이브리드 지원
+            val audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+            if (audioManager != null) {
+                try {
+                    val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                    val currVol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+                    Log.i(TAG, "🔊 Audio Volume (STREAM_MUSIC): $currVol / $maxVol")
+                    if (currVol <= 0 && maxVol > 0) {
+                        val targetVol = (maxVol * 0.85).toInt().coerceAtLeast(1)
+                        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetVol, 0)
+                        Log.i(TAG, "✓ Unmuted Bluetooth STREAM_MUSIC volume to $targetVol / $maxVol")
                     }
-
-                    override fun onCapturedContentResize(width: Int, height: Int) {
-                        Log.i(TAG, "MediaProjection onCapturedContentResize: ${width}x${height}")
-                        scheduleDisplayChangeCheck()
-                    }
-
-                    override fun onCapturedContentVisibilityChanged(isVisible: Boolean) {
-                        Log.i(TAG, "MediaProjection onCapturedContentVisibilityChanged: isVisible=$isVisible")
-                        if (isVisible) {
-                            requestSyncFrame()
-                        }
-                    }
-                }, android.os.Handler(android.os.Looper.getMainLooper()))
-
-                setupVideoEncoder()
-
-                if (enableRemoteRelay) {
-                    connectRelayWebSocket()
+                } catch (e: Exception) {
+                    Log.w(TAG, "Bluetooth volume adjust warning: ${e.message}")
                 }
             }
 
-            // 3. 오디오 캡처 서비스 시작 (WebRTC 및 로컬 서버 동시 송출)
-            if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                mediaProjection?.let { mp ->
-                    audioCaptureService = AudioCaptureService(mp)
-                    audioCaptureService?.start()
-                }
-            } else {
-                Log.i(TAG, "RECORD_AUDIO 권한이 없어 오디오 스트리밍을 건너뜁니다.")
-            }
+            // 테슬라 브라우저가 소리를 가로채지(잡지) 않도록 브라우저 오디오 캡처/전송을 비활성화하고,
+            // 모든 사운드(티맵 안내, 음악 등)는 100% 스마트폰에서 차량 블루투스(A2DP)로만 직접 출력
+            Log.i(TAG, "✓ Vehicle Bluetooth audio priority: all audio routes via phone Bluetooth A2DP directly")
 
             // 4. GPS 주행일지 추적 시작
-            if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            val hasFine = androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            val hasCoarse = androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (hasFine || hasCoarse) {
                 drivingLogManager = DrivingLogManager(this)
                 drivingLogManager?.startTrip()
             } else {
-                Log.i(TAG, "ACCESS_FINE_LOCATION 권한이 없어 GPS 추적을 건너뜁니다.")
+                Log.i(TAG, "위치 권한이 없어 GPS 추적을 건너뜁니다.")
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error starting mirroring", e)
+            AppLogger.e(TAG, "❌ Error starting mirroring: ${e.message}", e)
             android.os.Handler(android.os.Looper.getMainLooper()).post {
                 android.widget.Toast.makeText(applicationContext, "미러링 시작 오류: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
             }
@@ -429,50 +541,60 @@ class MediaProjectionService : Service() {
         }
     }
 
-    private fun acquireWakeLock() {
+    @Volatile var isAdaptiveBitrateEnabled: Boolean = true
+        private set
+
+    fun setAdaptiveBitrateEnabled(enabled: Boolean) {
+        isAdaptiveBitrateEnabled = enabled
+        webRtcStreamer?.setAdaptiveBitrateEnabled(enabled)
+        if (!enabled) {
+            updateMediaCodecBitrate(3_200_000)
+        }
+        Log.i(TAG, "⚡ Adaptive Bitrate set to: $enabled")
+    }
+
+    fun updateMediaCodecBitrate(bitrateBps: Int) {
         try {
-            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-            wakeLock = powerManager.newWakeLock(
-                PowerManager.PARTIAL_WAKE_LOCK,
-                "mMirror:VirtualDisplayWakeLock"
-            ).apply {
-                setReferenceCounted(false)
-                acquire(24 * 60 * 60 * 1000L) // 24시간 안전 타임아웃
+            val params = Bundle().apply {
+                putInt(MediaCodec.PARAMETER_KEY_VIDEO_BITRATE, bitrateBps)
             }
-            Log.i(TAG, "CPU WakeLock acquired successfully")
+            mediaCodec?.setParameters(params)
+            Log.i(TAG, "Dynamic MediaCodec bitrate updated to ${bitrateBps / 1000} kbps")
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to acquire WakeLock", e)
+            Log.w(TAG, "Failed to update MediaCodec bitrate: ${e.message}")
         }
     }
 
-    private fun registerScreenStateReceiver() {
-        screenStateReceiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context?, intent: Intent?) {
-                when (intent?.action) {
-                    Intent.ACTION_SCREEN_OFF -> {
-                        Log.i(TAG, "스마트폰 물리 전원 버튼으로 화면 꺼짐 감지 -> 가상 디스플레이 스트림 유지")
-                        requestSyncFrame()
-                    }
-                    Intent.ACTION_SCREEN_ON -> {
-                        Log.i(TAG, "스마트폰 화면 켜짐 감지")
-                        requestSyncFrame()
-                    }
-                }
-            }
+    fun updateStayAwake() {
+        wakeLockManager?.updateStayAwake()
+    }
+
+    @Volatile
+    private var lastSyncFrameTime = 0L
+
+    @Volatile
+    private var lastIFrameBuffer: ByteArray? = null
+
+    fun requestKeyFrame() {
+        val lastIFrame = lastIFrameBuffer
+        if (lastIFrame != null) {
+            // 즉각적인 자가치유 구원: 화면이 멈춰있거나 정적 상태여도 마지막 완전한 I-프레임을 0ms 즉시 재전송!
+            webRtcStreamer?.sendVideoPacket(lastIFrame, true)
+            Log.d(TAG, "🔑 Cached I-frame sent immediately to unfreeze client (${lastIFrame.size} bytes)")
         }
-        val filter = IntentFilter().apply {
-            addAction(Intent.ACTION_SCREEN_OFF)
-            addAction(Intent.ACTION_SCREEN_ON)
-        }
-        registerReceiver(screenStateReceiver, filter)
+        requestSyncFrame()
     }
 
     private fun requestSyncFrame() {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (now - lastSyncFrameTime < 400L) return // 400ms 쿨타임으로 폭주 방지
+        lastSyncFrameTime = now
         try {
             val params = Bundle().apply {
                 putInt(MediaCodec.PARAMETER_KEY_REQUEST_SYNC_FRAME, 0)
             }
             mediaCodec?.setParameters(params)
+            Log.d(TAG, "🔑 On-demand sync frame (I-frame) requested to MediaCodec")
         } catch (e: Exception) {
             Log.w(TAG, "Sync frame request failed", e)
         }
@@ -482,14 +604,23 @@ class MediaProjectionService : Service() {
         try {
             val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, screenWidth, screenHeight).apply {
                 setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-                setInteger(MediaFormat.KEY_BIT_RATE, 3_000_000) // 3 Mbps CBR (모바일 핫스팟 초저지연 대역폭 최적화)
+                setInteger(MediaFormat.KEY_BIT_RATE, 3_200_000) // 3.2 Mbps (720p 60 FPS 최적 화질)
                 setInteger(MediaFormat.KEY_FRAME_RATE, 60) // 60 FPS 부드러운 초고속 송출
-                setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1) // 1초마다 I-프레임
+                setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1) // 1초마다 I-프레임 (참조 프레임 단절 방지 및 초고속 자가치유)
                 // Baseline Profile: B-프레임 100% 제거 -> 인코더/디코더 버퍼링 0ms
                 setInteger(MediaFormat.KEY_PROFILE, MediaCodecInfo.CodecProfileLevel.AVCProfileBaseline)
                 setInteger(MediaFormat.KEY_LEVEL, MediaCodecInfo.CodecProfileLevel.AVCLevel41)
+                // CBR(고정 비트레이트) 모드 우선 적용 -> 빠른 화면 전환 시 급격한 대역폭 버스트 및 Wi-Fi 지연 누적 원천 차단
                 try {
                     setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)
+                } catch (_: Exception) {
+                    try {
+                        setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR)
+                    } catch (_: Exception) {}
+                }
+                // 정적 화면 시 프레임 단절 방지: 100ms(10 FPS)마다 이전 프레임 자동 반복 송출
+                try {
+                    setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, 100_000L)
                 } catch (_: Exception) {}
                 // Android R+ 초저지연 실시간 모드
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -535,8 +666,20 @@ class MediaProjectionService : Service() {
         encodingThread = Thread({
             val bufferInfo = MediaCodec.BufferInfo()
             Log.i(TAG, "H.264 Encoder loop started (${screenWidth}x${screenHeight})")
+            var lastClientCheckTime = 0L
+            var cachedHasLocalClients = false
+            var lastFrameProducedTime = android.os.SystemClock.elapsedRealtime()
+
+            requestSyncFrame()
+            scheduleDisplayChangeCheck()
 
             while (isStreaming) {
+                val nowMs = System.currentTimeMillis()
+                if (nowMs - lastClientCheckTime > 1500L) {
+                    lastClientCheckTime = nowMs
+                    cachedHasLocalClients = try { NativeBridge.hasConnectedClients() } catch (_: Throwable) { false }
+                }
+
                 val outputBufferIndex = try {
                     mediaCodec?.dequeueOutputBuffer(bufferInfo, 10_000) ?: -1
                 } catch (e: Exception) {
@@ -545,6 +688,7 @@ class MediaProjectionService : Service() {
                 }
 
                 if (outputBufferIndex >= 0) {
+                    lastFrameProducedTime = android.os.SystemClock.elapsedRealtime()
                     val outputBuffer = mediaCodec?.getOutputBuffer(outputBufferIndex)
                     if (outputBuffer != null && bufferInfo.size > 0) {
                         outputBuffer.position(bufferInfo.offset)
@@ -558,23 +702,48 @@ class MediaProjectionService : Service() {
 
                         if (isCodecConfig) {
                             spsPpsBuffer = byteArray.clone()
-                            NativeBridge.sendVideoFrame(byteArray, 0, bufferInfo.size)
+                            if (cachedHasLocalClients) {
+                                NativeBridge.sendVideoFrame(byteArray, 0, bufferInfo.size)
+                            }
                             sendRelayVideo(byteArray, false)
+                            // WebRTC DataChannel에는 SPS/PPS 단독 패킷을 보내지 않음 (다음 IDR 프레임과 병합되어 100% 온전하게 전송)
                         } else if (isKeyFrame && spsPpsBuffer != null) {
-                            // 키프레임(IDR) 앞단에 SPS/PPS를 항상 병합하여 전송
+                            // 키프레임(IDR) 앞단에 SPS/PPS를 항상 병합하여 전송 및 상시 캐시
                             val combined = ByteArray(spsPpsBuffer!!.size + byteArray.size)
                             System.arraycopy(spsPpsBuffer!!, 0, combined, 0, spsPpsBuffer!!.size)
                             System.arraycopy(byteArray, 0, combined, spsPpsBuffer!!.size, byteArray.size)
-                            NativeBridge.sendVideoFrame(combined, 0, combined.size)
+                            lastIFrameBuffer = combined
+                            if (cachedHasLocalClients) {
+                                NativeBridge.sendVideoFrame(combined, 0, combined.size)
+                            }
                             sendRelayVideo(combined, true)
+                            webRtcStreamer?.sendVideoPacket(combined, true)
                         } else {
-                            NativeBridge.sendVideoFrame(byteArray, 0, bufferInfo.size)
+                            if (isKeyFrame) {
+                                lastIFrameBuffer = byteArray.clone()
+                            }
+                            if (cachedHasLocalClients) {
+                                NativeBridge.sendVideoFrame(byteArray, 0, bufferInfo.size)
+                            }
                             sendRelayVideo(byteArray, false)
+                            webRtcStreamer?.sendVideoPacket(byteArray, isKeyFrame)
                         }
                     }
                     try {
                         mediaCodec?.releaseOutputBuffer(outputBufferIndex, false)
                     } catch (_: Exception) {}
+                } else {
+                    // 정적 화면 동결 방지 하트비트: 1.5초 이상 화면 변화가 없을 경우 캐시된 I-프레임을 리프레시 송출하여 테슬라 캔버스 정전 차단
+                    val now = android.os.SystemClock.elapsedRealtime()
+                    if (now - lastFrameProducedTime > 1500L) {
+                        lastFrameProducedTime = now
+                        val lastIFrame = lastIFrameBuffer
+                        if (lastIFrame != null && isStreaming) {
+                            webRtcStreamer?.sendVideoPacket(lastIFrame, true)
+                        } else if (isStreaming) {
+                            requestSyncFrame()
+                        }
+                    }
                 }
             }
             Log.i(TAG, "H.264 Encoder loop stopped")
@@ -590,9 +759,11 @@ class MediaProjectionService : Service() {
         checkAndApplyDisplayChanges()
     }
 
-    private fun scheduleDisplayChangeCheck() {
+    fun scheduleDisplayChangeCheck() {
         displayChangeHandler.removeCallbacks(displayChangeRunnable)
-        displayChangeHandler.postDelayed(displayChangeRunnable, 150L)
+        displayChangeHandler.postDelayed(displayChangeRunnable, 200L) // 1차 빠른 반영
+        displayChangeHandler.postDelayed(displayChangeRunnable, 500L) // 2차 힌지 전환 완료 시점
+        displayChangeHandler.postDelayed(displayChangeRunnable, 900L) // 3차 안정화
     }
 
     private fun computeScreenDimensions(): Triple<Int, Int, Int> {
@@ -621,26 +792,29 @@ class MediaProjectionService : Service() {
             rawHeight = 1920
         }
 
-        var w = (rawWidth / 16) * 16
-        var h = (rawHeight / 16) * 16
-        val maxDim = 1280
-        if (w > maxDim || h > maxDim) {
-            val scale = maxDim.toFloat() / maxOf(w, h)
-            w = ((w * scale).toInt() / 16) * 16
-            h = ((h * scale).toInt() / 16) * 16
-        }
-        return Triple(maxOf(320, w), maxOf(320, h), maxOf(120, density))
+        rawScreenWidth = rawWidth
+        rawScreenHeight = rawHeight
+
+        return resolutionPreset.computeEffectiveDimensions(this, rawWidth, rawHeight, density)
+    }
+
+    fun computeScreenDimensionsForStream(): Triple<Int, Int, Int> {
+        return computeScreenDimensions()
     }
 
     private fun registerDisplayListener() {
         val dm = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
         displayListener = object : DisplayManager.DisplayListener {
-            override fun onDisplayAdded(displayId: Int) {}
-            override fun onDisplayRemoved(displayId: Int) {}
+            override fun onDisplayAdded(displayId: Int) {
+                AppLogger.i(TAG, "📱 외부 디스플레이 연결됨 (displayId=$displayId)")
+                scheduleDisplayChangeCheck()
+            }
+            override fun onDisplayRemoved(displayId: Int) {
+                AppLogger.i(TAG, "📱 디스플레이 제거됨 (displayId=$displayId)")
+                scheduleDisplayChangeCheck()
+            }
             override fun onDisplayChanged(displayId: Int) {
-                if (displayId == android.view.Display.DEFAULT_DISPLAY) {
-                    scheduleDisplayChangeCheck()
-                }
+                scheduleDisplayChangeCheck()
             }
         }
         dm.registerDisplayListener(displayListener, android.os.Handler(android.os.Looper.getMainLooper()))
@@ -659,13 +833,13 @@ class MediaProjectionService : Service() {
 
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
         super.onConfigurationChanged(newConfig)
-        Log.i(TAG, "onConfigurationChanged 감지 (폴드 열림/닫힘/화면회전) -> 150ms 후 해상도 자동 동기화")
+        AppLogger.i(TAG, "📱 onConfigurationChanged 감지 (폴드 접힘/펼침/화면회전) -> 해상도 자동 동기화")
         scheduleDisplayChangeCheck()
     }
 
     @Synchronized
     private fun checkAndApplyDisplayChanges() {
-        if (!isStreaming || mediaProjection == null) return
+        if (!isStreaming) return
 
         val (newW, newH, newDensity) = computeScreenDimensions()
         val diffW = kotlin.math.abs(newW - screenWidth)
@@ -674,16 +848,16 @@ class MediaProjectionService : Service() {
             return
         }
 
-        Log.i(TAG, "🔄 폴드/화면 전환 감지: ${screenWidth}x${screenHeight} -> ${newW}x${newH} (밀도: $newDensity)")
+        AppLogger.i(TAG, "🔄 폴드/화면 전환 감지: ${screenWidth}x${screenHeight} -> ${newW}x${newH} (밀도: $newDensity, raw: ${rawScreenWidth}x${rawScreenHeight})")
         screenWidth = newW
         screenHeight = newH
         screenDensity = newDensity
+        TouchControlService.instance?.updateDimensions(rawScreenWidth, rawScreenHeight, screenWidth, screenHeight)
 
-        TouchControlService.instance?.updateDimensions(screenWidth, screenHeight)
         NativeBridge.updateConfig(screenWidth, screenHeight, 0, 60)
         sendRelayConfig()
 
-        webRtcStreamer?.changeResolution(screenWidth, screenHeight, 60)
+        webRtcStreamer?.changeResolution(screenWidth, screenHeight, screenDensity, 60)
         if (mediaCodec != null) {
             restartVideoEncoder()
         }
@@ -711,16 +885,28 @@ class MediaProjectionService : Service() {
 
             // 3. 해상도 변경에 따른 새 SPS/PPS 생성 대기 위해 버퍼 초기화
             spsPpsBuffer = null
+            lastIFrameBuffer = null
 
             // 4. 새로운 해상도 포맷으로 H.264 하드웨어 인코더 생성
             val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, screenWidth, screenHeight).apply {
                 setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-                setInteger(MediaFormat.KEY_BIT_RATE, 4_000_000)
-                setInteger(MediaFormat.KEY_FRAME_RATE, 30)
+                setInteger(MediaFormat.KEY_BIT_RATE, 3_500_000)
+                setInteger(MediaFormat.KEY_FRAME_RATE, 60)
                 setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
+                setInteger(MediaFormat.KEY_PROFILE, MediaCodecInfo.CodecProfileLevel.AVCProfileBaseline)
+                setInteger(MediaFormat.KEY_LEVEL, MediaCodecInfo.CodecProfileLevel.AVCLevel41)
                 try {
-                    setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)
+                    setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR)
                 } catch (_: Exception) {}
+                try {
+                    setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, 100_000L)
+                } catch (_: Exception) {}
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    try {
+                        setInteger(MediaFormat.KEY_LATENCY, 0)
+                        setInteger(MediaFormat.KEY_PRIORITY, 0)
+                    } catch (_: Exception) {}
+                }
             }
 
             val newCodec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
@@ -761,22 +947,21 @@ class MediaProjectionService : Service() {
     private fun stopMirroring() {
         isStreaming = false
         isRunning = false
+        isStandalone = false
+        carExitRunnable?.let { mainHandler.removeCallbacks(it) }
+        carExitRunnable = null
 
         try {
-            if (screenStateReceiver != null) {
-                unregisterReceiver(screenStateReceiver)
-                screenStateReceiver = null
+            if (ScreenDimmerManager.isDimmed) {
+                ScreenDimmerManager.setDimmed(false)
             }
         } catch (_: Exception) {}
+
 
         unregisterDisplayListener()
 
-        try {
-            wakeLock?.let {
-                if (it.isHeld) it.release()
-            }
-            wakeLock = null
-        } catch (_: Exception) {}
+        wakeLockManager?.releaseLocks()
+        wakeLockManager = null
 
         try {
             relayWebSocket?.close(1000, "User stopped mirroring")
@@ -786,9 +971,6 @@ class MediaProjectionService : Service() {
 
         webRtcStreamer?.stop()
         webRtcStreamer = null
-
-        audioCaptureService?.stop()
-        audioCaptureService = null
 
         encodingThread?.interrupt()
         encodingThread = null
@@ -804,6 +986,9 @@ class MediaProjectionService : Service() {
 
             mediaProjection?.stop()
             mediaProjection = null
+
+            spsPpsBuffer = null
+            lastIFrameBuffer = null
         } catch (e: Exception) {
             Log.w(TAG, "Error cleaning up projection", e)
         }

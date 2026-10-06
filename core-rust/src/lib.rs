@@ -1,4 +1,5 @@
 pub mod protocol;
+pub mod relay;
 pub mod server;
 pub mod tun_proxy;
 pub mod web_assets;
@@ -80,6 +81,16 @@ pub extern "system" fn Java_io_mmirror_NativeBridge_startServer(
 
     let server = MirrorServer::new(port as u16);
 
+    // JNI 정적 메서드 호출 헬퍼 (보일러플레이트 제거)
+    fn call_jni_static(env: &mut JNIEnv, class: &JClass, method: &str, sig: &str, args: &[jni::objects::JValue]) {
+        if let Err(e) = env.call_static_method(class, method, sig, args) {
+            crate::server::log_android(6, &format!("{} JNI error: {}", method, e));
+            if let Ok(true) = env.exception_check() {
+                let _ = env.exception_clear();
+            }
+        }
+    }
+
     // 안드로이드 Java 콜백 등록 (전역 참조 클래스 사용으로 ClassNotFoundException 및 ART abort 완벽 방지)
     server.set_control_callback(move |msg| {
         if let Some(jvm) = JVM.get() {
@@ -89,56 +100,28 @@ pub extern "system" fn Java_io_mmirror_NativeBridge_startServer(
                     match msg {
                         ControlMessage::Touch { action, id, x, y } => {
                             if let Ok(action_jstr) = env.new_string(&action) {
-                                let res = env.call_static_method(
-                                    &jclass,
-                                    "onTouchEvent",
-                                    "(Ljava/lang/String;IFF)V",
-                                    &[
-                                        (&action_jstr).into(),
-                                        (id as jint).into(),
-                                        (x.unwrap_or(0.0) as jfloat).into(),
-                                        (y.unwrap_or(0.0) as jfloat).into(),
-                                    ],
-                                );
-                                if let Err(e) = res {
-                                    crate::server::log_android(6, &format!("onTouchEvent JNI error: {}", e));
-                                    if let Ok(true) = env.exception_check() {
-                                        let _ = env.exception_clear();
-                                    }
-                                }
+                                call_jni_static(&mut env, &jclass, "onTouchEvent", "(Ljava/lang/String;IFF)V", &[
+                                    (&action_jstr).into(),
+                                    (id as jint).into(),
+                                    (x.unwrap_or(0.0) as jfloat).into(),
+                                    (y.unwrap_or(0.0) as jfloat).into(),
+                                ]);
                             }
                         }
                         ControlMessage::Key { key } => {
                             if let Ok(key_jstr) = env.new_string(&key) {
-                                let res = env.call_static_method(
-                                    &jclass,
-                                    "onKeyEvent",
-                                    "(Ljava/lang/String;)V",
-                                    &[(&key_jstr).into()],
-                                );
-                                if let Err(e) = res {
-                                    crate::server::log_android(6, &format!("onKeyEvent JNI error: {}", e));
-                                    if let Ok(true) = env.exception_check() {
-                                        let _ = env.exception_clear();
-                                    }
-                                }
+                                call_jni_static(&mut env, &jclass, "onKeyEvent", "(Ljava/lang/String;)V", &[(&key_jstr).into()]);
                             }
                         }
                         ControlMessage::Command { cmd } => {
                             if let Ok(cmd_jstr) = env.new_string(&cmd) {
-                                let res = env.call_static_method(
-                                    &jclass,
-                                    "onCommandEvent",
-                                    "(Ljava/lang/String;)V",
-                                    &[(&cmd_jstr).into()],
-                                );
-                                if let Err(e) = res {
-                                    crate::server::log_android(6, &format!("onCommandEvent JNI error: {}", e));
-                                    if let Ok(true) = env.exception_check() {
-                                        let _ = env.exception_clear();
-                                    }
-                                }
+                                call_jni_static(&mut env, &jclass, "onCommandEvent", "(Ljava/lang/String;)V", &[(&cmd_jstr).into()]);
                             }
+                        }
+                        ControlMessage::SetScreenPower { on } => {
+                            call_jni_static(&mut env, &jclass, "onSetScreenPower", "(Z)V", &[
+                                (if on { 1 } else { 0 } as jboolean).into(),
+                            ]);
                         }
                     }
                 } else {
@@ -187,6 +170,20 @@ pub extern "system" fn Java_io_mmirror_NativeBridge_stopServer(
 }
 
 #[no_mangle]
+pub extern "system" fn Java_io_mmirror_NativeBridge_hasConnectedClients(
+    _env: JNIEnv,
+    _class: JClass,
+) -> jboolean {
+    let lock = SERVER.lock().unwrap();
+    if let Some(ref server) = *lock {
+        if server.has_clients() {
+            return 1;
+        }
+    }
+    0
+}
+
+#[no_mangle]
 pub extern "system" fn Java_io_mmirror_NativeBridge_sendVideoFrame(
     env: JNIEnv,
     _class: JClass,
@@ -194,24 +191,26 @@ pub extern "system" fn Java_io_mmirror_NativeBridge_sendVideoFrame(
     offset: jint,
     length: jint,
 ) {
-    let len = length as usize;
-    let off = offset as usize;
-    let mut buf = vec![0u8; len];
-
-    unsafe {
-        let env_raw = env.get_raw();
-        (**env_raw).GetByteArrayRegion.unwrap()(
-            env_raw,
-            data,
-            off as jni::sys::jsize,
-            len as jni::sys::jsize,
-            buf.as_mut_ptr() as *mut jni::sys::jbyte,
-        );
-    }
-
     let lock = SERVER.lock().unwrap();
     if let Some(ref server) = *lock {
-        server.send_video(&buf);
+        if server.has_clients() {
+            let len = length as usize;
+            let off = offset as usize;
+            let mut buf = vec![0u8; len];
+
+            unsafe {
+                let env_raw = env.get_raw();
+                (**env_raw).GetByteArrayRegion.unwrap()(
+                    env_raw,
+                    data,
+                    off as jni::sys::jsize,
+                    len as jni::sys::jsize,
+                    buf.as_mut_ptr() as *mut jni::sys::jbyte,
+                );
+            }
+
+            server.send_video(&buf);
+        }
     }
 }
 

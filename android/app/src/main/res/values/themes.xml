@@ -1,7 +1,20 @@
 <resources>
-    <style name="Theme.MMirror" parent="Theme.Material3.DayNight.NoActionBar">
+    <style name="Theme.MMirror" parent="Theme.Material3.Dark.NoActionBar">
         <item name="colorPrimary">#3498db</item>
         <item name="android:statusBarColor">#0b0c10</item>
         <item name="android:navigationBarColor">#0b0c10</item>
+        <item name="android:windowBackground">#0b0c10</item>
+        <item name="colorSurface">#12151c</item>
+        <item name="colorOnSurface">#f0f6fc</item>
+        <item name="materialAlertDialogTheme">@style/Theme.MMirror.Dialog</item>
+    </style>
+
+    <style name="Theme.MMirror.Dialog" parent="ThemeOverlay.Material3.MaterialAlertDialog">
+        <item name="android:background">#12151c</item>
+        <item name="colorSurface">#12151c</item>
+        <item name="colorOnSurface">#f0f6fc</item>
+        <item name="android:textColorPrimary">#f0f6fc</item>
+        <item name="android:textColorSecondary">#8b949e</item>
+        <item name="colorPrimary">#3498db</item>
     </style>
 </resources>

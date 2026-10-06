@@ -13,7 +13,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::subscriber::set_global_default(subscriber)
         .expect("setting default subscriber failed");
 
-    let port = 8080;
+    let port = 8282;
     println!("==================================================");
     println!("  mMirror for Tesla - Local Simulation & Dev Server");
     println!("  URL: http://localhost:{}", port);
@@ -37,6 +37,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         ControlMessage::Command { cmd } => {
             println!("⚡ [Tesla Command] Command: {}", cmd);
+        }
+        ControlMessage::SetScreenPower { on } => {
+            println!("💡 [Tesla Screen Power] Set power: on={}", on);
         }
     });
 

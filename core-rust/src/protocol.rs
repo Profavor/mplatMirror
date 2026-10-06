@@ -25,6 +25,10 @@ pub enum ControlMessage {
     Command {
         cmd: String, // "ROTATE", etc.
     },
+    #[serde(rename = "set_screen_power")]
+    SetScreenPower {
+        on: bool,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

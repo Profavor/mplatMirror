@@ -3,52 +3,114 @@ package io.mmirror.webrtc
 import android.content.Context
 import android.content.Intent
 import android.media.projection.MediaProjection
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
-import io.mmirror.TouchControlService
+import io.mmirror.AppLogger
+import io.mmirror.MediaProjectionService
+import io.mmirror.NetworkUtils
+import io.mmirror.ScreenDimmerManager
 import okhttp3.*
 import org.json.JSONObject
 import org.webrtc.*
+import java.nio.ByteBuffer
 
 class WebRtcStreamer(
     private val context: Context,
-    private val resultData: Intent,
-    private val width: Int,
-    private val height: Int,
+    private val resultData: Intent? = null,
+    private var width: Int = 1600,
+    private var height: Int = 1120,
+    private var density: Int = 180,
     private val fps: Int = 60,
-    private val signalingUrl: String = "wss://mdm.mplat.store:8088/webrtc/signal?role=publisher&room=default"
+    private val signalingUrl: String = "wss://mdm.mplat.store:8088/webrtc/signal?role=publisher&room=default",
+    var isStandalone: Boolean = false,
+    private var mediaProjection: MediaProjection? = null,
+    val isAutoMirrorUnsupported: Boolean = false
 ) {
     companion object {
         private const val TAG = "WebRtcStreamer"
+        var instance: WebRtcStreamer? = null
+            private set
     }
+
+    private val initialWidth: Int = width
+    private val initialHeight: Int = height
+
+    var activeAutoMirrorMode: Boolean = false
+        private set
 
     private var eglBase: EglBase? = null
     private var peerConnectionFactory: PeerConnectionFactory? = null
+    private var videoCapturer: VideoCapturer? = null
     private var screenCapturer: ScreenCapturerAndroid? = null
+    private var presentationCapturer: PresentationVideoCapturer? = null
     private var surfaceTextureHelper: SurfaceTextureHelper? = null
     private var videoSource: VideoSource? = null
     private var videoTrack: VideoTrack? = null
 
     private var peerConnection: PeerConnection? = null
     private var dataChannel: DataChannel? = null
+    private val pendingRemoteCandidates = mutableListOf<IceCandidate>()
 
     private val okHttpClient = OkHttpClient.Builder()
         .retryOnConnectionFailure(true)
         .build()
     private var signalingWs: WebSocket? = null
+    private var firebaseSignaling: FirebaseSignalingManager? = null
+    var firebaseDatabaseUrl: String = "https://mplat-33044-default-rtdb.asia-southeast1.firebasedatabase.app"
+        get() {
+            if (field.isNotBlank()) return field
+            return try {
+                val prefs = context.getSharedPreferences("mmirror_prefs", Context.MODE_PRIVATE)
+                prefs.getString("firebase_database_url", "https://mplat-33044-default-rtdb.asia-southeast1.firebasedatabase.app") ?: "https://mplat-33044-default-rtdb.asia-southeast1.firebasedatabase.app"
+            } catch (_: Exception) { "https://mplat-33044-default-rtdb.asia-southeast1.firebasedatabase.app" }
+        }
+
+    private fun sendSignaling(message: String) {
+        try {
+            signalingWs?.send(message)
+            firebaseSignaling?.send(message)
+        } catch (_: Exception) {}
+    }
+
     @Volatile private var isRunning = false
     @Volatile private var isSignalingConnected = false
+
+    // --- 적응형 스트리밍 (ABR: Adaptive Bitrate & FPS) 상태 ---
+    @Volatile var isAbrEnabled: Boolean = true
+    @Volatile private var currentMinBitrateBps: Int = 1_000_000 // 1.0 Mbps
+    @Volatile private var currentMaxBitrateBps: Int = 3_200_000 // 3.2 Mbps (60 FPS 초저지연 + 40KB 이하 IDR 보장)
+    @Volatile private var currentMaxFramerate: Int = 60
+    private var abrGoodConditionStreak: Int = 0
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    private val dimmerListener: (Boolean) -> Unit = { dimmed ->
+        try {
+            val notify = JSONObject().apply {
+                put("type", "screen_power_changed")
+                put("on", !dimmed)
+            }
+            dataChannel?.send(DataChannel.Buffer(ByteBuffer.wrap(notify.toString().toByteArray(Charsets.UTF_8)), false))
+        } catch (_: Exception) {}
+    }
+
+    fun isPeerConnected(): Boolean {
+        return peerConnection?.connectionState() == PeerConnection.PeerConnectionState.CONNECTED
+    }
 
     fun start() {
         if (isRunning) return
         isRunning = true
-        Log.i(TAG, "Starting WebRtcStreamer (${width}x${height} @ ${fps}fps)...")
+        instance = this
+        ScreenDimmerManager.addListener(dimmerListener)
+        AppLogger.i(TAG, "Starting WebRtcStreamer (${width}x${height} @ ${fps}fps, isStandalone=$isStandalone)...")
 
         try {
             initPeerConnectionFactory()
             initVideoCapturer()
             connectSignaling()
         } catch (e: Throwable) {
-            Log.e(TAG, "Failed to start WebRtcStreamer: ${e.message}", e)
+            AppLogger.e(TAG, "Failed to start WebRtcStreamer: ${e.message}", e)
             stop()
         }
     }
@@ -65,41 +127,54 @@ class WebRtcStreamer(
         val encoderFactory = DefaultVideoEncoderFactory(
             egl.eglBaseContext,
             true, /* enableIntelVp8Encoder */
-            true  /* enableH264HighProfile */
+            false /* enableH264HighProfile -> Baseline Profile for 0ms B-frame delay */
         )
         val decoderFactory = DefaultVideoDecoderFactory(egl.eglBaseContext)
 
+        val options = PeerConnectionFactory.Options().apply {
+            disableNetworkMonitor = true
+            networkIgnoreMask = 0
+        }
+
         peerConnectionFactory = PeerConnectionFactory.builder()
+            .setOptions(options)
             .setVideoEncoderFactory(encoderFactory)
             .setVideoDecoderFactory(decoderFactory)
             .createPeerConnectionFactory()
     }
 
     private fun initVideoCapturer() {
-        val pcf = peerConnectionFactory ?: return
-        val egl = eglBase ?: return
-
-        screenCapturer = ScreenCapturerAndroid(resultData, object : MediaProjection.Callback() {
-            override fun onStop() {
-                Log.i(TAG, "ScreenCapturerAndroid onStop callback triggered")
-            }
-        })
-
-        surfaceTextureHelper = SurfaceTextureHelper.create("WebRtcCaptureHelper", egl.eglBaseContext)
-        val vSource = pcf.createVideoSource(screenCapturer!!.isScreencast)
-        videoSource = vSource
-
-        screenCapturer!!.initialize(surfaceTextureHelper, context, vSource.capturerObserver)
-        screenCapturer!!.startCapture(width, height, fps)
-
-        val vTrack = pcf.createVideoTrack("video_track_0", vSource)
-        vTrack.setEnabled(true)
-        videoTrack = vTrack
-        Log.i(TAG, "VideoTrack created and capture started (${width}x${height})")
+        // 순수 DataChannel H.264 전송 모드 (Android 14+ 단일 MediaProjection 충돌 방지 및 브라우저 오디오 간섭 0%)
+        Log.i(TAG, "✓ Operating in pure DataChannel H.264 stream mode (Zero audio interference, single hardware MediaCodec)")
     }
 
     private fun connectSignaling() {
         if (!isRunning) return
+
+        // 1. Firebase Realtime Database 시그널링 (우선 표준)
+        val dbUrl = firebaseDatabaseUrl
+        if (dbUrl.isNotBlank()) {
+            if (firebaseSignaling == null) {
+                firebaseSignaling = FirebaseSignalingManager(dbUrl, "default", okHttpClient) { msg ->
+                    handleSignalingMessage(msg)
+                }
+                firebaseSignaling?.start()
+                isSignalingConnected = true
+                sendConfig()
+                AppLogger.i(TAG, "🔥 Firebase Realtime Database 전용 시그널링 활성화 (레거시 WebSocket 루프 차단)")
+
+                // ★ 스마트폰 방송 시작 시 뷰어 대기 여부와 상관없이 즉시 초기 SDP Offer 생성 및 Firebase 등록
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    if (isRunning && !isPeerConnected()) {
+                        AppLogger.i(TAG, "🚀 Proactively generating initial SDP Offer on start...")
+                        createPeerConnectionAndOffer()
+                    }
+                }, 200L)
+            }
+            return
+        }
+
+        // 2. WebSocket 시그널링 (Firebase 미설정 시의 오프라인 로컬 폴백)
         Log.i(TAG, "Connecting to WebRTC Signaling: $signalingUrl")
 
         val request = Request.Builder()
@@ -108,10 +183,9 @@ class WebRtcStreamer(
 
         signalingWs = okHttpClient.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                Log.i(TAG, "🟢 WebRTC Signaling WebSocket Connected")
+                AppLogger.i(TAG, "🟢 WebRTC Signaling WebSocket Connected")
                 isSignalingConnected = true
                 sendConfig()
-                createPeerConnectionAndOffer()
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
@@ -119,26 +193,26 @@ class WebRtcStreamer(
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                Log.w(TAG, "Signaling WebSocket failure: ${t.message}")
+                AppLogger.e(TAG, "❌ Signaling WebSocket failure: ${t.message} (HTTP ${response?.code})", t)
                 isSignalingConnected = false
-                if (isRunning) {
+                if (isRunning && firebaseDatabaseUrl.isBlank()) {
                     android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                        if (isRunning && !isSignalingConnected) {
+                        if (isRunning && !isSignalingConnected && firebaseDatabaseUrl.isBlank()) {
                             connectSignaling()
                         }
-                    }, 3000)
+                    }, 5000)
                 }
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                Log.i(TAG, "Signaling WebSocket closed: $reason")
+                AppLogger.w(TAG, "⚠️ Signaling WebSocket closed: code=$code, reason=$reason")
                 isSignalingConnected = false
-                if (isRunning) {
+                if (isRunning && firebaseDatabaseUrl.isBlank()) {
                     android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                        if (isRunning && !isSignalingConnected) {
+                        if (isRunning && !isSignalingConnected && firebaseDatabaseUrl.isBlank()) {
                             connectSignaling()
                         }
-                    }, 3000)
+                    }, 5000)
                 }
             }
         })
@@ -151,16 +225,200 @@ class WebRtcStreamer(
                 put("width", width)
                 put("height", height)
                 put("fps", fps)
+                put("isStandalone", false)
+                put("appVersion", io.mmirror.BuildConfig.VERSION_NAME)
             }
-            signalingWs?.send(json.toString())
+            val str = json.toString()
+            sendSignaling(str)
+
+            // DataChannel이 열려있으면 0ms 직접 전달
+            val dc = dataChannel
+            if (dc != null && dc.state() == DataChannel.State.OPEN) {
+                val buffer = DataChannel.Buffer(java.nio.ByteBuffer.wrap(str.toByteArray(Charsets.UTF_8)), false)
+                dc.send(buffer)
+            }
         } catch (_: Exception) {}
     }
 
-    private fun createPeerConnectionAndOffer() {
+    private fun getHotspotIp(): String = NetworkUtils.getHotspotIp()
+
+    private fun getCandidateTargetIps(hotspotIp: String): Set<String> = NetworkUtils.getCandidateTargetIps(hotspotIp)
+
+    private fun mungeSdpForLowLatency(sdp: String): String {
+        val lines = sdp.split("\r\n").toMutableList()
+        val hotspotIp = getHotspotIp()
+
+        val result = mutableListOf<String>()
+        for (line in lines) {
+            var l = line
+            if (l.startsWith("c=IN IP4") && !l.contains("0.0.0.0") && hotspotIp.isNotEmpty()) {
+                l = "c=IN IP4 $hotspotIp"
+            }
+            result.add(l)
+        }
+        return result.joinToString("\r\n")
+    }
+
+    private fun configureVideoSenderParameters() {
+        try {
+            peerConnection?.senders?.forEach { sender ->
+                if (sender.track()?.kind() == "video") {
+                    val params = sender.parameters
+                    for (enc in params.encodings) {
+                        enc.minBitrateBps = currentMinBitrateBps
+                        enc.maxBitrateBps = currentMaxBitrateBps
+                        enc.maxFramerate = currentMaxFramerate
+                    }
+                    sender.parameters = params
+                    Log.i(TAG, "✓ Configured RtpSender: ${currentMinBitrateBps / 1000}~${currentMaxBitrateBps / 1000} kbps, $currentMaxFramerate FPS")
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to configure video sender parameters: ${e.message}")
+        }
+    }
+
+    /**
+     * 실시간 적응형 비트레이트 및 FPS 즉각 적용
+     */
+    fun applyBitrateAndFramerate(bitrateBps: Int, fps: Int, notifyClient: Boolean = true) {
+        currentMaxBitrateBps = bitrateBps.coerceIn(1_000_000, 3_500_000)
+        currentMaxFramerate = fps.coerceIn(30, 60)
+
+        try {
+            peerConnection?.senders?.forEach { sender ->
+                if (sender.track()?.kind() == "video") {
+                    val params = sender.parameters
+                    for (enc in params.encodings) {
+                        enc.minBitrateBps = currentMinBitrateBps
+                        enc.maxBitrateBps = currentMaxBitrateBps
+                        enc.maxFramerate = currentMaxFramerate
+                    }
+                    sender.parameters = params
+                }
+            }
+            PresentationVideoCapturer.instance?.targetFps = currentMaxFramerate
+            Log.i(TAG, "⚡ ABR Applied: ${currentMaxBitrateBps / 1000} kbps, $currentMaxFramerate FPS")
+            io.mmirror.MediaProjectionService.instance?.updateMediaCodecBitrate(currentMaxBitrateBps)
+
+            if (notifyClient) {
+                sendAbrStatus()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to apply ABR parameters: ${e.message}")
+        }
+    }
+
+    fun setAdaptiveBitrateEnabled(enabled: Boolean) {
+        this.isAbrEnabled = enabled
+        Log.i(TAG, "⚡ ABR Enabled state set to: $enabled")
+        if (!enabled) {
+            applyBitrateAndFramerate(3_200_000, 60)
+        } else {
+            sendAbrStatus()
+        }
+    }
+
+    private fun sendAbrStatus() {
+        val dc = dataChannel ?: return
+        if (dc.state() != DataChannel.State.OPEN) return
+        try {
+            val quality = when {
+                currentMaxBitrateBps >= 4_000_000 -> "HD"
+                currentMaxBitrateBps >= 2_500_000 -> "BALANCED"
+                else -> "ECO"
+            }
+            val resp = JSONObject().apply {
+                put("type", "abr_status")
+                put("bitrate_kbps", currentMaxBitrateBps / 1000)
+                put("fps", currentMaxFramerate)
+                put("quality", quality)
+                put("abr_enabled", isAbrEnabled)
+            }
+            dc.send(DataChannel.Buffer(ByteBuffer.wrap(resp.toString().toByteArray(Charsets.UTF_8)), false))
+        } catch (_: Exception) {}
+    }
+
+    /**
+     * 테슬라 브라우저에서 전송된 실시간 네트워크 텔레메트리 기반 적응형 조절 알고리즘
+     */
+    fun handleNetworkStats(rtt: Double, loss: Double, jitter: Double, @Suppress("UNUSED_PARAMETER") clientFps: Double = 0.0, @Suppress("UNUSED_PARAMETER") clientBitrate: Double = 0.0) {
+        if (!isAbrEnabled) return
+
+        // 1. 심각한 혼잡 상태: RTT 160ms 초과, 패킷 손실 5% 초과, 또는 지터 40ms 초과
+        if (rtt > 160.0 || loss > 0.05 || jitter > 40.0) {
+            abrGoodConditionStreak = 0
+            val newBitrate = (currentMaxBitrateBps * 0.70).toInt().coerceAtLeast(1_200_000)
+            val newFps = 30
+            if (newBitrate != currentMaxBitrateBps || newFps != currentMaxFramerate) {
+                Log.w(TAG, "🚨 [ABR] Severe congestion (RTT=${rtt.toInt()}ms, loss=${(loss * 100).toInt()}%, jitter=${jitter.toInt()}ms) -> Stepping down to ${newBitrate / 1000} kbps, $newFps FPS")
+                applyBitrateAndFramerate(newBitrate, newFps)
+            }
+            return
+        }
+
+        // 2. 경미한 혼잡 상태: RTT 90ms 초과, 패킷 손실 2% 초과, 또는 지터 25ms 초과
+        if (rtt > 90.0 || loss > 0.02 || jitter > 25.0) {
+            abrGoodConditionStreak = 0
+            val newBitrate = (currentMaxBitrateBps * 0.85).toInt().coerceAtLeast(1_800_000)
+            val newFps = if (currentMaxFramerate > 45) 45 else currentMaxFramerate
+            if (newBitrate != currentMaxBitrateBps || newFps != currentMaxFramerate) {
+                Log.i(TAG, "⚠️ [ABR] Moderate congestion (RTT=${rtt.toInt()}ms, loss=${(loss * 100).toInt()}%) -> Stepping down to ${newBitrate / 1000} kbps, $newFps FPS")
+                applyBitrateAndFramerate(newBitrate, newFps)
+            }
+            return
+        }
+
+        // 3. 안정 및 양호 상태: RTT < 50ms, 손실률 < 0.5%, 지터 < 15ms
+        if (rtt < 50.0 && loss < 0.005 && jitter < 15.0) {
+            abrGoodConditionStreak++
+            // 2회 연속 안정(약 3초 유지) 시 단계적 상향 (+350 kbps)
+            if (abrGoodConditionStreak >= 2) {
+                abrGoodConditionStreak = 0
+                val newBitrate = (currentMaxBitrateBps + 350_000).coerceAtMost(3_500_000)
+                val newFps = if (newBitrate >= 3_200_000) 60 else 45
+                if (newBitrate != currentMaxBitrateBps || newFps != currentMaxFramerate) {
+                    Log.i(TAG, "🟢 [ABR] Network clean & stable -> Ramping up to ${newBitrate / 1000} kbps, $newFps FPS")
+                    applyBitrateAndFramerate(newBitrate, newFps)
+                }
+            }
+        } else {
+            abrGoodConditionStreak = 0
+        }
+    }
+
+    private var lastOfferTimestamp = 0L
+    @Volatile private var hasSynthesizedHotspotCandidate = false
+    @Volatile private var hasNativeHotspotCandidate = false
+    @Volatile private var lastRemoteAnswerUfrag: String? = null
+
+    private fun createPeerConnectionAndOffer(force: Boolean = false) {
+        val existingPc = peerConnection
+        if (!force && existingPc != null && (existingPc.connectionState() == PeerConnection.PeerConnectionState.CONNECTED ||
+                                   existingPc.iceConnectionState() == PeerConnection.IceConnectionState.CONNECTED)) {
+            AppLogger.i(TAG, "⚡ PeerConnection already connected! Skipping redundant offer creation and requesting keyframe.")
+            io.mmirror.MediaProjectionService.instance?.requestKeyFrame()
+            return
+        }
+
+        val now = System.currentTimeMillis()
+        if (!force && now - lastOfferTimestamp < 1500) {
+            Log.i(TAG, "Debouncing rapid Offer request (${now - lastOfferTimestamp}ms)")
+            return
+        }
+        lastOfferTimestamp = now
+        hasSynthesizedHotspotCandidate = false
+        hasNativeHotspotCandidate = false
+        lastRemoteAnswerUfrag = null
+
         val pcf = peerConnectionFactory ?: return
-        val vTrack = videoTrack ?: return
+
+        synchronized(pendingRemoteCandidates) {
+            pendingRemoteCandidates.clear()
+        }
 
         peerConnection?.close()
+        firebaseSignaling?.clearSessionForNewOffer()
 
         val iceServers = listOf(
             PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer(),
@@ -170,10 +428,15 @@ class WebRtcStreamer(
         val rtcConfig = PeerConnection.RTCConfiguration(iceServers).apply {
             sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
             continualGatheringPolicy = PeerConnection.ContinualGatheringPolicy.GATHER_CONTINUALLY
+            tcpCandidatePolicy = PeerConnection.TcpCandidatePolicy.DISABLED
         }
 
         val pcObserver = object : PeerConnection.Observer {
             override fun onIceCandidate(candidate: IceCandidate) {
+                if (candidate.sdp.contains(" tcp ")) {
+                    Log.d(TAG, "⏩ Skipping TCP ICE candidate: ${candidate.sdp}")
+                    return
+                }
                 Log.i(TAG, "📡 Generated local ICE candidate: ${candidate.sdp}")
                 val json = JSONObject().apply {
                     put("type", "candidate")
@@ -183,34 +446,90 @@ class WebRtcStreamer(
                         put("sdpMLineIndex", candidate.sdpMLineIndex)
                     })
                 }
-                signalingWs?.send(json.toString())
-            }
+                sendSignaling(json.toString())
 
-            override fun onConnectionChange(newState: PeerConnection.PeerConnectionState) {
-                Log.i(TAG, "⚡ WebRTC Connection State: $newState")
-                if (newState == PeerConnection.PeerConnectionState.CONNECTED) {
-                    Log.i(TAG, "🎉 [WEBRTC] Direct P2P Connected to Tesla! 0MB Local Streaming Active!")
+                // ★ 테슬라 핫스팟 P2P 직결 핵심: 핫스팟 로컬 IP(10.x.x.x 또는 192.168.x.x) 후보 단 1회만 정밀 합성 전송
+                val hotspotIp = getHotspotIp()
+                if (candidate.sdp.contains(hotspotIp)) {
+                    hasNativeHotspotCandidate = true
+                } else if (!hasNativeHotspotCandidate && !hasSynthesizedHotspotCandidate) {
+                    val parts = candidate.sdp.split(" ")
+                    if (parts.size >= 8 && candidate.sdp.contains(" udp ") && (candidate.sdp.contains("typ host") || candidate.sdp.contains("typ srflx"))) {
+                        hasSynthesizedHotspotCandidate = true
+                        val synthSdp = candidate.sdp
+                            .replace(" ${parts[4]} ", " $hotspotIp ")
+                            .replace("typ srflx", "typ host")
+                        val synthJson = JSONObject().apply {
+                            put("type", "candidate")
+                            put("candidate", JSONObject().apply {
+                                put("candidate", synthSdp)
+                                put("sdpMid", candidate.sdpMid)
+                                put("sdpMLineIndex", candidate.sdpMLineIndex)
+                            })
+                        }
+                        sendSignaling(synthJson.toString())
+                        Log.i(TAG, "📡 Synthesized Hotspot ICE candidate for Tesla (single, UDP): $synthSdp")
+                    }
                 }
             }
 
-            override fun onSignalingChange(state: PeerConnection.SignalingState) {}
-            override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) {}
-            override fun onIceConnectionReceivingChange(receiving: Boolean) {}
-            override fun onIceGatheringChange(state: PeerConnection.IceGatheringState) {}
+            override fun onConnectionChange(newState: PeerConnection.PeerConnectionState) {
+                AppLogger.i(TAG, "⚡ WebRTC Connection State: $newState")
+                if (newState == PeerConnection.PeerConnectionState.CONNECTED) {
+                    AppLogger.i(TAG, "🎉 [WEBRTC] Direct P2P Connected to Tesla! 0MB Local Streaming Active!")
+                    // 차량 연결됨 → GPS 주행 기록 시작
+                    io.mmirror.DrivingLogManager.currentInstance?.onPeerConnected()
+                    io.mmirror.MediaProjectionService.instance?.requestKeyFrame()
+                } else if (newState == PeerConnection.PeerConnectionState.DISCONNECTED ||
+                           newState == PeerConnection.PeerConnectionState.FAILED ||
+                           newState == PeerConnection.PeerConnectionState.CLOSED) {
+                    AppLogger.w(TAG, "🔌 WebRTC peer disconnected/failed: $newState")
+                    // 차량 연결 해제 → GPS 주행 기록 중지 & 저장
+                    io.mmirror.DrivingLogManager.currentInstance?.onPeerDisconnected()
+                }
+            }
+
+            override fun onSignalingChange(state: PeerConnection.SignalingState) {
+                AppLogger.d(TAG, "📡 WebRTC Signaling State: $state")
+            }
+            override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) {
+                AppLogger.i(TAG, "🧊 ICE Connection State: $state")
+                if (state == PeerConnection.IceConnectionState.FAILED) {
+                    AppLogger.e(TAG, "❌ [WEBRTC] ICE 연결 실패 (로컬 P2P 소켓 차단 또는 주소 미도달)")
+                } else if (state == PeerConnection.IceConnectionState.DISCONNECTED) {
+                    AppLogger.w(TAG, "⚠️ [WEBRTC] ICE 연결 끊김 (브라우저 또는 핫스팟 일시 단절)")
+                } else if (state == PeerConnection.IceConnectionState.CONNECTED || state == PeerConnection.IceConnectionState.COMPLETED) {
+                    AppLogger.i(TAG, "✓ [WEBRTC] ICE P2P 직결 바인딩 성공!")
+                }
+            }
+            override fun onIceConnectionReceivingChange(receiving: Boolean) {
+                AppLogger.d(TAG, "🧊 ICE Receiving: $receiving")
+            }
+            override fun onIceGatheringChange(state: PeerConnection.IceGatheringState) {
+                AppLogger.d(TAG, "📡 ICE Gathering: $state")
+            }
             override fun onIceCandidatesRemoved(candidates: Array<out IceCandidate>?) {}
             override fun onAddStream(stream: MediaStream?) {}
             override fun onRemoveStream(stream: MediaStream?) {}
             override fun onDataChannel(dc: DataChannel) {
                 setupDataChannel(dc)
             }
-            override fun onRenegotiationNeeded() {}
+            override fun onRenegotiationNeeded() {
+                AppLogger.d(TAG, "🔄 WebRTC onRenegotiationNeeded")
+            }
             override fun onAddTrack(receiver: RtpReceiver?, streams: Array<out MediaStream>?) {}
         }
 
-        val pc = pcf.createPeerConnection(rtcConfig, pcObserver) ?: return
+        val pc = pcf.createPeerConnection(rtcConfig, pcObserver)
+        if (pc == null) {
+            AppLogger.e(TAG, "❌ PeerConnectionFactory.createPeerConnection() returned NULL!")
+            return
+        }
         peerConnection = pc
 
-        pc.addTrack(vTrack, listOf("stream_mmirror"))
+        videoTrack?.let { vTrack ->
+            pc.addTrack(vTrack, listOf("stream_mmirror"))
+        }
 
         val dcInit = DataChannel.Init().apply {
             ordered = true
@@ -225,25 +544,34 @@ class WebRtcStreamer(
 
         pc.createOffer(object : SdpObserver {
             override fun onCreateSuccess(desc: SessionDescription) {
-                Log.i(TAG, "SDP Offer created successfully")
+                AppLogger.i(TAG, "✓ SDP Offer 생성 완료, LocalDescription 설정 중...")
+                val mungedSdp = mungeSdpForLowLatency(desc.description)
                 pc.setLocalDescription(object : SdpObserver {
                     override fun onCreateSuccess(p0: SessionDescription?) {}
                     override fun onSetSuccess() {
-                        Log.i(TAG, "LocalDescription set, sending Offer to signaling...")
+                        AppLogger.i(TAG, "✓ LocalDescription 설정 완료 (3.5Mbps 저지연 SDP), Offer 전송 중...")
                         val json = JSONObject().apply {
                             put("type", "offer")
-                            put("sdp", desc.description)
+                            put("sdp", mungedSdp)
+                            put("timestamp", System.currentTimeMillis())
+                            put("config", JSONObject().apply {
+                                put("width", width)
+                                put("height", height)
+                                put("fps", fps)
+                                put("isStandalone", isStandalone)
+                                put("appVersion", io.mmirror.BuildConfig.VERSION_NAME)
+                            })
                         }
-                        signalingWs?.send(json.toString())
+                        sendSignaling(json.toString())
                     }
-                    override fun onCreateFailure(err: String?) { Log.e(TAG, "setLocalDescription createFailure: $err") }
-                    override fun onSetFailure(err: String?) { Log.e(TAG, "setLocalDescription setFailure: $err") }
+                    override fun onCreateFailure(err: String?) { AppLogger.e(TAG, "❌ setLocalDescription createFailure: $err") }
+                    override fun onSetFailure(err: String?) { AppLogger.e(TAG, "❌ setLocalDescription setFailure: $err") }
                 }, desc)
             }
 
             override fun onSetSuccess() {}
-            override fun onCreateFailure(err: String?) { Log.e(TAG, "createOffer failure: $err") }
-            override fun onSetFailure(err: String?) { Log.e(TAG, "createOffer setFailure: $err") }
+            override fun onCreateFailure(err: String?) { AppLogger.e(TAG, "❌ createOffer failure: $err") }
+            override fun onSetFailure(err: String?) { AppLogger.e(TAG, "❌ createOffer setFailure: $err") }
         }, sdpConstraints)
     }
 
@@ -254,7 +582,11 @@ class WebRtcStreamer(
             override fun onStateChange() {
                 Log.i(TAG, "💬 DataChannel State changed: ${dc.state()}")
                 if (dc.state() == DataChannel.State.OPEN) {
+                    isDroppingGop = false
+                    sendConfig()
+                    sendTouchStatus()
                     sendAppList()
+                    MediaProjectionService.instance?.requestKeyFrame()
                 }
             }
             override fun onMessage(buffer: DataChannel.Buffer) {
@@ -266,53 +598,139 @@ class WebRtcStreamer(
         })
     }
 
-    fun sendAppList() {
+    fun sendTouchStatus() {
         val dc = dataChannel ?: return
         if (dc.state() != DataChannel.State.OPEN) return
         try {
-            val pm = context.packageManager
-            val knownApps = listOf(
-                Pair("티맵", "com.skt.tmap.ku"),
-                Pair("카카오내비", "com.locnall.KimGiSa"),
-                Pair("네이버지도", "com.nhn.android.nmap"),
-                Pair("유튜브", "com.google.android.youtube"),
-                Pair("넷플릭스", "com.netflix.mediaclient"),
-                Pair("YT 뮤직", "com.google.android.apps.youtube.music"),
-                Pair("멜론", "com.iloen.melon"),
-                Pair("스포티파이", "com.spotify.music"),
-                Pair("크롬", "com.android.chrome"),
-                Pair("쿠팡플레이", "com.coupang.mobile.play"),
-                Pair("티빙", "net.cj.cjenm.tving"),
-                Pair("웨이브", "kr.co.captv.pooqV2")
-            )
-            val jsonArray = org.json.JSONArray()
-            for ((name, pkg) in knownApps) {
-                val isInstalled = try {
-                    pm.getPackageInfo(pkg, 0)
-                    true
-                } catch (_: Exception) {
-                    false
-                }
-                val item = JSONObject().apply {
-                    put("name", name)
-                    put("package", pkg)
-                    put("installed", isInstalled)
-                }
-                jsonArray.put(item)
-            }
+            val isA11yGranted = io.mmirror.TouchControlService.isAccessibilityServiceEnabled(context)
             val resp = JSONObject().apply {
-                put("type", "app_list")
-                put("apps", jsonArray)
-                put("shizuku", io.mmirror.adb.AdbTouchManager.isShizukuAvailable)
-                put("virtualDisplayId", getVirtualDisplayId())
+                put("type", "touch_status")
+                put("installed", true)
+                put("running", isA11yGranted)
+                put("granted", isA11yGranted)
+                put("uid", 1000)
+                put("version", "v${io.mmirror.BuildConfig.VERSION_NAME}")
+                put("statusText", if (isA11yGranted) "접근성 터치 활성" else "접근성 권한 필요")
+                put("virtualDisplayId", -1)
+                put("isStandalone", false)
             }
             val payload = resp.toString().toByteArray(Charsets.UTF_8)
             val buffer = DataChannel.Buffer(java.nio.ByteBuffer.wrap(payload), false)
             dc.send(buffer)
-            Log.i(TAG, "Sent app_list to viewer (${jsonArray.length()} apps, vd=${getVirtualDisplayId()})")
+            Log.i(TAG, "Sent touch status: granted=$isA11yGranted")
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to send app list: ${e.message}")
+            Log.w(TAG, "Failed to send touch status: ${e.message}")
         }
+    }
+
+    private fun drawableToBase64(drawable: android.graphics.drawable.Drawable, sizePx: Int = 72): String {
+        val bitmap = android.graphics.Bitmap.createBitmap(sizePx, sizePx, android.graphics.Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bitmap)
+        drawable.setBounds(0, 0, sizePx, sizePx)
+        drawable.draw(canvas)
+        val baos = java.io.ByteArrayOutputStream()
+        bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 70, baos)
+        bitmap.recycle()
+        return android.util.Base64.encodeToString(baos.toByteArray(), android.util.Base64.NO_WRAP)
+    }
+
+    fun sendAppList() {
+        val dc = dataChannel ?: return
+        if (dc.state() != DataChannel.State.OPEN) return
+        Thread {
+            try {
+                val pm = context.packageManager
+            val launcherIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+            val installedList = pm.queryIntentActivities(launcherIntent, 0)
+
+            // 우선 표시할 주요 앱 패키지 (정렬 우선순위)
+            val priorityPkgs = listOf(
+                "com.skt.tmap.ku", "com.skt.skaf.l001mtm091",
+                "com.locnall.KimGiSa", "com.nhn.android.nmap",
+                "com.google.android.youtube", "com.netflix.mediaclient",
+                "com.google.android.apps.youtube.music",
+                "com.iloen.melon", "com.spotify.music",
+                "com.android.chrome",
+                "com.coupang.mobile.play", "net.cj.cjenm.tving",
+                "kr.co.captv.pooqV2", "com.disney.disneyplus"
+            )
+
+            data class AppEntry(val name: String, val pkg: String, val resolveInfo: android.content.pm.ResolveInfo, val priority: Int)
+
+            val appEntries = mutableListOf<AppEntry>()
+            val seenPkgs = mutableSetOf<String>()
+
+            for (resolveInfo in installedList) {
+                val pkg = resolveInfo.activityInfo?.packageName ?: continue
+                if (pkg == context.packageName) continue
+                if (seenPkgs.contains(pkg)) continue
+                seenPkgs.add(pkg)
+
+                val label = resolveInfo.loadLabel(pm).toString()
+                val priority = priorityPkgs.indexOf(pkg).let { if (it >= 0) it else 999 }
+                appEntries.add(AppEntry(label, pkg, resolveInfo, priority))
+            }
+
+            // 정렬: 우선 앱 먼저, 나머지는 한글/영어 이름순
+            appEntries.sortWith(compareBy<AppEntry> { it.priority }.thenBy { it.name })
+
+            // 1차: 아이콘 없이 앱 목록 먼저 전송 (즉시 UI 렌더링, 0ms 지연)
+            val jsonArray = org.json.JSONArray()
+            for (entry in appEntries) {
+                val item = JSONObject().apply {
+                    put("name", entry.name)
+                    put("package", entry.pkg)
+                    put("installed", true)
+                }
+                jsonArray.put(item)
+            }
+
+            val isA11yGranted = io.mmirror.TouchControlService.isAccessibilityServiceEnabled(context)
+            val resp = JSONObject().apply {
+                put("type", "app_list")
+                put("apps", jsonArray)
+                put("touchControl", isA11yGranted)
+                put("touchRunning", isA11yGranted)
+                put("virtualDisplayId", -1)
+                put("isStandalone", false)
+            }
+            val payload = resp.toString().toByteArray(Charsets.UTF_8)
+            dc.send(DataChannel.Buffer(java.nio.ByteBuffer.wrap(payload), false))
+            Log.i(TAG, "Sent app_list to viewer (${jsonArray.length()} apps)")
+
+            // 2차: 아이콘을 백그라운드에서 지연 추출하여 배치(batch)로 전송
+            val batchSize = 6
+            for (i in appEntries.indices step batchSize) {
+                val dcNow = dataChannel
+                if (dcNow == null || dcNow.state() != DataChannel.State.OPEN) break
+
+                val end = minOf(i + batchSize, appEntries.size)
+                val batch = appEntries.subList(i, end)
+                val iconsObj = JSONObject()
+                for (entry in batch) {
+                    val iconStr = try {
+                        val icon = entry.resolveInfo.loadIcon(pm)
+                        drawableToBase64(icon)
+                    } catch (_: Throwable) { "" }
+                    if (iconStr.isNotBlank()) {
+                        iconsObj.put(entry.pkg, iconStr)
+                    }
+                }
+                if (iconsObj.length() > 0) {
+                    val iconResp = JSONObject().apply {
+                        put("type", "app_icons")
+                        put("icons", iconsObj)
+                    }
+                    val iconPayload = iconResp.toString().toByteArray(Charsets.UTF_8)
+                    dcNow.send(DataChannel.Buffer(java.nio.ByteBuffer.wrap(iconPayload), false))
+                    Thread.sleep(60) // 배치 간 CPU 및 소켓 버퍼 안정화 간격
+                }
+            }
+
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to send app list: ${e.message}")
+            }
+        }.start()
     }
 
     private fun handleControlMessage(text: String) {
@@ -320,59 +738,94 @@ class WebRtcStreamer(
             val json = JSONObject(text)
             val type = json.optString("type")
             when (type) {
+                "get_touch_status", "get_shizuku_status" -> {
+                    sendTouchStatus()
+                }
+                "request_keyframe" -> {
+                    Log.i(TAG, "🔑 Received request_keyframe from DataChannel -> triggering sync frame refresh")
+                    isDroppingGop = false
+                    io.mmirror.MediaProjectionService.instance?.requestKeyFrame()
+                    io.mmirror.MediaProjectionService.instance?.scheduleDisplayChangeCheck()
+                }
                 "touch" -> {
                     val action = json.optString("action")
                     val id = json.optInt("id", 0)
                     val x = json.optDouble("x", 0.0).toFloat()
                     val y = json.optDouble("y", 0.0).toFloat()
-                    val mode = json.optString("mode", "standalone")
-                    val targetDisplayId = if (mode == "mirror") -1 else getVirtualDisplayId()
-
-                    if (io.mmirror.adb.AdbTouchManager.isShizukuAvailable) {
-                        io.mmirror.adb.AdbTouchManager.onTouch(action, id, x, y, width, height, targetDisplayId)
-                    } else {
-                        TouchControlService.instance?.onTouch(action, id, x, y)
-                    }
+                    io.mmirror.TouchControlService.instance?.onTouch(action, id, x, y)
+                }
+                "pinch_zoom" -> {
+                    val direction = json.optString("direction", "in")
+                    val x = json.optDouble("x", 0.5).toFloat()
+                    val y = json.optDouble("y", 0.5).toFloat()
+                    io.mmirror.TouchControlService.instance?.onPinchZoom(direction, x, y)
                 }
                 "key" -> {
                     val key = json.optString("key")
-                    val mode = json.optString("mode", "standalone")
-                    val targetDisplayId = if (mode == "mirror") -1 else getVirtualDisplayId()
-                    val keyCode = when (key.uppercase()) {
-                        "BACK" -> 4
-                        "HOME" -> 3
-                        "RECENTS" -> 187
-                        "VOLUME_UP" -> 24
-                        "VOLUME_DOWN" -> 25
-                        else -> 0
-                    }
-                    if (keyCode != 0 && io.mmirror.adb.AdbTouchManager.isShizukuAvailable) {
-                        io.mmirror.adb.AdbTouchManager.injectKey(keyCode, targetDisplayId)
-                    } else {
-                        TouchControlService.instance?.onKey(key)
+                    io.mmirror.TouchControlService.instance?.onKey(key)
+                }
+                "type_text", "inject_text" -> {
+                    val textToInject = json.optString("text")
+                    if (textToInject.isNotEmpty()) {
+                        val ok = io.mmirror.TouchControlService.instance?.injectText(textToInject) ?: false
+                        if (ok) {
+                            sendToast("✓ 텍스트가 스마트폰에 입력되었습니다: $textToInject")
+                        } else {
+                            sendToast("⚠️ 입력창(EditText)을 찾지 못했습니다. 폰의 검색창을 먼저 터치해 주세요.")
+                        }
                     }
                 }
                 "launch_app" -> {
                     val pkg = json.optString("package")
-                    val mode = json.optString("mode", "standalone")
-                    val targetDisplayId = if (mode == "mirror") -1 else getVirtualDisplayId()
-                    Log.i(TAG, "Launching $pkg on display $targetDisplayId (mode=$mode)")
-                    if (io.mmirror.adb.AdbTouchManager.isShizukuAvailable) {
-                        io.mmirror.adb.AdbTouchManager.launchAppOnDisplay(context, pkg, targetDisplayId)
-                    } else {
+                    try {
                         val launchIntent = context.packageManager.getLaunchIntentForPackage(pkg)
                         if (launchIntent != null) {
-                            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            launchIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
                             context.startActivity(launchIntent)
+                            Log.i(TAG, "✓ Launched $pkg via standard Intent")
+                        } else {
+                            sendToast("⚠️ 앱 실행 실패: 설치 여부를 확인해 주세요.")
                         }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to launch $pkg: ${e.message}")
+                        sendToast("⚠️ 앱 실행 실패: ${e.message}")
                     }
                 }
                 "get_apps" -> {
                     sendAppList()
                 }
-                "command" -> {
-                    val cmd = json.optString("cmd")
-                    TouchControlService.instance?.onCommand(cmd)
+                "set_screen_power" -> {
+                    val powerOn = json.optBoolean("on", true)
+                    Log.i(TAG, "💡 Received set_screen_power: on=$powerOn")
+                    ScreenDimmerManager.setDimmed(!powerOn)
+                    val resp = JSONObject().apply {
+                        put("type", "toast")
+                        put("message", if (powerOn) "☀️ 스마트폰 화면 밝기가 정상 복원되었습니다." else "🌙 스마트폰 화면이 최저 밝기(초절전 암전)로 전환되었습니다.")
+                    }
+                    dataChannel?.send(DataChannel.Buffer(java.nio.ByteBuffer.wrap(resp.toString().toByteArray(Charsets.UTF_8)), false))
+                }
+                "ping" -> {
+                    val t = json.optDouble("t", 0.0)
+                    val pong = JSONObject().apply {
+                        put("type", "pong")
+                        put("t", t)
+                    }
+                    dataChannel?.send(DataChannel.Buffer(java.nio.ByteBuffer.wrap(pong.toString().toByteArray(Charsets.UTF_8)), false))
+                }
+                "net_stats" -> {
+                    val rtt = json.optDouble("rtt", 0.0)
+                    val loss = json.optDouble("loss", 0.0)
+                    val jitter = json.optDouble("jitter", 0.0)
+                    val clientFps = json.optDouble("fps", 60.0)
+                    val clientBitrate = json.optDouble("bitrate", 0.0)
+                    handleNetworkStats(rtt, loss, jitter, clientFps, clientBitrate)
+                }
+                "get_abr_status" -> {
+                    sendAbrStatus()
+                }
+                "set_abr" -> {
+                    val enable = json.optBoolean("enabled", true)
+                    setAdaptiveBitrateEnabled(enable)
                 }
             }
         } catch (e: Exception) {
@@ -380,26 +833,118 @@ class WebRtcStreamer(
         }
     }
 
+    fun setStandaloneMode(standalone: Boolean) {
+        Log.i(TAG, "setStandaloneMode called: standalone=$standalone")
+        this.isStandalone = standalone
+    }
+
+    private fun notifyModeChanged(standalone: Boolean) {
+        try {
+            val json = JSONObject().apply {
+                put("type", "config")
+                put("width", width)
+                put("height", height)
+                put("fps", fps)
+                put("isStandalone", standalone)
+            }
+            val bytes = json.toString().toByteArray(Charsets.UTF_8)
+            dataChannel?.send(DataChannel.Buffer(java.nio.ByteBuffer.wrap(bytes), false))
+            sendSignaling(json.toString())
+        } catch (_: Exception) {}
+    }
+
+    private fun sendToast(message: String) {
+        try {
+            val json = JSONObject().apply {
+                put("type", "toast")
+                put("message", message)
+            }
+            val bytes = json.toString().toByteArray(Charsets.UTF_8)
+            dataChannel?.send(DataChannel.Buffer(java.nio.ByteBuffer.wrap(bytes), false))
+        } catch (_: Exception) {}
+    }
+
     private fun handleSignalingMessage(text: String) {
+        mainHandler.post {
+            handleSignalingMessageInternal(text)
+        }
+    }
+
+    private fun handleSignalingMessageInternal(text: String) {
         try {
             val json = JSONObject(text)
             val type = json.optString("type")
             when (type) {
                 "ready" -> {
-                    Log.i(TAG, "Viewer notified ready, generating new SDP Offer")
-                    createPeerConnectionAndOffer()
+                    val existingPc = peerConnection
+                    val isConnected = existingPc != null && (
+                        existingPc.connectionState() == PeerConnection.PeerConnectionState.CONNECTED ||
+                        existingPc.iceConnectionState() == PeerConnection.IceConnectionState.CONNECTED
+                    )
+                    if (isConnected) {
+                        AppLogger.i(TAG, "⚡ 뷰어 ready 수신: 이미 P2P 연결 상태입니다. 키프레임 전송으로 화면 즉시 갱신.")
+                        MediaProjectionService.instance?.requestKeyFrame()
+                    } else {
+                        val now = System.currentTimeMillis()
+                        val state = existingPc?.signalingState()
+                        if (state == PeerConnection.SignalingState.HAVE_LOCAL_OFFER && (now - lastOfferTimestamp < 3500L)) {
+                            AppLogger.i(TAG, "⏳ 뷰어 ready 수신: 이미 Offer 발행 후 핸드셰이크 진행 중 (${now - lastOfferTimestamp}ms 전). 대기.")
+                        } else {
+                            AppLogger.i(TAG, "📥 테슬라 뷰어 ready 수신 -> 새 SDP Offer 생성")
+                            createPeerConnectionAndOffer(force = false)
+                        }
+                    }
+                }
+                "reconnect" -> {
+                    val now = System.currentTimeMillis()
+                    if (now - lastOfferTimestamp < 2000L) {
+                        AppLogger.i(TAG, "Debouncing rapid reconnect (${now - lastOfferTimestamp}ms)")
+                    } else {
+                        AppLogger.i(TAG, "🔄 테슬라 뷰어 reconnect 요청 수신 -> 세션 재설정 및 새 Offer 생성")
+                        createPeerConnectionAndOffer(force = true)
+                    }
                 }
                 "answer" -> {
                     val sdp = json.optString("sdp")
-                    Log.i(TAG, "Received SDP Answer from viewer")
+                    val answerTs = json.optLong("timestamp", 0L)
+                    if (lastOfferTimestamp > 0L && answerTs > 0L && answerTs < lastOfferTimestamp) {
+                        AppLogger.w(TAG, "⏳ Stale answer ignored in WebRtcStreamer (answerTs=$answerTs < lastOfferTimestamp=$lastOfferTimestamp)")
+                        return
+                    }
+                    val pc = peerConnection ?: return
+                    val state = pc.signalingState()
+                    if (state != PeerConnection.SignalingState.HAVE_LOCAL_OFFER) {
+                        Log.d(TAG, "중복 또는 이미 처리된 SDP Answer 무시 (현재 상태: $state)")
+                        return
+                    }
+                    val ufragMatch = Regex("a=ice-ufrag:([^\\r\\n]+)").find(sdp)
+                    lastRemoteAnswerUfrag = ufragMatch?.groupValues?.get(1)?.trim()
+                    AppLogger.i(TAG, "📥 테슬라 뷰어로부터 SDP Answer 수신 (ufrag: $lastRemoteAnswerUfrag), RemoteDescription 설정 중...")
                     val desc = SessionDescription(SessionDescription.Type.ANSWER, sdp)
-                    peerConnection?.setRemoteDescription(object : SdpObserver {
+                    pc.setRemoteDescription(object : SdpObserver {
                         override fun onCreateSuccess(p0: SessionDescription?) {}
                         override fun onSetSuccess() {
-                            Log.i(TAG, "RemoteDescription set successfully! P2P negotiation complete.")
+                            AppLogger.i(TAG, "🎉 [WEBRTC] RemoteDescription(Answer) 설정 완료! P2P 핸드셰이크 성공.")
+                            configureVideoSenderParameters()
+                            synchronized(pendingRemoteCandidates) {
+                                for (c in pendingRemoteCandidates) {
+                                    try {
+                                        val candUfragMatch = Regex("ufrag\\s+([^\\s]+)").find(c.sdp)
+                                        val candUfrag = candUfragMatch?.groupValues?.get(1)?.trim()
+                                        if (candUfrag == null || lastRemoteAnswerUfrag == null || candUfrag == lastRemoteAnswerUfrag) {
+                                            pc.addIceCandidate(c)
+                                        } else {
+                                            AppLogger.d(TAG, "Dropping buffered candidate with mismatched ufrag ($candUfrag != $lastRemoteAnswerUfrag)")
+                                        }
+                                    } catch (e: Exception) {
+                                        AppLogger.w(TAG, "Failed to add buffered candidate: ${e.message}")
+                                    }
+                                }
+                                pendingRemoteCandidates.clear()
+                            }
                         }
-                        override fun onCreateFailure(err: String?) { Log.e(TAG, "RemoteDescription createFailure: $err") }
-                        override fun onSetFailure(err: String?) { Log.e(TAG, "RemoteDescription setFailure: $err") }
+                        override fun onCreateFailure(err: String?) { AppLogger.e(TAG, "❌ RemoteDescription createFailure: $err") }
+                        override fun onSetFailure(err: String?) { AppLogger.e(TAG, "❌ RemoteDescription setFailure: $err") }
                     }, desc)
                 }
                 "candidate" -> {
@@ -408,20 +953,93 @@ class WebRtcStreamer(
                         val sdp = candidateObj.optString("candidate")
                         val sdpMid = candidateObj.optString("sdpMid")
                         val sdpMLineIndex = candidateObj.optInt("sdpMLineIndex", 0)
-                        val iceCandidate = IceCandidate(sdpMid, sdpMLineIndex, sdp)
-                        peerConnection?.addIceCandidate(iceCandidate)
-                        Log.i(TAG, "Added remote ICE candidate from viewer")
+
+                        val expectedUfrag = lastRemoteAnswerUfrag
+                        if (sdp.isNotEmpty()) {
+                            val candUfragMatch = Regex("ufrag\\s+([^\\s]+)").find(sdp)
+                            val candUfrag = candUfragMatch?.groupValues?.get(1)?.trim()
+                            if (candUfrag != null && expectedUfrag != null && candUfrag != expectedUfrag) {
+                                AppLogger.d(TAG, "⏳ Ignoring stale remote candidate (ufrag: $candUfrag != $expectedUfrag)")
+                                return
+                            }
+                        }
+
+                        val cand = IceCandidate(sdpMid, sdpMLineIndex, sdp)
+                        val pc = peerConnection
+                        if (pc != null && pc.remoteDescription != null) {
+                            try {
+                                pc.addIceCandidate(cand)
+                            } catch (e: Exception) {
+                                AppLogger.w(TAG, "⚠️ ICE candidate add warning: ${e.message}")
+                            }
+                        } else {
+                            synchronized(pendingRemoteCandidates) {
+                                pendingRemoteCandidates.add(cand)
+                            }
+                            AppLogger.d(TAG, "⏳ Buffered viewer candidate until remoteDescription is set")
+                        }
+
+                        // 2. ★ 크롬 mDNS(.local) 마스킹 해제: 테슬라 브라우저가 보낸 .local 후보를 핫스팟 클라이언트 IP로 치환 주입!
+                        if (sdp.contains(".local")) {
+                            val hotspotIp = getHotspotIp()
+                            val candidateIps = getCandidateTargetIps(hotspotIp)
+                            var injectedCount = 0
+                            for (teslaIp in candidateIps) {
+                                val unmaskedSdp = sdp.replace(Regex("[a-zA-Z0-9-]+\\.local"), teslaIp)
+                                val unmaskedCand = IceCandidate(sdpMid, sdpMLineIndex, unmaskedSdp)
+                                if (pc != null && pc.remoteDescription != null) {
+                                    try {
+                                        pc.addIceCandidate(unmaskedCand)
+                                        injectedCount++
+                                    } catch (_: Exception) {}
+                                } else {
+                                    synchronized(pendingRemoteCandidates) {
+                                        pendingRemoteCandidates.add(unmaskedCand)
+                                    }
+                                    injectedCount++
+                                }
+                            }
+                            AppLogger.i(TAG, "📡 Tesla mDNS 후보 치환 주입 완료: 총 ${injectedCount}개 서브넷 IP 주입 완료 (핫스팟: $hotspotIp)")
+                        }
+                        AppLogger.d(TAG, "Added remote ICE candidate from viewer")
                     }
                 }
             }
         } catch (e: Exception) {
-            Log.w(TAG, "handleSignalingMessage error: ${e.message}")
+            AppLogger.w(TAG, "⚠️ handleSignalingMessage error: ${e.message}")
         }
     }
 
     fun stop() {
         isRunning = false
+        if (instance == this) instance = null
         Log.i(TAG, "Stopping WebRtcStreamer...")
+
+        try {
+            ScreenDimmerManager.removeListener(dimmerListener)
+            ScreenDimmerManager.setDimmed(false)
+        } catch (_: Exception) {}
+
+        try {
+            sendSignaling("""{"type":"stream_stopped"}""")
+        } catch (_: Exception) {}
+
+        try {
+            firebaseSignaling?.stop()
+        } catch (_: Exception) {}
+        firebaseSignaling = null
+        lastOfferTimestamp = 0L
+        lastRemoteAnswerUfrag = null
+        hasSynthesizedHotspotCandidate = false
+        hasNativeHotspotCandidate = false
+        synchronized(pendingRemoteCandidates) {
+            pendingRemoteCandidates.clear()
+        }
+
+        try {
+            val stopMsg = ByteBuffer.wrap("""{"type":"stream_stopped"}""".toByteArray(Charsets.UTF_8))
+            dataChannel?.send(DataChannel.Buffer(stopMsg, false))
+        } catch (_: Exception) {}
 
         try {
             signalingWs?.close(1000, "Normal stop")
@@ -437,6 +1055,12 @@ class WebRtcStreamer(
             peerConnection?.close()
         } catch (_: Exception) {}
         peerConnection = null
+
+        try {
+            presentationCapturer?.stopCapture()
+            presentationCapturer?.dispose()
+        } catch (_: Exception) {}
+        presentationCapturer = null
 
         try {
             screenCapturer?.stopCapture()
@@ -467,42 +1091,73 @@ class WebRtcStreamer(
         Log.i(TAG, "WebRtcStreamer stopped completely")
     }
 
-    fun getMediaProjection(): MediaProjection? = screenCapturer?.mediaProjection
+    fun getMediaProjection(): MediaProjection? = mediaProjection ?: screenCapturer?.mediaProjection ?: presentationCapturer?.mediaProjection
 
-    fun getVirtualDisplayId(): Int {
-        return try {
-            val field = ScreenCapturerAndroid::class.java.getDeclaredField("virtualDisplay")
-            field.isAccessible = true
-            val vd = field.get(screenCapturer) as? android.hardware.display.VirtualDisplay
-            vd?.display?.displayId ?: -1
-        } catch (_: Exception) {
-            -1
-        }
-    }
+    fun getVirtualDisplayId(): Int = -1
 
-    fun changeResolution(newWidth: Int, newHeight: Int, newFps: Int = 60) {
+    fun changeResolution(newWidth: Int, newHeight: Int, newDensity: Int = density, newFps: Int = 60, @Suppress("UNUSED_PARAMETER") force: Boolean = false) {
         try {
+            width = newWidth
+            height = newHeight
+            density = newDensity
+            surfaceTextureHelper?.let { helper ->
+                ThreadUtils.invokeAtFrontUninterruptibly(helper.handler) {
+                    helper.setTextureSize(newWidth, newHeight)
+                }
+            }
+            videoSource?.adaptOutputFormat(newWidth, newHeight, newFps)
+            presentationCapturer?.updateResolution(newWidth, newHeight, newDensity)
             screenCapturer?.changeCaptureFormat(newWidth, newHeight, newFps)
-            Log.i(TAG, "WebRTC capture resolution changed to ${newWidth}x${newHeight}")
+            sendConfig()
+            Log.i(TAG, "✓ WebRTC capture resolution changed cleanly to ${newWidth}x${newHeight} (dpi=$newDensity)")
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to change WebRTC capture resolution: ${e.message}")
+            Log.w(TAG, "Failed to change WebRTC capture resolution: ${e.message}", e)
         }
     }
 
-    fun sendAudio(data: ByteArray, length: Int) {
+    @Volatile
+    private var isDroppingGop = false
+    @Volatile
+    private var gopDropStartTime = 0L
+
+    fun sendVideoPacket(data: ByteArray, isKeyFrame: Boolean) {
         val dc = dataChannel ?: return
         if (dc.state() != DataChannel.State.OPEN) return
-        if (dc.bufferedAmount() > 128 * 1024L) return // 버퍼 폭주 방지
+        val buffered = dc.bufferedAmount()
+        val now = android.os.SystemClock.elapsedRealtime()
+
+        // 1. 소켓 버퍼가 1MB(1024*1024) 이상 적체된 경우에만 네트워크 혼잡으로 판단
+        if (buffered > 1024 * 1024L) {
+            if (!isDroppingGop) {
+                isDroppingGop = true
+                gopDropStartTime = now
+                Log.w(TAG, "⚠️ WebRTC DataChannel 버퍼 과적체 (${buffered / 1024}KB) -> GOP 드롭 모드 진입 및 키프레임 요청")
+                io.mmirror.MediaProjectionService.instance?.requestKeyFrame()
+            }
+        }
+
+        if (isDroppingGop) {
+            val dropDuration = now - gopDropStartTime
+            if (dropDuration > 800L || buffered < 256 * 1024L || isKeyFrame) {
+                // 키프레임 도착, 버퍼 해소(<256KB), 또는 800ms 경과 시 GOP 드롭 모드 즉각 해제 및 전송 재개
+                isDroppingGop = false
+            } else {
+                // 신규 키프레임이 도착할 때까지 중간 델타 프레임만 드롭
+                return
+            }
+        }
 
         try {
-            val packet = ByteArray(1 + length)
-            packet[0] = 0x02 // PKT_TYPE_AUDIO
-            System.arraycopy(data, 0, packet, 1, length)
+            val packet = ByteArray(1 + data.size)
+            packet[0] = 0x01 // PKT_TYPE_VIDEO
+            System.arraycopy(data, 0, packet, 1, data.size)
             val buffer = DataChannel.Buffer(java.nio.ByteBuffer.wrap(packet), true)
             dc.send(buffer)
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to send audio via DataChannel: ${e.message}")
-        }
+        } catch (_: Exception) {}
+    }
+
+    fun sendAudio(@Suppress("UNUSED_PARAMETER") data: ByteArray, @Suppress("UNUSED_PARAMETER") length: Int) {
+        // 차량 블루투스(A2DP) 직결 우선권 보장을 위해 브라우저 오디오 전송 비활성화
     }
 
     fun sendGps(json: String) {

@@ -56,7 +56,7 @@
                         android:paddingTop="2dp"
                         android:paddingEnd="7dp"
                         android:paddingBottom="2dp"
-                        android:text="v1.2.3"
+                        android:text="v1.0.0"
                         android:textColor="#3498db"
                         android:textSize="11sp"
                         android:textStyle="bold" />
@@ -75,6 +75,7 @@
                 android:id="@+id/btnOpenTripLog"
                 android:layout_width="wrap_content"
                 android:layout_height="38dp"
+                android:visibility="gone"
                 android:backgroundTint="#151b22"
                 android:paddingStart="10dp"
                 android:paddingEnd="10dp"
@@ -86,6 +87,77 @@
                 app:strokeColor="#243b53"
                 app:strokeWidth="1dp" />
         </LinearLayout>
+
+        <!-- 🚀 최신 버전 업데이트 알림 배너 (버전 불일치 시 동적 표시) -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardUpdateNotice"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:visibility="gone"
+            app:cardBackgroundColor="#2c1a06"
+            app:cardCornerRadius="14dp"
+            app:cardElevation="0dp"
+            app:strokeColor="#f59e0b"
+            app:strokeWidth="1.5dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="14dp"
+                android:paddingTop="12dp"
+                android:paddingEnd="14dp"
+                android:paddingBottom="12dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🚀"
+                    android:textSize="22sp" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/tvUpdateNoticeTitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="최신 버전 업데이트 안내"
+                        android:textColor="#fbbf24"
+                        android:textSize="13.5sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvUpdateNoticeDesc"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="최신 버전이 출시되었습니다. Google Play 스토어에서 최신 버전으로 업데이트하세요."
+                        android:textColor="#d1d5db"
+                        android:textSize="11.5sp" />
+                </LinearLayout>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnDownloadUpdate"
+                    style="@style/Widget.Material3.Button.TonalButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="38dp"
+                    android:backgroundTint="#f59e0b"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:text="업데이트"
+                    android:textColor="#000000"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    app:cornerRadius="8dp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
 
         <!-- 🚗 테슬라 접속 주소 메인 히어로 카드 -->
         <com.google.android.material.card.MaterialCardView
@@ -138,7 +210,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="10dp"
-                    android:text="https://rnd.mplat.store:9999"
+                    android:text="https://mplat-mirror.web.app"
                     android:textColor="#ffffff"
                     android:textSize="20sp"
                     android:textStyle="bold" />
@@ -148,7 +220,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
-                    android:text="보조: https://teslamirror.net:9999  |  https://mdm.mplat.store:9999"
+                    android:text="태블릿/PC: http://192.168.43.1:8282"
                     android:textColor="#3498db"
                     android:textSize="12sp" />
 
@@ -245,7 +317,67 @@
                     android:layout_marginBottom="12dp"
                     android:background="#22252e" />
 
-                <!-- 2. WebRTC 로컬 P2P 연결 상태 -->
+                <!-- 2. 차량 블루투스 오디오 (고음질 A2DP) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🎧 차량 블루투스 오디오"
+                            android:textColor="#ecf0f1"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/tvBluetoothStatus"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="블루투스 상태 확인 중..."
+                            android:textColor="#a0a5b1"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnOpenBluetooth"
+                        android:layout_width="wrap_content"
+                        android:layout_height="38dp"
+                        android:backgroundTint="#2980b9"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
+                        android:text="블루투스 설정"
+                        android:textColor="#ffffff"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        app:cornerRadius="8dp" />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="※ 오디오(내비/음악)는 차량 블루투스(A2DP)로 0딜레이 무손실 직결 출력됩니다."
+                    android:textColor="#3498db"
+                    android:textSize="11sp" />
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginBottom="12dp"
+                    android:background="#22252e" />
+
+                <!-- 3. WebRTC 로컬 P2P 연결 상태 -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -319,7 +451,8 @@
                     android:layout_marginBottom="12dp"
                     android:background="#22252e" />
 
-                <!-- 3. 양방향 터치 제어 (접근성) -->
+
+                <!-- 4. 양방향 터치 제어 (안드로이드 공식 접근성 서비스) -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -345,21 +478,22 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="2dp"
-                            android:text="테슬라 화면 터치 시 스마트폰 조작"
+                            android:text="접근성 서비스 상태 확인 중..."
                             android:textColor="#a0a5b1"
                             android:textSize="12sp" />
                     </LinearLayout>
 
                     <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnEnableAccessibility"
+                        android:id="@+id/btnOpenAccessibilitySettings"
                         android:layout_width="wrap_content"
                         android:layout_height="38dp"
-                        android:backgroundTint="#2d303a"
+                        android:backgroundTint="#3498db"
                         android:paddingStart="12dp"
                         android:paddingEnd="12dp"
-                        android:text="권한 설정"
+                        android:text="접근성 켜기"
                         android:textColor="#ffffff"
                         android:textSize="12sp"
+                        android:textStyle="bold"
                         app:cornerRadius="8dp" />
                 </LinearLayout>
 
@@ -370,7 +504,7 @@
                     android:layout_marginBottom="12dp"
                     android:background="#22252e" />
 
-                <!-- 4. 초저지연 무선 디버깅 (Wireless Debugging / ADB) -->
+                <!-- 4-1. 티맵/내비 화면 자동 절전 (시스템 설정 변경 권한) -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -386,29 +520,136 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="🛠️ 무선 디버깅 (0ms 터치)"
+                            android:text="🌙 내비/티맵 화면 절전 (밝기 제어)"
                             android:textColor="#ecf0f1"
                             android:textSize="14sp"
                             android:textStyle="bold" />
 
                         <TextView
-                            android:id="@+id/tvWirelessDebuggingStatus"
+                            android:id="@+id/tvWriteSettingsStatus"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="2dp"
-                            android:text="무선 디버깅(ADB) / Shizuku 상태 확인 중..."
+                            android:text="설정 권한 확인 중..."
                             android:textColor="#a0a5b1"
                             android:textSize="12sp" />
                     </LinearLayout>
 
                     <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnOpenWirelessDebugging"
+                        android:id="@+id/btnOpenWriteSettings"
                         android:layout_width="wrap_content"
                         android:layout_height="38dp"
-                        android:backgroundTint="#27ae60"
+                        android:backgroundTint="#9b59b6"
                         android:paddingStart="12dp"
                         android:paddingEnd="12dp"
-                        android:text="무선디버깅 켜기"
+                        android:text="권한 허용"
+                        android:textColor="#ffffff"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        app:cornerRadius="8dp" />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="💡 권한 허용 시 티맵 등 다른 앱 실행 중에도 테슬라 [절전] 버튼으로 스마트폰 화면 밝기를 최저(1)로 암전하여 배터리·발열을 방지합니다."
+                    android:textColor="#9b59b6"
+                    android:textSize="11sp" />
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginBottom="12dp"
+                    android:background="#22252e" />
+
+                <!-- 5. 차량 자동 잠금 해제 & 화면 유지 (Smart Lock) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🔓 차량 잠금 해제 (Smart Lock)"
+                            android:textColor="#ecf0f1"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/tvSmartLockStatus"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="테슬라 BT 연결 시 자동 잠금 해제"
+                            android:textColor="#a0a5b1"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnOpenSmartLock"
+                        android:layout_width="wrap_content"
+                        android:layout_height="38dp"
+                        android:backgroundTint="#8e44ad"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
+                        android:text="Smart Lock 설정"
+                        android:textColor="#ffffff"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        app:cornerRadius="8dp" />
+                </LinearLayout>
+
+                <!-- 📱 폴더블 폰 전용: 커버 화면 앱 연속 사용 바로가기 -->
+                <LinearLayout
+                    android:id="@+id/layoutFoldContinuity"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:visibility="gone">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="갤럭시 Z (폴드/플립) 커버 화면 앱 계속 사용"
+                            android:textColor="#ffffff"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="폰을 접어도 미러링 중단 없이 유지"
+                            android:textColor="#a0a5b1"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnOpenFoldContinuity"
+                        android:layout_width="wrap_content"
+                        android:layout_height="38dp"
+                        android:backgroundTint="#2980b9"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
+                        android:text="설정 열기"
                         android:textColor="#ffffff"
                         android:textSize="12sp"
                         android:textStyle="bold"
@@ -416,40 +657,47 @@
                 </LinearLayout>
 
                 <LinearLayout
-                    android:id="@+id/layoutShizukuActions"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
                     android:gravity="center_vertical"
-                    android:orientation="horizontal"
-                    android:visibility="gone">
+                    android:orientation="horizontal">
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnShizukuPermission"
-                        style="@style/Widget.Material3.Button.OutlinedButton"
+                    <TextView
                         android:layout_width="0dp"
-                        android:layout_height="36dp"
+                        android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="Shizuku 권한 승인"
-                        android:textColor="#2ecc71"
-                        android:textSize="11sp"
-                        app:cornerRadius="8dp"
-                        app:strokeColor="#2ecc71"
-                        app:strokeWidth="1dp" />
+                        android:text="미러링 중 화면 꺼짐 방지 (Stay Awake)"
+                        android:textColor="#cbd5e1"
+                        android:textSize="12sp" />
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnOpenShizukuApp"
-                        style="@style/Widget.Material3.Button.OutlinedButton"
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/switchStayAwake"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
                         android:layout_width="0dp"
-                        android:layout_height="36dp"
-                        android:layout_marginStart="6dp"
+                        android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="Shizuku 앱 열기"
-                        android:textColor="#3498db"
-                        android:textSize="11sp"
-                        app:cornerRadius="8dp"
-                        app:strokeColor="#3498db"
-                        app:strokeWidth="1dp" />
+                        android:text="미러링 중 화면 잠금 자동 해제 유지"
+                        android:textColor="#cbd5e1"
+                        android:textSize="12sp" />
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/switchAutoDismissKeyguard"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true" />
                 </LinearLayout>
 
             </LinearLayout>
@@ -509,7 +757,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
                     android:lineSpacingExtra="4dp"
-                    android:text="1️⃣ 스마트폰 모바일 핫스팟 켜기 &amp; 테슬라 Wi-Fi 연결\n     ⚠️ 필수: 테슬라 Wi-Fi 설정에서 [D 기어 시 연결 유지] 체크!\n2️⃣ 아래 파란색 [미러링 시작] 터치 (화면 캡처 허용)\n3️⃣ 테슬라 브라우저에서 https://mdm.mplat.store:8088 접속\n     (0MB 데이터 WebRTC 로컬 P2P로 1초 만에 즉시 연결!)"
+                    android:text="1️⃣ 스마트폰 모바일 핫스팟 켜기 &amp; 테슬라 Wi-Fi 연결\n     ⚠️ 필수: 테슬라 Wi-Fi 설정에서 [D 기어 시 연결 유지] 체크!\n2️⃣ 아래 파란색 [미러링 시작] 터치 (화면 캡처 허용)\n3️⃣ 테슬라 브라우저에서 https://mplat-mirror.web.app 접속\n     (0MB 데이터 WebRTC 로컬 P2P로 1초 만에 즉시 연결!)"
                     android:textColor="#cbd5e1"
                     android:textSize="12sp" />
 
@@ -529,18 +777,273 @@
             android:layout_height="0dp"
             android:layout_weight="1" />
 
+        <!-- 송출 해상도 선택 카드 -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardResolutionPreset"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            app:cardBackgroundColor="#131e29"
+            app:cardCornerRadius="14dp"
+            app:strokeColor="#243b53"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="📺 송출 해상도 설정"
+                        android:textColor="#ffffff"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvCurrentResolutionBadge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="#1f3498db"
+                        android:paddingStart="8dp"
+                        android:paddingTop="3dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="3dp"
+                        android:text="720p HD"
+                        android:textColor="#3498db"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvCurrentResolutionDesc"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="📱 스마트폰 원본 비율 유지 (여백 0% · 60 FPS)\n720p HD 초저지연 하드웨어 인코딩으로 화면 끊김/지직거림 완벽 방지"
+                    android:textColor="#8e9aa8"
+                    android:textSize="12sp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:background="#152ecc71"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="12dp"
+                    android:paddingTop="10dp"
+                    android:paddingEnd="12dp"
+                    android:paddingBottom="10dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="✓ "
+                        android:textColor="#2ecc71"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="스마트폰 화면 720p HD (60 FPS) 최적화 적용됨"
+                        android:textColor="#2ecc71"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- 가상화면(CarPlay 스타일) vs 일반 미러링 선택 스위치 (무선디버깅 제거로 일반 미러링 모드 기본화) -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardVirtualDisplayMode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:visibility="gone"
+            app:cardBackgroundColor="#131e29"
+            app:cardCornerRadius="14dp"
+            app:strokeColor="#243b53"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:padding="14dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/tvVirtualDisplayTitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🖥️ 테슬라 전용 가상화면 (CarPlay 스타일)"
+                        android:textColor="#ffffff"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvVirtualDisplayDesc"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="폰 화면과 분리된 독립 가상화면"
+                        android:textColor="#8e9aa8"
+                        android:textSize="11sp" />
+                </LinearLayout>
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switchVirtualDisplay"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="false" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- 미지원 앱 자동 미러링 전환 스위치 카드 -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardAutoMirror"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:visibility="gone"
+            app:cardBackgroundColor="#1a2230"
+            app:cardCornerRadius="12dp"
+            app:strokeColor="#2d3748"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:padding="14dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="⚡ 미지원 앱 자동 미러링 전환"
+                        android:textColor="#ffffff"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="티맵 등 가상화면 미지원 앱 실행 시 폰 화면 미러링으로 0초 자동 전환"
+                        android:textColor="#8e9aa8"
+                        android:textSize="11sp" />
+                </LinearLayout>
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switchAutoMirror"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="true" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+
+        <!-- 8. 적응형 스트리밍 자동 조절 (ABR) -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardAdaptiveBitrate"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            app:cardBackgroundColor="#161922"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="0dp"
+            app:strokeColor="#22252e"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:padding="14dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="⚡ 적응형 스트리밍 자동 최적화 (ABR)"
+                        android:textColor="#ffffff"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="Wi-Fi 전송속도와 지연시간을 감지하여 비트레이트와 FPS를 실시간 자동 최적화합니다"
+                        android:textColor="#8e9aa8"
+                        android:textSize="11sp" />
+                </LinearLayout>
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switchAdaptiveBitrate"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="true" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+
         <!-- 메인 토글 버튼 -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnToggleMirroring"
             android:layout_width="match_parent"
             android:layout_height="56dp"
-            android:layout_marginTop="20dp"
-            android:layout_marginBottom="16dp"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="10dp"
             android:backgroundTint="#3498db"
             android:text="미러링 시작"
             android:textColor="#ffffff"
             android:textSize="16sp"
             android:textStyle="bold"
+            app:cornerRadius="12dp" />
+
+        <!-- 스마트폰 화면 끄기 (초절전 암전 모드) 버튼 -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnDimScreen"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginBottom="16dp"
+            android:backgroundTint="#2d303a"
+            android:text="🌙 스마트폰 화면 끄기 (초절전 암전)"
+            android:textColor="#ffffff"
+            android:textSize="14sp"
+            android:visibility="gone"
             app:cornerRadius="12dp" />
 
         <!-- 라이선스 & 버전 정보 푸터 -->
@@ -555,7 +1058,7 @@
                 android:id="@+id/tvVersionInfo"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="mplat Mirror v1.2.3 · 0MB 초저지연 로컬 터널"
+                android:text="mplat Mirror v1.0.0 · 0MB 초저지연 로컬 P2P"
                 android:textColor="#888e9b"
                 android:textSize="12sp" />
 
@@ -567,15 +1070,22 @@
                 android:textColor="#555a66"
                 android:textSize="11sp" />
 
-            <TextView
-                android:id="@+id/btnViewLicenses"
+            <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
-                android:padding="6dp"
-                android:text="📜 오픈소스 라이선스 정보"
-                android:textColor="#3498db"
-                android:textSize="12sp" />
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/btnViewLicenses"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:padding="6dp"
+                    android:text="📜 오픈소스 라이선스"
+                    android:textColor="#3498db"
+                    android:textSize="12sp" />
+            </LinearLayout>
         </LinearLayout>
 
     </LinearLayout>

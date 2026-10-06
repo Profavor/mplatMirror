@@ -1,3 +1,9 @@
+//! ⚠️ DEPRECATED: TUN VPN 프록시 (레거시)
+//!
+//! WebRTC P2P 로컬 직결 방식으로 완전히 대체되었습니다.
+//! 이 모듈은 호환성을 위해 유지되지만, 통상적인 차량 미러링에서는 사용하지 않습니다.
+//! Kotlin 쪽 `NativeBridge.startTunProxy`/`stopTunProxy`도 `@Deprecated` 처리 완료.
+
 use std::io;
 use std::os::unix::io::{AsRawFd, FromRawFd, RawFd};
 use std::pin::Pin;
@@ -157,7 +163,7 @@ pub fn start_tun_proxy(fd: i32, target_port: u16) -> bool {
                                         let dest_port = match local_port {
                                             9999 | 9998 | 8443 | 7679 => local_port,
                                             7777 => 7777,
-                                            8080 => 8080,
+                                            8282 | 8080 => local_port,
                                             8088 => 8088,
                                             _ => 9999,
                                         };
@@ -228,7 +234,7 @@ mod tests {
         let (s1, _s2) = std::os::unix::net::UnixStream::pair().unwrap();
         use std::os::unix::io::IntoRawFd;
         let fd = s1.into_raw_fd();
-        let res = start_tun_proxy(fd, 8080);
+        let res = start_tun_proxy(fd, 8282);
         assert!(res);
         tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
         stop_tun_proxy();

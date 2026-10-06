@@ -2,342 +2,347 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>mplat Mirror - 테슬라 미러링 APK 다운로드 (v1.2.0)</title>
-    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-    <style>
-        :root {
-            --bg-color: #0b0c10;
-            --card-bg: #16171d;
-            --accent-color: #3498db;
-            --accent-hover: #2980b9;
-            --text-color: #ffffff;
-            --subtext: #8e94a5;
-            --border-color: #272b35;
-            --success-color: #2ecc71;
-        }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background: var(--bg-color);
-            color: var(--text-color);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            padding: 24px;
-        }
-        .container {
-            max-width: 560px;
-            width: 100%;
-            background: var(--card-bg);
-            border-radius: 24px;
-            padding: 36px 28px;
-            box-shadow: 0 24px 60px rgba(0,0,0,0.8), 0 0 30px rgba(52, 152, 219, 0.15);
-            border: 1px solid var(--border-color);
-            text-align: center;
-        }
-        .logo-wrap {
-            margin-bottom: 16px;
-        }
-        .app-logo {
-            width: 90px;
-            height: 90px;
-            border-radius: 20px;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.6);
-            border: 2px solid rgba(255,255,255,0.15);
-        }
-        h1 {
-            font-size: 28px;
-            font-weight: 800;
-            margin-bottom: 6px;
-            letter-spacing: -0.5px;
-            color: #ffffff;
-        }
-        .version-badge {
-            display: inline-block;
-            background: rgba(52, 152, 219, 0.18);
-            color: #3498db;
-            font-size: 13px;
-            font-weight: 700;
-            padding: 3px 10px;
-            border-radius: 12px;
-            border: 1px solid rgba(52, 152, 219, 0.4);
-            margin-bottom: 12px;
-        }
-        p.subtitle {
-            color: var(--subtext);
-            font-size: 15px;
-            margin-bottom: 20px;
-            line-height: 1.5;
-        }
-        .badge-list {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            justify-content: center;
-            margin-bottom: 26px;
-        }
-        .badge {
-            background: rgba(255, 255, 255, 0.05);
-            color: #b8beca;
-            padding: 6px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 500;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-        .download-btn {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 12px;
-            background: var(--accent-color);
-            color: white;
-            padding: 17px 28px;
-            border-radius: 14px;
-            font-size: 17px;
-            font-weight: 700;
-            text-decoration: none;
-            transition: all 0.2s ease;
-            box-shadow: 0 6px 20px rgba(52, 152, 219, 0.4);
-            margin-bottom: 14px;
-        }
-        .download-btn:hover {
-            background: var(--accent-hover);
-            transform: translateY(-2px);
-            box-shadow: 0 8px 24px rgba(52, 152, 219, 0.6);
-        }
-        .secondary-link {
-            display: inline-block;
-            font-size: 13px;
-            color: var(--subtext);
-            text-decoration: none;
-            margin-bottom: 24px;
-            transition: color 0.15s;
-        }
-        .secondary-link:hover {
-            color: #3498db;
-        }
-        .file-meta {
-            font-size: 13px;
-            color: var(--subtext);
-            margin-bottom: 24px;
-        }
-        .qr-section {
-            background: rgba(255, 255, 255, 0.03);
-            border-radius: 16px;
-            padding: 20px;
-            margin-bottom: 24px;
-            border: 1px solid var(--border-color);
-        }
-        .qr-section h3 {
-            font-size: 14px;
-            color: var(--subtext);
-            margin-bottom: 14px;
-            font-weight: 500;
-        }
-        #qrcode {
-            display: inline-block;
-            background: white;
-            padding: 12px;
-            border-radius: 12px;
-        }
-        .guide-box {
-            text-align: left;
-            background: rgba(0, 0, 0, 0.4);
-            border-radius: 14px;
-            padding: 18px 20px;
-            font-size: 13px;
-            line-height: 1.6;
-            color: #b0b5c2;
-            border-left: 4px solid var(--accent-color);
-            margin-bottom: 24px;
-        }
-        .guide-box strong {
-            color: #ffffff;
-        }
-        .guide-box ol {
-            padding-left: 20px;
-            margin-top: 8px;
-        }
-        .guide-box li {
-            margin-bottom: 6px;
-        }
-        .footer-legal {
-            border-top: 1px solid rgba(255, 255, 255, 0.08);
-            padding-top: 16px;
-            font-size: 12px;
-            color: #646a78;
-            line-height: 1.6;
-        }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>mplat Mirror - 테슬라 무선 미러링</title>
+    <link rel="stylesheet" href="leaflet.css">
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="container">
-        <div class="logo-wrap">
-            <img src="app_logo.png" alt="mplat Mirror" class="app-logo">
+    <div id="appContainer">
+        <!-- 상단 헤더 / 정보 바 (상단 완전 고정 및 플레이어와 절대 안 겹침) -->
+        <header id="topBar">
+            <div class="status-indicator">
+                <span id="statusDot" class="dot disconnected"></span>
+                <span id="statusText">연결 대기 중...</span>
+                <span class="app-version-badge">v1.2.7</span>
+                <span id="versionMismatchBadge" class="badge-mismatch" style="display:none;" title="스마트폰 앱 버전 불일치">⚠️ 앱 v<span id="mismatchAppVer"></span> 업데이트 필요</span>
+                <span id="modeBadge" class="badge-mode" style="display:none;"></span>
+            </div>
+
+            <div class="metrics">
+                <button id="btnFitMode" class="btn-fit-mode" title="화면 맞춤 방식 (좌측 밀착 / 꽉 채움 / 스마트 줌 / 중앙 정렬)">🚗 좌측 밀착</button>
+                <span id="resolutionInfo">-- x --</span>
+                <span id="fpsInfo">0 FPS</span>
+                <span id="bitrateInfo">-- Mbps</span>
+                <span id="latencyInfo">-- ms</span>
+            </div>
+        </header>
+
+        <!-- 테슬라 맞춤형 우측 고정 앱 팔레트 (CarPlay Dock) -->
+        <aside id="appDock" class="app-dock">
+            <div class="dock-top-section">
+                <button class="dock-item-btn" id="btnDockHome" title="테슬라 홈 대시보드 (시계/날씨)">
+                    <span class="dock-emoji">⌂</span>
+                    <span class="dock-text">홈</span>
+                </button>
+                <button class="dock-item-btn" id="btnDockMirror" title="스마트폰 화면 1:1 미러링 보기">
+                    <span class="dock-emoji">📱</span>
+                    <span class="dock-text">미러링</span>
+                </button>
+            </div>
+            <div class="dock-divider"></div>
+            <div class="dock-scroll-container">
+                <div class="dock-section-title">앱</div>
+                <div id="dockAppsContainer" class="dock-apps-container">
+                    <!-- 자바스크립트로 동적 렌더링 -->
+                </div>
+                <button class="dock-item-btn dock-manage-btn" id="btnOpenAppManager" title="팔레트 앱 추가 및 편집">
+                    <span class="dock-emoji">➕</span>
+                    <span class="dock-text">추가</span>
+                </button>
+            </div>
+            <div class="dock-divider"></div>
+            <div class="dock-bottom-section">
+                <button class="dock-item-btn" id="dockBtnTextInput" title="테슬라 키보드로 스마트폰에 텍스트/목적지 입력">
+                    <span class="dock-emoji">⌨️</span>
+                    <span class="dock-text">입력</span>
+                </button>
+                <button class="dock-item-btn dock-power-btn" id="dockBtnScreenPower" title="스마트폰 화면 초절전(암전) / 밝기 복원">
+                    <span class="dock-emoji" id="dockScreenPowerEmoji">🌙</span>
+                    <span class="dock-text" id="dockScreenPowerText">절전</span>
+                </button>
+            </div>
+        </aside>
+
+        <!-- 메인 뷰어 영역 -->
+        <main id="viewportContainer">
+            <!-- 순수 캔버스 60 FPS 초저지연 하드웨어 가속 렌더러 (테슬라 오디오 간섭 0%) -->
+            <canvas id="videoCanvas" class="fit-left"></canvas>
+
+            <!-- 테슬라 전용 홈 대시보드 (시계, 실시간 GPS 날씨, 주행 요약, 앱 런처) -->
+            <div id="homeDashboard" class="home-dashboard">
+                <div class="dashboard-scroll-wrap">
+                    <!-- 상단 위젯 그리드 (시계, 실시간 날씨, 주행 요약) -->
+                    <div class="dashboard-widgets-grid">
+                        <!-- 위젯 1: 대형 디지털 시계 & 캘린더 -->
+                        <div class="dash-card clock-card">
+                            <div class="clock-time-row">
+                                <span id="dashClockTime" class="dash-clock-time">12:00</span>
+                                <span id="dashClockSec" class="dash-clock-sec">00</span>
+                                <span id="dashClockAmPm" class="dash-clock-ampm">PM</span>
+                            </div>
+                            <div class="clock-date-row">
+                                <span id="dashClockDate" class="dash-clock-date">2026년 10월 2일 금요일</span>
+                            </div>
+                        </div>
+
+                        <!-- 위젯 2: 실시간 GPS 날씨 카드 -->
+                        <div class="dash-card weather-card" id="dashWeatherCard">
+                            <div class="weather-top-row">
+                                <span id="dashWeatherIcon" class="weather-icon">☀️</span>
+                                <div class="weather-temp-wrap">
+                                    <div class="weather-temp-row">
+                                        <span id="dashWeatherTemp" class="weather-temp">--</span>
+                                        <span class="weather-unit">°C</span>
+                                    </div>
+                                    <span id="dashWeatherDesc" class="weather-desc">날씨 수신 중...</span>
+                                </div>
+                            </div>
+                            <div class="weather-bottom-row">
+                                <span id="dashWeatherLocation" class="weather-location">📍 위치 확인 중...</span>
+                                <span id="dashWeatherRange" class="weather-range">최저 --° / 최고 --°</span>
+                            </div>
+                        </div>
+
+                        <!-- 위젯 3: 오늘의 주행 통계 & HUD (비활성화) -->
+                        <div class="dash-card trip-card" id="dashTripCard" style="display: none;">
+                            <div class="trip-card-header">
+                                <span class="trip-title">🚗 오늘의 주행</span>
+                                <button id="btnDashTripLog" class="btn-dash-action" title="주행일지 & 지도 보기">주행일지 ➔</button>
+                            </div>
+                            <div class="trip-stats-grid">
+                                <div class="trip-stat-item">
+                                    <span class="trip-val" id="dashTripDist">0.0</span>
+                                    <span class="trip-lbl">km 주행</span>
+                                </div>
+                                <div class="trip-stat-item">
+                                    <span class="trip-val" id="dashTripTime">00:00</span>
+                                    <span class="trip-lbl">주행 시간</span>
+                                </div>
+                                <div class="trip-stat-item">
+                                    <span class="trip-val" id="dashTripSpeed">0</span>
+                                    <span class="trip-lbl">km/h 현재</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 1:1 스마트폰 미러링 바로가기 배너 -->
+                    <div class="dash-mirror-banner" id="btnDashEnterMirror" title="스마트폰 화면 1:1 미러링 바로보기">
+                        <div class="banner-left">
+                            <span class="banner-icon">📱</span>
+                            <div class="banner-text">
+                                <strong>스마트폰 화면 1:1 미러링</strong>
+                                <span>현재 스마트폰에 떠있는 화면을 테슬라 화면에서 직접 조작합니다</span>
+                            </div>
+                        </div>
+                        <button class="btn-banner-go">화면 보기 ➔</button>
+                    </div>
+
+                    <!-- 하단 앱 런처 섹션 -->
+                    <div class="dash-apps-section">
+                        <div class="dash-apps-header">
+                            <span class="dash-section-title">자주 쓰는 앱 바로가기</span>
+                            <span class="dash-section-sub">터치하면 폰에서 실행되고 1:1 미러링으로 자동 전환됩니다</span>
+                        </div>
+                        <div id="dashAppsGrid" class="dash-apps-grid">
+                            <!-- JS로 동적 렌더링 -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 플로팅 줌 컨트롤러 (테슬라 운전자 전용 원터치 확대/축소) -->
+            <div id="floatingZoomControls" class="floating-zoom-controls">
+                <button id="btnZoomIn" class="zoom-btn" title="화면 확대 (Zoom In)">+</button>
+                <div class="zoom-divider"></div>
+                <button id="btnZoomOut" class="zoom-btn" title="화면 축소 (Zoom Out)">−</button>
+            </div>
+
+            <!-- 연결 대기 및 이지 가이드 오버레이 -->
+            <div id="disconnectOverlay" class="overlay">
+                <div class="overlay-card guide-card">
+                    <div class="guide-header">
+                        <img src="logo.png" alt="mplat Mirror Logo" class="guide-logo">
+                        <div class="guide-title-box">
+                            <h2 id="overlayTitle"><span id="overlayTitleText">mplat Mirror 테슬라 연결 가이드</span> <span class="badge-version">v1.2.7</span></h2>
+                            <p class="guide-sub">컴퓨터 연결이나 개발자 모드 없이 3초 만에 시작하세요</p>
+                        </div>
+                    </div>
+                    
+                    <div class="guide-steps">
+                        <div class="guide-step-item step-done">
+                            <div class="step-num">✓</div>
+                            <div class="step-content">
+                                <strong>1단계: 차량 핫스팟 및 블루투스 확인</strong>
+                                <span>테슬라 Wi-Fi를 스마트폰 핫스팟에 연결하고 차량 블루투스를 켜두세요. (고음질 무손실 출력)</span>
+                            </div>
+                        </div>
+                        <div class="guide-step-item step-active">
+                            <div class="step-num">2</div>
+                            <div class="step-content">
+                                <strong>2단계: 스마트폰에서 [미러링 시작] 터치</strong>
+                                <span id="overlayMessage">스마트폰 mplat Mirror 앱에서 파란색 <strong>[미러링 시작]</strong> 버튼을 누르고 <strong>'지금 시작'</strong>을 선택하세요.</span>
+                            </div>
+                        </div>
+                        <div class="guide-step-item">
+                            <div class="step-num">3</div>
+                            <div class="step-content">
+                                <strong>3단계: 테슬라 대화면 60FPS 감상 &amp; 드라이빙</strong>
+                                <span>초저지연 60FPS로 티맵 내비게이션과 미디어를 대화면으로 감상하세요!</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="guide-tips">
+                        <span>💡 <strong>운전자 꿀팁</strong>: 현재 주소를 테슬라 브라우저 <strong>★ 즐겨찾기(북마크)</strong>에 등록해두시면 다음부터 원클릭 접속됩니다!</span>
+                        <span style="display:block; margin-top:6px; color:#60a5fa;">🔊 <strong>차량 사운드 안내</strong>: 차량 화면 하단 미디어 소스를 <strong>[블루투스]</strong>로 선택하시면 스마트폰 티맵 내비 음성과 음악이 차 스피커로 즉시 출력됩니다.</span>
+                        <div id="overlayVersionWarning" class="guide-version-warning" style="display: none; margin-top: 8px; background: rgba(245, 158, 11, 0.15); border: 1px solid #f59e0b; border-radius: 8px; padding: 10px; font-size: 12px; color: #fbbf24;">
+                            ⚠️ <strong>스마트폰 앱 업데이트 안내</strong>: 연결된 스마트폰의 앱 버전(v<span id="overlayMismatchVer"></span>)이 최신 버전(v1.2.7)과 일치하지 않습니다. 안정적인 60FPS 전송을 위해 <a href="https://play.google.com/store/apps/details?id=io.mmirror" target="_blank" style="color:#60a5fa; text-decoration:underline; font-weight:bold;">Google Play 스토어</a> 또는 <a href="/dist/mplatMirror.apk" style="color:#38bdf8; text-decoration:underline; font-weight:bold;">직접 APK 다운로드</a>로 최신 앱으로 업데이트해 주세요.
+                        </div>
+                    </div>
+
+
+                    <div class="guide-footer-status">
+                        <div class="spinner-small"></div>
+                        <span id="overlayFooterText">스마트폰의 [미러링 시작] 신호를 기다리는 중...</span>
+                    </div>
+
+                    <div class="guide-legal">
+                        <div class="guide-legal-disclaimer" style="line-height: 1.5; margin-bottom: 8px; color: #8e9aa8; font-size: 10.5px;">
+                            <span>⚖️ <strong>도로교통법 제49조 준수</strong>: 운전 중 영상 시청 및 조작 금지 · 정차 중 또는 합법적 내비 안내 전용</span>
+                            <span style="display:block; margin-top:2px;">🏷️ 'Tesla', 'Apple CarPlay', 'TMAP'은 각 권리자의 등록상표이며 본 서비스와 공식 제휴 관계가 없습니다.</span>
+                            <span style="display:block; margin-top:2px;">🔒 이용자 데이터/위치 서버 미수집 (0MB 모바일 데이터 순수 로컬 P2P 직결)</span>
+                        </div>
+                        <span>mplat Mirror v1.2.7 · 0MB 초저지연 WebRTC 로컬 P2P 직결 · Copyright © 2026 mplat</span>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- 주행일지 & 지도 모달 (독립 팝업) -->
+        <div id="tripLogModal" class="modal-overlay hidden" style="display: none;">
+            <div class="modal-window">
+                <div class="modal-header">
+                    <div class="modal-title">
+                        <span class="modal-icon">🚗</span>
+                        <h2>테슬라 주행일지 &amp; GPS 지도</h2>
+                    </div>
+                    <button id="btnCloseTripModal" class="btn-close-modal" title="닫기">✕ 닫기</button>
+                </div>
+
+                <!-- 모달 내부 실시간 주행 HUD 바 -->
+                <div class="modal-hud-bar">
+                    <div class="hud-item speed-badge">
+                        <span id="hudSpeed">0</span>
+                        <small>km/h</small>
+                    </div>
+                    <div class="hud-item info-badge">
+                        <span class="badge-label">이번 주행거리</span>
+                        <span id="hudDistance">0.0 km</span>
+                    </div>
+                    <div class="hud-item info-badge">
+                        <span class="badge-label">주행 시간</span>
+                        <span id="hudDuration">00:00</span>
+                    </div>
+                </div>
+
+                <div class="modal-body">
+                    <div id="mapContainer"></div>
+                    <div id="tripSidebar">
+                        <div class="sidebar-header">
+                            <h3>주행 기록 목록</h3>
+                        </div>
+                        <div id="tripList" class="trip-list-scroll"></div>
+                        <div class="sidebar-footer">
+                            <button id="btnBottomCloseTripModal" class="btn-sidebar-close">✕ 닫고 미러링 복귀</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
-        <h1>mplat Mirror for Tesla</h1>
-        <div class="version-badge">v1.2.3 (Build 12) · Apache License 2.0</div>
-        <p class="subtitle">테슬라 차량 브라우저 전용 초저지연 안드로이드 미러링 솔루션</p>
 
-        <div class="badge-list">
-            <span class="badge">🚗 운전석 좌측 밀착</span>
-            <span class="badge">⚡ 0MB 로컬 초저지연 프록시</span>
-            <span class="badge">👁️ 몰입형 UI 3초 자동 숨김</span>
-            <span class="badge">📱 티맵 안전점수 100% 보장</span>
-            <span class="badge">✂️ 스마트 내비 분할 확대</span>
-            <span class="badge">👆 양방향 정밀 터치</span>
-            <span class="badge">🔊 차량 스피커 사운드</span>
-            <span class="badge">🚀 Rust NDK 엔진</span>
-        </div>
+        <!-- 가상화면 앱 팔레트 관리/편집 모달 (독립 팝업) -->
+        <div id="appManagerModal" class="modal-overlay hidden" style="display: none;">
+            <div class="overlay-card app-manager-card">
+                <div class="app-manager-header">
+                    <div class="app-manager-title-box">
+                        <h2>📱 가상화면 앱 관리</h2>
+                        <p class="app-manager-sub">우측 팔레트에 표시할 앱을 자유롭게 추가하거나 삭제할 수 있습니다.</p>
+                    </div>
+                    <button id="btnCloseAppManager" class="modal-close-btn" title="닫기">&times;</button>
+                </div>
 
-        <a href="mplatMirror.apk" class="download-btn" download="mplatMirror.apk">
-            <span>📥 mplatMirror.apk 다운로드 (최신 v1.2.3)</span>
-        </a>
+                <!-- 섹션 1: 현재 등록된 팔레트 앱 -->
+                <div class="app-manager-section">
+                    <div class="section-title-row">
+                        <span class="section-title">현재 팔레트 앱 목록 (<span id="dockAppCount">0</span>개)</span>
+                        <span class="section-hint">✕ 버튼을 누르면 팔레트에서 제거됩니다.</span>
+                    </div>
+                    <div id="managerCurrentApps" class="manager-apps-grid current-grid">
+                        <!-- 동적 렌더링 -->
+                    </div>
+                </div>
 
-        <a href="/mirror" style="display: flex; align-items: center; justify-content: center; gap: 8px; background: rgba(46, 204, 113, 0.15); color: #2ecc71; border: 1px solid rgba(46, 204, 113, 0.4); padding: 14px 24px; border-radius: 14px; font-weight: 700; text-decoration: none; margin-bottom: 16px; transition: all 0.2s;">
-            <span>🚗 테슬라 모니터 웹 뷰어 열기 (/mirror)</span>
-        </a>
+                <!-- 섹션 2: 스마트폰에 설치된 앱 추가 -->
+                <div class="app-manager-section">
+                    <div class="section-title-row">
+                        <span class="section-title">스마트폰 설치 앱 추가</span>
+                        <input type="text" id="appSearchInput" class="app-search-input" placeholder="🔍 앱 이름 검색...">
+                    </div>
+                    <div id="managerAvailableApps" class="manager-apps-grid available-grid">
+                        <!-- 동적 렌더링 -->
+                    </div>
+                </div>
 
-        <div class="file-meta">
-            <span>버전: v1.2.3</span> • <span>크기: ~27.8 MB</span> • <span>Android 10+ (API 29 이상)</span>
-        </div>
+                <!-- 섹션 3: 직접 패키지명 입력 추가 -->
+                <div class="app-manager-section custom-app-section">
+                    <details>
+                        <summary class="custom-app-summary">➕ 직접 패키지명으로 앱 추가하기</summary>
+                        <div class="custom-app-form">
+                            <input type="text" id="customAppName" placeholder="앱 이름 (예: 카카오톡)" class="custom-input">
+                            <input type="text" id="customAppPkg" placeholder="패키지명 (예: com.kakao.talk)" class="custom-input">
+                            <input type="text" id="customAppEmoji" placeholder="아이콘(이모지) (예: 💬)" class="custom-input-sm" maxlength="2">
+                            <button id="btnAddCustomApp" class="btn-primary-sm">추가</button>
+                        </div>
+                    </details>
+                </div>
 
-        <div class="qr-section">
-            <h3>스마트폰 카메라로 스캔하여 바로 다운로드</h3>
-            <div id="qrcode"></div>
-        </div>
-
-        <div class="guide-box">
-            <strong>💡 간편 4단계 연결 안내 (데이터 소모 0MB):</strong>
-            <ol>
-                <li>APK 다운로드 및 설치 후 <b>'알 수 없는 출처 앱'</b> 설치를 허용합니다.</li>
-                <li>스마트폰 <b>모바일 핫스팟</b>을 켜고, 테슬라 차량 Wi-Fi에 연결합니다. <i>(⚠️ 필수: 테슬라 Wi-Fi 설정에서 'D 기어 시 연결 유지' 체크)</i></li>
-                <li>앱에서 <b>[가상 프록시 켜기]</b> 및 <b>[미러링 시작]</b>을 누릅니다.</li>
-                <li>테슬라 브라우저 주소창에 <code>https://teslamirror.net:9999</code>를 입력하여 접속하면 운전석 좌측에 최적화된 풀스크린으로 즉시 미러링됩니다!</li>
-            </ol>
-        </div>
-
-        <div class="guide-box" style="border-left-color: #2ecc71; margin-bottom: 24px;">
-            <strong>📋 릴리즈 노트</strong>
-
-            <div style="margin-top: 12px;">
-                <div style="color: #2ecc71; font-weight: 700; font-size: 14px;">v1.2.3 — 2026.09.29 (최신 업데이트)</div>
-                <ul style="padding-left: 18px; margin: 6px 0 14px;">
-                    <li>📖 <b>앱 내 테슬라 연결 매뉴얼 최신화</b> — https://teslamirror.net:9999 로컬 프록시 기준 3단계 가이드 반영 및 팝업 상세 매뉴얼 추가</li>
-                    <li>⚠️ <b>테슬라 주행 중 Wi-Fi 끊김 방지 안내 추가</b> — 테슬라 Wi-Fi 'D(드라이브) 기어 시 연결 유지' 필수 체크리스트 강조</li>
-                    <li>📱 <b>갤럭시 폴드 화면 실시간 동적 해상도 재설정</b> — 폴드를 접거나 펼칠 때 중단 없이 테슬라 모니터에 최적화된 해상도로 즉시 자동 리사이징</li>
-                    <li>🚗 <b>운전석 좌측 밀착 (fit-left) &amp; 상단바 3초 자동 숨김</b> — 운전자 시인성 극대화 및 깔끔한 전체 화면 뷰어</li>
-                </ul>
-            </div>
-
-            <div>
-                <div style="color: #8e94a5; font-weight: 700; font-size: 14px;">v1.2.2 — 2026.09.29</div>
-                <ul style="padding-left: 18px; margin: 6px 0 14px;">
-                    <li>🚗 <b>운전석 좌측 밀착 (fit-left) 최적화</b> — 폰 화면 미러링 시 화면 중앙이 아닌 핸들과 운전석 바로 옆 좌측에 꽉 차게 정렬하여 시인성 및 한 손 터치 조작성 대폭 강화</li>
-                    <li>👁️ <b>몰입형 UI 3초 자동 숨김(오토 하이드)</b> — 툴바가 테슬라 화면을 가리지 않도록 3초 후 부드럽게 사라지는 100% 풀스크린 뷰어 탑재 (화면 가장자리 터치 시 즉시 복원)</li>
-                    <li>⚡ <b>원클릭 즉시 미러링 시작</b> — 번거로운 앱 선택 팝업 다이얼로그 및 테스트 버튼 완전 제거, 간결하고 직관적인 UI 개편</li>
-                    <li>👆 <b>테슬라 모니터 1:1 정밀 터치 좌표 역변환</b> — 좌측 정렬 및 풀스크린 확대 시에도 1:1 정확한 터치 반응 제공</li>
-                </ul>
-            </div>
-
-            <div>
-                <div style="color: #3498db; font-weight: 700; font-size: 14px;">v1.2.0 — 2026.09.28</div>
-                <ul style="padding-left: 18px; margin: 6px 0 14px;">
-                    <li>🚗 <b>티맵 안전점수 100% 적립 보장</b> — 가짜 웹 지도가 아닌 실제 티맵 앱 세션을 유지하여 자동차 보험료 할인 점수 완벽 적립</li>
-                    <li>✂️ <b>스마트 내비 분할 크롭(Crop) 모드 신설</b> — 갤럭시 분할화면 시 상단 티맵 영역만 2배 줌인하여 테슬라 모니터에 풀스크린 송출</li>
-                    <li>📱 <b>스마트폰 100% 자유 사용</b> — 폰 하단에서 카톡, 전화, 유튜브를 써도 테슬라 모니터에는 오직 티맵만 깨끗하게 표시</li>
-                </ul>
-            </div>
-
-            <div>
-                <div style="color: #8e94a5; font-weight: 700; font-size: 14px;">v1.1.6 — 2026.09.28</div>
-                <ul style="padding-left: 18px; margin: 6px 0 14px;">
-                    <li>🪟 원터치 자동 팝업 창(Pop-up Window) 실행 지원</li>
-                    <li>📱 스마트폰 동시 멀티태스킹 공간 확보</li>
-                </ul>
-            </div>
-
-            <div>
-                <div style="color: #8e94a5; font-weight: 700; font-size: 14px;">v1.1.4 — 2026.09.28</div>
-                <ul style="padding-left: 18px; margin: 6px 0 14px;">
-                    <li>🔍 <b>모던 앱 런처 UI 전면 개편</b> — 텍스트 리스트 대신 앱 아이콘 + 이름 + 패키지명이 깔끔하게 표시되는 테슬라 다크 테마 바텀시트 탑재</li>
-                    <li>⚡ <b>실시간 앱 검색창 지원</b> — 티맵, 카카오, 넷플릭스 등 앱 이름을 검색하여 1초 만에 바로 실행</li>
-                    <li>📱 <b>설치된 전체 앱 100% 탐색</b> — Android 11+ 패키지 가시성 제한을 해제(<code>QUERY_ALL_PACKAGES</code>)하여 폰에 설치된 모든 내비/미디어 앱 누락 없이 완벽 로드</li>
-                    <li>⭐ <b>스마트 즐겨찾기/최근 앱 우선 정렬</b> — 최근 실행 및 자주 쓰는 앱이 상단에 ⭐ 표시와 함께 자동 배치</li>
-                </ul>
-            </div>
-
-            <div>
-                <div style="color: #8e94a5; font-weight: 700; font-size: 14px;">v1.1.3 — 2026.09.28</div>
-                <ul style="padding-left: 18px; margin: 6px 0 14px;">
-                    <li>🖥️ 독립 가상 디스플레이(Virtual Display) 모드 지원 — 폰 화면 미러링 대신 독립 가상 화면 송출</li>
-                    <li>⭐ 테슬라 전용 앱 런처 & 즐겨찾기 프리셋 저장</li>
-                    <li>👆 가상 화면 터치 디스패치 (<code>setDisplayId</code>)</li>
-                    <li>🛡️ 백그라운드 미러링 보장 (앱 스와이프 종료 방지)</li>
-                </ul>
-            </div>
-
-            <div>
-                <div style="color: #8e94a5; font-weight: 700; font-size: 14px;">v1.1.2 — 2026.09.28</div>
-                <ul style="padding-left: 18px; margin: 6px 0 14px;">
-                    <li>🔧 VPN 가상 프록시 안정성 개선 (폰 브라우저 테스트 수정)</li>
-                    <li>🎨 앱 UI 전면 개편 — 다크 테슬라 테마 대시보드</li>
-                    <li>📍 주행일지 HUD를 별도 모달로 분리 (🚗 버튼)</li>
-                    <li>📋 접속 주소 원클릭 복사 기능 추가</li>
-                    <li>🔄 전체 버전 동기화 (앱/웹/서버/다운로드 페이지)</li>
-                </ul>
-            </div>
-
-            <div>
-                <div style="color: #3498db; font-weight: 700; font-size: 14px;">v1.1.1 — 2026.09.28</div>
-                <ul style="padding-left: 18px; margin: 6px 0 14px;">
-                    <li>🛡️ 로컬 가상 프록시(VPN) 방식 도입 — Samsung 핫스팟 방화벽 우회</li>
-                    <li>🌐 가상 IP <code>7.7.7.7:7777</code> 주소로 테슬라 접속 지원</li>
-                    <li>⚙️ VPN 자동 시작/정지 연동 (미러링 토글 시 자동 활성화)</li>
-                </ul>
-            </div>
-
-            <div>
-                <div style="color: #3498db; font-weight: 700; font-size: 14px;">v1.1.0 — 2026.09.28</div>
-                <ul style="padding-left: 18px; margin: 6px 0 14px;">
-                    <li>🗺️ GPS 주행일지 기능 추가 (속도, 거리, 경로 추적)</li>
-                    <li>🔊 오디오 스트리밍 지원 (테슬라 스피커 출력)</li>
-                    <li>🔒 HTTPS/TLS 자체 서명 인증서 서버 추가 (포트 8443, 7679)</li>
-                    <li>📱 다중 포트 바인딩 (7777, 9999, 7678)</li>
-                </ul>
-            </div>
-
-            <div>
-                <div style="color: #8e94a5; font-weight: 700; font-size: 14px;">v1.0.0 — 2026.09.27</div>
-                <ul style="padding-left: 18px; margin: 6px 0 0;">
-                    <li>🚀 최초 릴리즈</li>
-                    <li>📺 Rust NDK 기반 실시간 화면 미러링 엔진</li>
-                    <li>👆 양방향 터치 제어 (접근성 서비스)</li>
-                    <li>⚡ WebCodecs H.264 초저지연 디코딩</li>
-                    <li>📡 WebSocket 기반 영상/제어 스트리밍</li>
-                </ul>
+                <div class="app-manager-footer">
+                    <button id="btnResetDefaultApps" class="btn-secondary" title="초기 기본 앱 목록으로 되돌립니다">기본값 복원</button>
+                    <button id="btnDoneAppManager" class="btn-primary">완료</button>
+                </div>
             </div>
         </div>
 
-        <div class="footer-legal">
-            <div>mplat Mirror v1.1.2 · Released under Apache License 2.0</div>
-            <div>Copyright © 2026 mplat. All rights reserved.</div>
+        <!-- 텍스트/목적지 직접 입력 모달 (테슬라 키보드 연동) -->
+        <div id="textInputModal" class="modal-overlay hidden" style="display: none;">
+            <div class="input-modal-card">
+                <div class="modal-header" style="background: transparent; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding: 0 0 14px 0; margin-bottom: 14px; height: auto;">
+                    <h3 style="margin: 0; font-size: 17px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 8px;">
+                        <span>⌨️</span> <span>텍스트/목적지 입력</span>
+                    </h3>
+                    <button class="btn-close-modal" id="btnCloseTextInput" style="padding: 4px 10px; font-size: 16px; margin: 0;">&times;</button>
+                </div>
+                <div class="modal-body" style="padding: 0;">
+                    <p style="font-size: 13px; color: #94a3b8; margin: 0 0 14px 0; line-height: 1.4;">
+                        스마트폰 화면의 검색창(티맵·네이버·유튜브 등)을 터치한 후, 아래에 목적지나 검색어를 입력하고 <strong>[전송]</strong>을 누르세요.
+                    </p>
+                    <form id="textInputForm" style="display: flex; gap: 8px;" onsubmit="return false;">
+                        <input type="text" id="phoneTextInput" class="custom-input" placeholder="목적지 또는 검색어 입력..." style="flex: 1; font-size: 15px; padding: 10px 14px; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: #fff;">
+                        <button type="submit" id="btnSubmitTextInput" class="btn-primary" style="padding: 10px 18px; font-weight: 700; font-size: 14px; border-radius: 8px; cursor: pointer;">전송</button>
+                    </form>
+                </div>
+            </div>
         </div>
     </div>
 
-    <script>
-        const downloadUrl = window.location.origin + '/mplatMirror.apk';
-        new QRCode(document.getElementById("qrcode"), {
-            text: downloadUrl,
-            width: 140,
-            height: 140,
-            colorDark : "#000000",
-            colorLight : "#ffffff",
-            correctLevel : QRCode.CorrectLevel.H
-        });
-    </script>
+    <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-database-compat.js"></script>
+    <script src="firebase-config.js?v=1.2.7"></script>
+    <script src="leaflet.js"></script>
+    <script src="player.js?v=1.2.7"></script>
+    <script src="touch.js?v=1.2.7"></script>
+    <script src="triplog.js?v=1.2.7"></script>
 </body>
 </html>

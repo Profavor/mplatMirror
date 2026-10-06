@@ -60,6 +60,11 @@
         }
     }
 
+    // 전역 인터페이스 노출 (도크 앱 팔레트 및 외부 호출용)
+    window.openTripLogModal = openModal;
+    window.closeTripLogModal = closeModal;
+    window.toggleTripLogModal = toggleModal;
+
     // 모달 토글 버튼 바인딩
     ['click', 'pointerdown'].forEach(evt => {
         if (btnTripLog) {

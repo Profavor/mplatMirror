@@ -1,0 +1,1485 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>mplat Mirror v1.2.7 - 테슬라 무선 미러링 &amp; 양방향 터치 공식 다운로드</title>
+    <link rel="icon" href="logo.png" type="image/png">
+    <meta name="description" content="모바일 데이터 소모 0MB! 스마트폰 핫스팟 로컬 Wi-Fi(UDP) 초저지연 60FPS 테슬라 미러링. 갤럭시 Z 폴드/플립 연속성 및 1:1 정밀 터치 완벽 지원.">
+    <meta property="og:title" content="mplat Mirror v1.2.7 - 테슬라 0MB 무선 미러링">
+    <meta property="og:description" content="LTE/5G 데이터 소모 0MB! 서브 50ms 60FPS 초저지연 테슬라 미러링 및 양방향 정밀 터치">
+    <meta property="og:image" content="logo.png">
+    <style>
+        :root {
+            --bg-base: #030712;
+            --bg-surface: #0b0f19;
+            --bg-card: rgba(15, 23, 42, 0.72);
+            --bg-card-hover: rgba(30, 41, 59, 0.85);
+            --border-card: rgba(255, 255, 255, 0.08);
+            --border-glow: rgba(56, 189, 248, 0.35);
+            --border-green-glow: rgba(16, 185, 129, 0.4);
+            --text-primary: #ffffff;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --accent-cyan: #38bdf8;
+            --accent-cyan-dark: #0284c7;
+            --accent-green: #10b981;
+            --accent-rose: #f43f5e;
+            --accent-amber: #f59e0b;
+            --accent-purple: #a855f7;
+            --font-family: -apple-system, BlinkMacSystemFont, "Pretendard", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-base);
+            color: var(--text-primary);
+            font-family: var(--font-family);
+            line-height: 1.6;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* Ambient Lighting & High-tech Grid */
+        .ambient-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            pointer-events: none;
+            z-index: 0;
+            background: 
+                radial-gradient(circle at 50% -10%, rgba(56, 189, 248, 0.16) 0%, transparent 65%),
+                radial-gradient(circle at 10% 45%, rgba(16, 185, 129, 0.08) 0%, transparent 50%),
+                radial-gradient(circle at 90% 65%, rgba(168, 85, 247, 0.08) 0%, transparent 55%),
+                radial-gradient(circle at 50% 95%, rgba(2, 132, 199, 0.1) 0%, transparent 60%);
+        }
+
+        .container {
+            max-width: 1180px;
+            margin: 0 auto;
+            padding: 0 24px;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Navigation Header */
+        header.nav-header {
+            padding: 20px 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border-card);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: rgba(3, 7, 18, 0.75);
+        }
+
+        .brand-box {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .brand-logo {
+            width: 38px;
+            height: 38px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(56, 189, 248, 0.35);
+            transition: transform 0.2s;
+        }
+
+        .brand-box:hover .brand-logo {
+            transform: scale(1.05);
+        }
+
+        .brand-title {
+            font-size: 21px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .badge-version {
+            background: linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(2, 132, 199, 0.3));
+            color: var(--accent-cyan);
+            border: 1px solid rgba(56, 189, 248, 0.4);
+            font-size: 11px;
+            font-weight: 800;
+            padding: 2px 9px;
+            border-radius: 20px;
+            letter-spacing: 0.5px;
+            box-shadow: 0 0 10px rgba(56, 189, 248, 0.2);
+        }
+
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 22px;
+        }
+
+        .nav-link {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 600;
+            transition: color 0.2s;
+        }
+
+        .nav-link:hover {
+            color: var(--text-primary);
+        }
+
+        .nav-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .nav-btn-web {
+            background: rgba(255, 255, 255, 0.06);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            padding: 8px 16px;
+            border-radius: 10px;
+            font-size: 13px;
+            font-weight: 700;
+            text-decoration: none;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .nav-btn-web:hover {
+            background: rgba(255, 255, 255, 0.12);
+            border-color: rgba(56, 189, 248, 0.5);
+            transform: translateY(-1px);
+        }
+
+        .nav-btn-download {
+            background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+            color: #ffffff;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 8px 16px;
+            border-radius: 10px;
+            font-size: 13px;
+            font-weight: 700;
+            text-decoration: none;
+            box-shadow: 0 4px 14px rgba(2, 132, 199, 0.35);
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .nav-btn-download:hover {
+            box-shadow: 0 6px 20px rgba(2, 132, 199, 0.5);
+            transform: translateY(-1px);
+        }
+
+        /* Hero Section */
+        .hero {
+            padding: 70px 0 50px;
+            text-align: center;
+        }
+
+        .hero-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(16, 185, 129, 0.12);
+            border: 1px solid rgba(16, 185, 129, 0.35);
+            color: var(--accent-green);
+            padding: 7px 18px;
+            border-radius: 30px;
+            font-size: 13px;
+            font-weight: 700;
+            margin-bottom: 24px;
+            backdrop-filter: blur(8px);
+        }
+
+        .hero-pill .pulse-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--accent-green);
+            border-radius: 50%;
+            box-shadow: 0 0 10px var(--accent-green);
+            animation: pulse 2s infinite ease-in-out;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.9); opacity: 0.7; }
+            50% { transform: scale(1.35); opacity: 1; }
+            100% { transform: scale(0.9); opacity: 0.7; }
+        }
+
+        .hero-title {
+            font-size: 52px;
+            font-weight: 900;
+            line-height: 1.22;
+            letter-spacing: -1.5px;
+            margin-bottom: 20px;
+        }
+
+        .gradient-text {
+            background: linear-gradient(135deg, #ffffff 25%, #38bdf8 70%, #818cf8 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .hero-desc {
+            font-size: 18.5px;
+            color: var(--text-secondary);
+            max-width: 780px;
+            margin: 0 auto 40px;
+            line-height: 1.65;
+            word-break: keep-all;
+        }
+
+        /* Main Download Grid (CTA & QR Dual Card) */
+        .hero-download-grid {
+            display: grid;
+            grid-template-columns: 1.4fr 1fr;
+            gap: 24px;
+            max-width: 960px;
+            margin: 0 auto 50px;
+            text-align: left;
+        }
+
+        .download-action-card {
+            background: linear-gradient(145deg, rgba(15, 23, 42, 0.85), rgba(8, 12, 20, 0.95));
+            border: 1px solid rgba(56, 189, 248, 0.28);
+            border-radius: 24px;
+            padding: 34px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            position: relative;
+            box-shadow: 0 20px 48px rgba(0, 0, 0, 0.5), 0 0 25px rgba(56, 189, 248, 0.08);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+
+        .download-card-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(56, 189, 248, 0.15);
+            color: var(--accent-cyan);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 700;
+            margin-bottom: 14px;
+            width: fit-content;
+        }
+
+        .download-card-title {
+            font-size: 24px;
+            font-weight: 800;
+            color: #ffffff;
+            margin-bottom: 8px;
+            letter-spacing: -0.5px;
+        }
+
+        .download-card-desc {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-bottom: 24px;
+            line-height: 1.55;
+        }
+
+        .btn-download-hero {
+            background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+            color: #ffffff;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            padding: 18px 30px;
+            border-radius: 16px;
+            font-size: 18px;
+            font-weight: 800;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            box-shadow: 0 10px 30px rgba(2, 132, 199, 0.45), 0 0 20px rgba(56, 189, 248, 0.25);
+            transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn-download-hero::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.7s;
+        }
+
+        .btn-download-hero:hover::before {
+            left: 100%;
+        }
+
+        .btn-download-hero:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 16px 40px rgba(2, 132, 199, 0.6), 0 0 30px rgba(56, 189, 248, 0.4);
+        }
+
+        .btn-playstore-hero {
+            background: #000000;
+            color: #ffffff;
+            border: 1.5px solid rgba(255, 255, 255, 0.22);
+            padding: 14px 28px;
+            border-radius: 16px;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), 0 0 20px rgba(66, 133, 244, 0.25);
+            transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+            position: relative;
+            overflow: hidden;
+            width: 100%;
+            max-width: 380px;
+        }
+
+        .btn-playstore-hero:hover {
+            transform: translateY(-2px);
+            border-color: rgba(66, 133, 244, 0.8);
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.8), 0 0 30px rgba(66, 133, 244, 0.5);
+            background: #0a0a0a;
+        }
+
+        .play-btn-content {
+            display: flex;
+            flex-direction: column;
+            text-align: left;
+            line-height: 1.15;
+        }
+
+        .play-badge-label {
+            font-size: 11px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: #94a3b8;
+            font-weight: 600;
+        }
+
+        .play-badge-title {
+            font-size: 22px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            color: #ffffff;
+        }
+
+        .btn-direct-apk {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 9px 18px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 12px;
+            color: #cbd5e1;
+            font-size: 13px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.2s ease;
+        }
+
+        .btn-direct-apk:hover {
+            background: rgba(255, 255, 255, 0.12);
+            color: #ffffff;
+            border-color: rgba(255, 255, 255, 0.3);
+            transform: translateY(-1px);
+        }
+
+        .download-specs-bar {
+            margin-top: 18px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+            font-size: 12.5px;
+            color: var(--text-muted);
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            padding-top: 16px;
+        }
+
+        .spec-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .spec-item strong {
+            color: var(--text-secondary);
+        }
+
+        /* QR Code Card */
+        .qr-action-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-card);
+            border-radius: 24px;
+            padding: 30px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            justify-content: center;
+            box-shadow: 0 20px 48px rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            transition: border-color 0.2s, transform 0.2s;
+        }
+
+        .qr-action-card:hover {
+            border-color: var(--border-glow);
+            transform: translateY(-2px);
+        }
+
+        .qr-box {
+            background: #ffffff;
+            padding: 12px;
+            border-radius: 18px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), 0 0 15px rgba(56, 189, 248, 0.2);
+            margin-bottom: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .qr-box img {
+            width: 140px;
+            height: 140px;
+            display: block;
+        }
+
+        .qr-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: #ffffff;
+            margin-bottom: 6px;
+        }
+
+        .qr-sub {
+            font-size: 13px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+            max-width: 220px;
+        }
+
+        .qr-sub strong {
+            color: var(--accent-cyan);
+        }
+
+        /* Hero Meta Stats Pill Row */
+        .hero-meta-stats {
+            display: flex;
+            justify-content: center;
+            gap: 28px;
+            flex-wrap: wrap;
+            font-size: 13.5px;
+            color: var(--text-muted);
+            margin-bottom: 20px;
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            background: rgba(15, 23, 42, 0.45);
+            padding: 8px 16px;
+            border-radius: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .stat-item strong {
+            color: var(--text-primary);
+        }
+
+        /* v1.0.4 Latest Highlights & Release Banner */
+        .release-notes-card {
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.7), rgba(15, 23, 42, 0.95));
+            border: 1px solid rgba(56, 189, 248, 0.35);
+            border-radius: 22px;
+            padding: 30px 34px;
+            margin: 40px auto 70px;
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45), 0 0 20px rgba(56, 189, 248, 0.08);
+            text-align: left;
+            backdrop-filter: blur(16px);
+        }
+
+        .release-notes-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            padding-bottom: 14px;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .release-notes-title {
+            font-size: 20px;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #ffffff;
+            letter-spacing: -0.3px;
+        }
+
+        .release-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+            gap: 18px;
+        }
+
+        .release-item {
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+            font-size: 13.5px;
+            color: var(--text-secondary);
+            line-height: 1.55;
+            background: rgba(15, 23, 42, 0.55);
+            padding: 16px 18px;
+            border-radius: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            transition: border-color 0.2s;
+        }
+
+        .release-item:hover {
+            border-color: rgba(56, 189, 248, 0.3);
+        }
+
+        .release-item .rel-icon {
+            font-size: 20px;
+            line-height: 1;
+        }
+
+        .release-item strong {
+            color: #ffffff;
+            display: block;
+            margin-bottom: 3px;
+            font-size: 14px;
+        }
+
+        /* Section Global Header */
+        .section-header {
+            text-align: center;
+            margin-bottom: 48px;
+        }
+
+        .section-badge {
+            color: var(--accent-cyan);
+            font-size: 13px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .section-title {
+            font-size: 36px;
+            font-weight: 900;
+            letter-spacing: -1px;
+            margin-bottom: 14px;
+        }
+
+        .section-sub {
+            color: var(--text-secondary);
+            font-size: 16.5px;
+            max-width: 680px;
+            margin: 0 auto;
+            line-height: 1.6;
+            word-break: keep-all;
+        }
+
+        /* Features Section */
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+            gap: 24px;
+            margin-bottom: 90px;
+        }
+
+        .feature-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-card);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-radius: 22px;
+            padding: 32px;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-4px);
+            border-color: var(--border-glow);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5), 0 0 24px rgba(56, 189, 248, 0.12);
+        }
+
+        .feature-icon-box {
+            width: 58px;
+            height: 58px;
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            margin-bottom: 22px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .feature-card.highlight-green {
+            border-color: rgba(16, 185, 129, 0.35);
+            background: radial-gradient(circle at 100% 0%, rgba(16, 185, 129, 0.14) 0%, rgba(15, 23, 42, 0.8) 65%);
+        }
+
+        .feature-card.highlight-green .feature-icon-box {
+            background: rgba(16, 185, 129, 0.15);
+            border-color: rgba(16, 185, 129, 0.35);
+        }
+
+        .feature-card.highlight-cyan {
+            border-color: rgba(56, 189, 248, 0.35);
+            background: radial-gradient(circle at 100% 0%, rgba(56, 189, 248, 0.14) 0%, rgba(15, 23, 42, 0.8) 65%);
+        }
+
+        .feature-card.highlight-cyan .feature-icon-box {
+            background: rgba(56, 189, 248, 0.15);
+            border-color: rgba(56, 189, 248, 0.35);
+        }
+
+        .feature-card.highlight-purple {
+            border-color: rgba(168, 85, 247, 0.35);
+            background: radial-gradient(circle at 100% 0%, rgba(168, 85, 247, 0.14) 0%, rgba(15, 23, 42, 0.8) 65%);
+        }
+
+        .feature-card.highlight-purple .feature-icon-box {
+            background: rgba(168, 85, 247, 0.15);
+            border-color: rgba(168, 85, 247, 0.35);
+        }
+
+        .feature-title {
+            font-size: 20px;
+            font-weight: 800;
+            margin-bottom: 12px;
+            color: #ffffff;
+            letter-spacing: -0.3px;
+        }
+
+        .feature-desc {
+            color: var(--text-secondary);
+            font-size: 14.5px;
+            line-height: 1.65;
+            word-break: keep-all;
+        }
+
+        .feature-desc strong {
+            color: #ffffff;
+        }
+
+        /* Foldable Special Section */
+        .fold-section {
+            background: linear-gradient(145deg, #0b1120 0%, #060a12 100%);
+            border: 1px solid rgba(168, 85, 247, 0.3);
+            border-radius: 28px;
+            padding: 48px;
+            margin-bottom: 90px;
+            box-shadow: 0 24px 50px rgba(0, 0, 0, 0.6), 0 0 30px rgba(168, 85, 247, 0.1);
+        }
+
+        .fold-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 24px;
+            margin-top: 36px;
+        }
+
+        .fold-card {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 20px;
+            padding: 28px;
+        }
+
+        .fold-card-title {
+            font-size: 18px;
+            font-weight: 800;
+            color: #ffffff;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .fold-tag {
+            background: rgba(168, 85, 247, 0.2);
+            color: var(--accent-purple);
+            border: 1px solid rgba(168, 85, 247, 0.4);
+            font-size: 11px;
+            font-weight: 800;
+            padding: 2px 8px;
+            border-radius: 6px;
+        }
+
+        .fold-card-desc {
+            font-size: 14px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        .fold-card-desc ol, .fold-card-desc ul {
+            margin-top: 10px;
+            padding-left: 20px;
+        }
+
+        .fold-card-desc li {
+            margin-bottom: 6px;
+        }
+
+        /* Step by Step Install Guide */
+        .guide-section {
+            background: #080c14;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 28px;
+            padding: 48px;
+            margin-bottom: 90px;
+            box-shadow: 0 20px 48px rgba(0, 0, 0, 0.5);
+        }
+
+        .steps-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 22px;
+            margin-top: 36px;
+        }
+
+        .step-box {
+            background: rgba(15, 23, 42, 0.65);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 20px;
+            padding: 26px;
+            position: relative;
+            transition: all 0.25s;
+        }
+
+        .step-box:hover {
+            border-color: var(--border-glow);
+            transform: translateY(-2px);
+        }
+
+        .step-badge {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, rgba(56, 189, 248, 0.25), rgba(2, 132, 199, 0.4));
+            color: var(--accent-cyan);
+            border: 1px solid rgba(56, 189, 248, 0.5);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 16px;
+            margin-bottom: 16px;
+            box-shadow: 0 0 12px rgba(56, 189, 248, 0.25);
+        }
+
+        .step-heading {
+            font-size: 17.5px;
+            font-weight: 800;
+            margin-bottom: 10px;
+            color: #ffffff;
+        }
+
+        .step-info {
+            font-size: 13.5px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        .step-highlight {
+            color: var(--accent-cyan);
+            font-weight: 700;
+        }
+
+        /* FAQ Section with Modern Native Details */
+        .faq-section {
+            margin-bottom: 90px;
+        }
+
+        .faq-list {
+            max-width: 860px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .faq-item {
+            background: var(--bg-card);
+            border: 1px solid var(--border-card);
+            border-radius: 18px;
+            padding: 0;
+            overflow: hidden;
+            transition: border-color 0.2s;
+        }
+
+        .faq-item:hover, .faq-item[open] {
+            border-color: var(--border-glow);
+        }
+
+        .faq-item summary {
+            padding: 22px 26px;
+            font-size: 17px;
+            font-weight: 700;
+            color: #ffffff;
+            cursor: pointer;
+            list-style: none;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            user-select: none;
+        }
+
+        .faq-item summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .faq-item summary::after {
+            content: "＋";
+            font-size: 20px;
+            color: var(--accent-cyan);
+            font-weight: 700;
+            transition: transform 0.25s ease;
+        }
+
+        .faq-item[open] summary::after {
+            content: "−";
+            transform: rotate(180deg);
+        }
+
+        .faq-a {
+            padding: 0 26px 22px 26px;
+            font-size: 14.5px;
+            color: var(--text-secondary);
+            line-height: 1.65;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            padding-top: 16px;
+        }
+
+        .faq-a strong {
+            color: #ffffff;
+        }
+
+        /* Bottom Floating Bar on Mobile */
+        .mobile-bottom-bar {
+            display: none;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: rgba(3, 7, 18, 0.92);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border-top: 1px solid var(--border-card);
+            padding: 12px 20px;
+            z-index: 999;
+            box-shadow: 0 -10px 25px rgba(0, 0, 0, 0.6);
+        }
+
+        .mobile-bottom-btn {
+            background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+            color: #ffffff;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            padding: 14px;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 800;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+            box-shadow: 0 4px 16px rgba(2, 132, 199, 0.4);
+        }
+
+        /* Footer */
+        .legal-disclaimer-box {
+            background: rgba(15, 23, 42, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            padding: 26px;
+            margin-bottom: 36px;
+            text-align: left;
+            font-size: 12px;
+            line-height: 1.65;
+        }
+
+        .legal-section {
+            margin-bottom: 16px;
+        }
+
+        .legal-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .legal-section h4 {
+            color: #ffffff;
+            font-size: 13.5px;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+
+        .legal-section p {
+            color: var(--text-muted);
+        }
+
+        footer.page-footer {
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 44px 0 60px;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 13.5px;
+        }
+
+        .footer-logo {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 17px;
+            font-weight: 800;
+            color: #ffffff;
+            margin-bottom: 12px;
+        }
+
+        .footer-links {
+            margin-top: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .footer-links a {
+            color: var(--accent-cyan);
+            text-decoration: none;
+            font-weight: 600;
+            transition: color 0.2s;
+        }
+
+        .footer-links a:hover {
+            color: #ffffff;
+        }
+
+        /* Responsive Breakpoints */
+        @media (max-width: 900px) {
+            .hero-download-grid {
+                grid-template-columns: 1fr;
+            }
+            .hero-title { font-size: 40px; }
+            .hero-desc { font-size: 16.5px; }
+            .fold-section, .guide-section { padding: 30px; }
+            .nav-links { display: none; }
+            .mobile-bottom-bar { display: block; }
+            body { padding-bottom: 70px; }
+        }
+
+        @media (max-width: 600px) {
+            .hero-title { font-size: 32px; letter-spacing: -0.8px; }
+            .hero-desc { font-size: 15px; }
+            .download-action-card { padding: 24px; }
+            .btn-download-hero { font-size: 16px; padding: 15px 20px; }
+            .hero-meta-stats { gap: 10px; }
+            .stat-item { width: 100%; justify-content: center; }
+            .features-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="ambient-bg"></div>
+
+    <div class="container">
+        <!-- Top Nav -->
+        <header class="nav-header">
+            <a href="/" class="brand-box">
+                <img src="logo.png" alt="mplat Mirror Logo" class="brand-logo">
+                <span class="brand-title">mplat Mirror <span class="badge-version">v1.2.7</span></span>
+            </a>
+            <nav class="nav-links">
+                <a href="#features" class="nav-link">핵심 기능</a>
+                <a href="#fold" class="nav-link">폴드 &amp; 플립 특화</a>
+                <a href="#install" class="nav-link">설치 가이드</a>
+                <a href="#faq" class="nav-link">자주 묻는 질문</a>
+                <a href="https://play.google.com/store/apps/details?id=io.mmirror" class="nav-link" target="_blank" rel="noopener">Google Play</a>
+            </nav>
+            <div class="nav-actions">
+                <a href="/" class="nav-btn-web">🚗 테슬라 웹 플레이어</a>
+                <a href="https://play.google.com/store/apps/details?id=io.mmirror" class="nav-btn-download" target="_blank" rel="noopener">▶ Google Play</a>
+            </div>
+        </header>
+
+        <!-- Hero Section -->
+        <section class="hero">
+            <div class="hero-pill">
+                <span class="pulse-dot"></span>
+                <span>v1.2.7 정식 릴리즈 · 0MB 모바일 데이터 · 완전 무광고 청정 미러링</span>
+            </div>
+
+            <h1 class="hero-title">
+                스마트폰 모바일 데이터 0MB<br>
+                <span class="gradient-text">테슬라 대화면 60 FPS 초저지연 미러링</span>
+            </h1>
+
+            <p class="hero-desc">
+                루팅이나 PC 연결 없이, 스마트폰 핫스팟 로컬 Wi-Fi(UDP) 직결로 지연 시간 50ms 미만의 쾌적한 티맵·유튜브 대화면 감상과 차량 스피커 무손실 원음 사운드를 경험하세요.
+            </p>
+
+            <!-- Dual Action Hero Box (Direct Download + QR Code Scan) -->
+            <div class="hero-download-grid">
+                <!-- Action Card: Direct APK Download -->
+                <div class="download-action-card">
+                    <div>
+                        <div class="download-card-badge">✨ Google Play 공식 출시 · v1.2.7 정식 빌드</div>
+                        <h2 class="download-card-title">mplat Mirror Android</h2>
+                        <p class="download-card-desc">
+                            루팅이나 PC 연결 없이 스마트폰 모바일 데이터 0MB 소모! 1:1 정밀 접근성 터치 엔진, 60 FPS 초저지연 전송, 광고 없는 쾌적한 환경을 제공하는 공식 앱입니다.
+                        </p>
+                    </div>
+
+                    <div>
+                        <!-- Primary CTA: Google Play Store Button -->
+                        <a href="https://play.google.com/store/apps/details?id=io.mmirror" class="btn-playstore-hero" target="_blank" rel="noopener">
+                            <svg viewBox="0 0 512 512" width="28" height="28" style="flex-shrink:0;">
+                                <path fill="#4285F4" d="M325.3 234.3L104.6 13l280.8 161.2-60.1 59.8z"/>
+                                <path fill="#34A853" d="M47 0C34 7.5 25.5 21.6 25.5 38.8v434.4c0 17.1 8.5 31.3 21.5 38.8l239-239L47 0z"/>
+                                <path fill="#EA4335" d="M325.3 277.7l60.1 59.8L104.6 499l220.7-221.3z"/>
+                                <path fill="#FBBC04" d="M455.5 229.4l-70.1-40.2-60.1 60.1 60.1 60.1 70.1-40.2c16.3-9.4 26.6-26.7 26.6-45.6s-10.3-36.2-26.6-39.2z"/>
+                            </svg>
+                            <div class="play-btn-content">
+                                <span class="play-badge-label">GET IT ON</span>
+                                <span class="play-badge-title">Google Play</span>
+                            </div>
+                        </a>
+
+                        <!-- Secondary CTA: Direct APK Download for Developers / Sideloading -->
+                        <div style="margin-top: 14px; display: flex; align-items: center; justify-content: flex-start; gap: 8px;">
+                            <a href="https://mdm.mplat.store:8088/dist/mplatMirror.apk" class="btn-direct-apk" download>
+                                <span>📦 직접 APK 파일 다운로드 (v1.2.7 정식 빌드)</span>
+                            </a>
+                        </div>
+
+                        <div class="download-specs-bar">
+                            <div class="spec-item"><span>🛡️</span> <strong>Play 프로텍트:</strong> 정밀 검증 완료</div>
+                            <div class="spec-item"><span>🤖</span> <strong>지원 OS:</strong> Android 10 ~ 16</div>
+                            <div class="spec-item"><span>⚡</span> <strong>데이터 소모:</strong> 0.00 MB</div>
+                            <div class="spec-item"><span>📦</span> <strong>용량:</strong> 59.7 MB</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- QR Scan Card: Instant Camera Scan -->
+                <div class="qr-action-card">
+                    <div class="qr-box">
+                        <img src="apk_qr.svg" alt="Google Play QR Code">
+                    </div>
+                    <h3 class="qr-title">스마트폰 카메라로 스캔</h3>
+                    <p class="qr-sub">
+                        PC나 테슬라 화면에서 폰 카메라를 비추면 <strong>Google Play 스토어로 즉시 이동</strong>합니다.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Meta Stats Pill Bar -->
+            <div class="hero-meta-stats">
+                <div class="stat-item">
+                    <span>🛡️ 모바일 데이터 소모:</span>
+                    <strong>0 MB (로컬 Wi-Fi 직결)</strong>
+                </div>
+                <div class="stat-item">
+                    <span>📺 화면 해상도 프리셋:</span>
+                    <strong>16인치(여백 0%) · 15.4인치 · QHD 전체화면</strong>
+                </div>
+                <div class="stat-item">
+                    <span>⚡ 지연 시간 &amp; 프레임:</span>
+                    <strong>Sub-50ms / 60 FPS (H.264 실시간)</strong>
+                </div>
+                <div class="stat-item">
+                    <span>🎧 차량 사운드:</span>
+                    <strong>테슬라 블루투스(A2DP) 무손실 직결</strong>
+                </div>
+                <div class="stat-item">
+                    <span>🔋 전원 관리:</span>
+                    <strong>충전 중 켜짐 유지 &amp; 암전 절전</strong>
+                </div>
+            </div>
+
+            <!-- v1.2.7 Release Highlights Card -->
+            <div class="release-notes-card">
+                <div class="release-notes-header">
+                    <div class="release-notes-title">
+                        <span>🚀</span>
+                        <span>v1.2.7 정식 릴리즈 핵심 변경 내역</span>
+                        <span class="badge-version">LATEST</span>
+                    </div>
+                    <span style="font-size: 13px; color: var(--accent-cyan); font-weight: 700;">2026.10 릴리즈</span>
+                </div>
+                <div class="release-grid">
+                    <div class="release-item">
+                        <span class="rel-icon">⚡</span>
+                        <div>
+                            <strong>스마트폰 연결 협상 지연 해소 (Zero-Delay WebRTC Negotiation)</strong>
+                            수십 개의 불필요한 passive TCP ICE 후보 수집을 정책상 원천 차단하고 핫스팟 로컬 UDP 직결 후보를 최우선 교환하여 테슬라 브라우저와 스마트폰 간 연결 협상 시간을 0.1초 내외로 획기적 단축
+                        </div>
+                    </div>
+                    <div class="release-item">
+                        <span class="rel-icon">🛠️</span>
+                        <div>
+                            <strong>웹 플레이어 연결 완료 예외 처리 및 UI 먹통 결함 완벽 해결</strong>
+                            WebRTC P2P 연결 성공 시 변수 미선언으로 인해 발생하던 JavaScript 런타임 오류를 완벽 수정하고 예외 방어 처리를 추가하여 0MB 로컬 스트리밍 배지 및 연결 가이드 오버레이 자동 전환 100% 보장
+                        </div>
+                    </div>
+                    <div class="release-item">
+                        <span class="rel-icon">👆</span>
+                        <div>
+                            <strong>실시간 터치 드래그 추종 엔진 (Continuous Drag Engine)</strong>
+                            지도(티맵/네이버 지도) 및 스크롤 드래그 시 실시간 30ms 간격으로 즉시 화면이 손가락을 따라 부드럽게 이동하여 자연스러운 내비 조작 지원
+                        </div>
+                    </div>
+                    <div class="release-item">
+                        <span class="rel-icon">🚗</span>
+                        <div>
+                            <strong>UI 레이아웃 최적화 및 주행일지 UI 비표시</strong>
+                            미동작 및 불필요한 주행일지/주행이력 위젯을 앱과 웹 대시보드에서 완전 비표시 처리하고 대시보드를 시계·날씨 2열 고해상도 그리드로 최적화
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Features Section -->
+        <section id="features" style="padding-top: 20px;">
+            <div class="section-header">
+                <span class="section-badge">Core Innovations</span>
+                <h2 class="section-title">테슬라 오너를 위한 8대 핵심 기술</h2>
+                <p class="section-sub">기존의 비싸고 느리던 외부 서버 릴레이 방식을 탈피하고 완벽한 차량 내 로컬 직결을 실현했습니다.</p>
+            </div>
+
+            <div class="features-grid">
+                <!-- 1. Zero Data -->
+                <div class="feature-card highlight-green">
+                    <div class="feature-icon-box">🛡️</div>
+                    <h3 class="feature-title">데이터 0MB (Zero-Data) 원칙</h3>
+                    <p class="feature-desc">
+                        외부 인터넷 서버(VPS)로 화면을 업로드하지 않습니다. 스마트폰 핫스팟이 형성한 로컬 Wi-Fi 서브넷 내부에서만 영상과 터치가 순환하므로, 시간당 2.7GB씩 날아가던 <strong>LTE/5G 요금제 데이터 소모가 0.00MB</strong>입니다.
+                    </p>
+                </div>
+
+                <!-- 2. Sub-50ms 60FPS & Custom Resolution Presets -->
+                <div class="feature-card highlight-cyan">
+                    <div class="feature-icon-box">⚡</div>
+                    <h3 class="feature-title">서브 50ms &amp; 60 FPS 초저지연 하드웨어 인코딩</h3>
+                    <p class="feature-desc">
+                        퀄컴 스냅드래곤 / 삼성 엑시노스 하드웨어 H.264 Baseline 인코더를 튜닝하여 디코더 버퍼 지연을 0ms로 단축했습니다. 티맵 내비게이션 길안내와 고속 스크롤이 지연 없이 즉각 반응합니다.
+                    </p>
+                </div>
+
+                <!-- 3. Bluetooth Audio -->
+                <div class="feature-card">
+                    <div class="feature-icon-box">🎧</div>
+                    <h3 class="feature-title">차량 블루투스(A2DP) 무손실 사운드</h3>
+                    <p class="feature-desc">
+                        브라우저 Web Audio의 버퍼링 딜레이나 음질 왜곡을 완전히 없앴습니다. 스마트폰과 테슬라 차량 블루투스 직결 표준으로 티맵 안내음과 유튜브 음악이 차량 프리미엄 스피커로 웅장하게 출력됩니다.
+                    </p>
+                </div>
+
+                <!-- 4. Fold & Flip Dynamic Resizing -->
+                <div class="feature-card highlight-purple">
+                    <div class="feature-icon-box">📱</div>
+                    <h3 class="feature-title">갤럭시 Z 폴드 &amp; 플립 완벽 연속성</h3>
+                    <p class="feature-desc">
+                        폴더블 폰을 펼쳤을 때의 대화면(1856×2160 등)과 접었을 때의 커버 화면(968×2376) 해상도 변화를 실시간 감지하여, <strong>미러링을 끊지 않고 3단계 디바운스로 매끄럽게 재바인딩</strong>합니다.
+                    </p>
+                </div>
+
+                <!-- 5. Precision Touch Control -->
+                <div class="feature-card highlight-cyan">
+                    <div class="feature-icon-box">🎯</div>
+                    <h3 class="feature-title">접근성 1:1 절대 정밀 터치 컨트롤</h3>
+                    <p class="feature-desc">
+                        차량 대화면 터치 시 발생하는 손가락 진동 떨림을 보정하는 스마트 터치 슬롭(25~50px)과 One UI 최적화 단발 탭, 600ms 롱프레스, 네이티브 관성 스와이프를 완벽하게 주입합니다.
+                    </p>
+                </div>
+
+                <!-- 6. Tesla Screen Fit Modes -->
+                <div class="feature-card">
+                    <div class="feature-icon-box">🚗</div>
+                    <h3 class="feature-title">테슬라 전용 4가지 화면 맞춤 모드</h3>
+                    <p class="feature-desc">
+                        운전석 쪽으로 화면을 밀착시키는 <strong>[🚗 좌측 밀착]</strong>부터 테슬라 16인치 창에 여백 0px로 채우는 <strong>[⚡ 꽉 채움]</strong>, 비율 유지 확대 <strong>[🔍 스마트 줌]</strong>, <strong>[📱 중앙 정렬]</strong>을 터치 한 번으로 전환합니다.
+                    </p>
+                </div>
+
+                <!-- 7. Charging Stay Awake -->
+                <div class="feature-card">
+                    <div class="feature-icon-box">🔋</div>
+                    <h3 class="feature-title">충전 중 화면 켜짐 유지 &amp; 암전 절전</h3>
+                    <p class="feature-desc">
+                        차량 유선 케이블이나 무선 충전 패드 거치 시 화면이 절전 모드로 꺼지거나 잠기지 않도록 상시 켜짐을 유지하며, 테슬라 화면 조작 시 스마트폰 화면을 최저 밝기 암전 상태로 유지해 발열을 억제합니다.
+                    </p>
+                </div>
+
+                <!-- 8. Real-time Diagnostic Console -->
+                <div class="feature-card">
+                    <div class="feature-icon-box">📟</div>
+                    <h3 class="feature-title">실시간 진단 콘솔 &amp; 자동 복구</h3>
+                    <p class="feature-desc">
+                        네트워크 흔들림 시 1초 만에 자동 재협상 복구하는 워치독(Self-Healing)과 앱 내 다크 터미널 콘솔(AppLogger)을 통해 Wi-Fi/블루투스/WebRTC 상태를 한눈에 진단할 수 있습니다.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Foldable Devices Special Guide -->
+        <section id="fold" class="fold-section">
+            <div class="section-header" style="margin-bottom: 24px;">
+                <span class="section-badge" style="color: var(--accent-purple);">Foldable Optimization</span>
+                <h2 class="section-title">갤럭시 Z 폴드 &amp; 플립 사용자를 위한 꿀팁</h2>
+                <p class="section-sub">접거나 펼쳐도 미러링이 중단되지 않도록 완벽하게 튜닝되었습니다.</p>
+            </div>
+
+            <div class="fold-grid">
+                <div class="fold-card">
+                    <div class="fold-card-title">
+                        <span>📖 Galaxy Z Fold 시리즈</span>
+                        <span class="fold-tag">폴드 2~6 지원</span>
+                    </div>
+                    <div class="fold-card-desc">
+                        폴드는 전면에 정규 커버 화면이 있어 One UI 자체 기능만으로 완벽한 연속성을 지원합니다:
+                        <ol>
+                            <li>스마트폰 <strong>[설정] &gt; [디스플레이]</strong>로 이동합니다.</li>
+                            <li><strong>[커버 화면에서 앱 계속 사용]</strong> 항목을 터치합니다.</li>
+                            <li><strong>mMirror</strong> 앱의 스위치를 <strong>[켬(ON)]</strong>으로 활성화합니다.</li>
+                        </ol>
+                        💡 이제 주행 중 폴드를 펼쳤다가 닫아도 미러링이 꺼지지 않고 즉시 커버 화면 해상도로 자동 리사이즈됩니다!
+                    </div>
+                </div>
+
+                <div class="fold-card">
+                    <div class="fold-card-title">
+                        <span>📱 Galaxy Z Flip 시리즈</span>
+                        <span class="fold-tag">플립 3~6 지원</span>
+                    </div>
+                    <div class="fold-card-desc">
+                        플립은 폰을 닫을 때 화면이 꺼지는(화면 잠금) 기본 정책이 적용되어 있습니다. 닫은 상태에서도 송출을 유지하려면:
+                        <ol>
+                            <li>Galaxy Store에서 삼성 공식 <strong>Good Lock</strong> 앱을 설치합니다.</li>
+                            <li><strong>MultiStar</strong> 플러그인을 설치 후 <strong>[I ♡ Galaxy Foldable]</strong> 선택</li>
+                            <li><strong>[플렉스 윈도우 위젯]</strong> 목록에 <strong>mMirror</strong>를 체크합니다.</li>
+                        </ol>
+                        💡 접은 상태(플렉스 윈도우)에서도 앱이 강제 종료되거나 절전되지 않고 테슬라로 미러링이 지속됩니다!
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Install Guide Section -->
+        <section id="install" class="guide-section">
+            <div class="section-header" style="margin-bottom: 24px;">
+                <span class="section-badge">Easy 3-Step Setup</span>
+                <h2 class="section-title">초간단 3초 연결 방법</h2>
+                <p class="section-sub">컴퓨터 연결이나 복잡한 설정 없이, 딱 한 번만 북마크해두시면 다음부터는 3초 만에 연결됩니다.</p>
+            </div>
+
+            <div class="steps-container">
+                <div class="step-box">
+                    <div class="step-badge">1</div>
+                    <h4 class="step-heading">앱 다운로드 &amp; 설치</h4>
+                    <p class="step-info">
+                        스마트폰에서 <span class="step-highlight">Google Play 스토어</span>에서 앱을 설치(또는 직접 APK 다운로드)하고, 앱 실행 시 화면 녹화 및 접근성 권한을 1회 허용합니다.
+                    </p>
+                </div>
+
+                <div class="step-box">
+                    <div class="step-badge">2</div>
+                    <h4 class="step-heading">핫스팟 &amp; 블루투스 연결</h4>
+                    <p class="step-info">
+                        폰의 모바일 핫스팟을 켜고, 테슬라 Wi-Fi를 연결합니다. (<span class="step-highlight">D기어 주행 시 Wi-Fi 유지</span> 체크 및 차량 블루투스 페어링)
+                    </p>
+                </div>
+
+                <div class="step-box">
+                    <div class="step-badge">3</div>
+                    <h4 class="step-heading">테슬라 브라우저 접속</h4>
+                    <p class="step-info">
+                        테슬라 화면에서 <span class="step-highlight">https://mplat-mirror.web.app</span> 접속 후 브라우저 <span class="step-highlight">★ 즐겨찾기(북마크)</span>에 추가합니다.
+                    </p>
+                </div>
+
+                <div class="step-box">
+                    <div class="step-badge">4</div>
+                    <h4 class="step-heading">[미러링 시작] 터치!</h4>
+                    <p class="step-info">
+                        스마트폰 앱에서 <span class="step-highlight">[미러링 시작]</span>을 누르고 지금 시작을 선택하면 테슬라 대화면에 60 FPS 화면이 즉시 표시됩니다.
+                    </p>
+                </div>
+            </div>
+
+            <div style="text-align: center; margin-top: 40px; display: flex; flex-direction: column; align-items: center; gap: 14px;">
+                <a href="https://play.google.com/store/apps/details?id=io.mmirror" class="btn-playstore-hero" target="_blank" rel="noopener">
+                    <svg viewBox="0 0 512 512" width="28" height="28" style="flex-shrink:0;">
+                        <path fill="#4285F4" d="M325.3 234.3L104.6 13l280.8 161.2-60.1 59.8z"/>
+                        <path fill="#34A853" d="M47 0C34 7.5 25.5 21.6 25.5 38.8v434.4c0 17.1 8.5 31.3 21.5 38.8l239-239L47 0z"/>
+                        <path fill="#EA4335" d="M325.3 277.7l60.1 59.8L104.6 499l220.7-221.3z"/>
+                        <path fill="#FBBC04" d="M455.5 229.4l-70.1-40.2-60.1 60.1 60.1 60.1 70.1-40.2c16.3-9.4 26.6-26.7 26.6-45.6s-10.3-36.2-26.6-39.2z"/>
+                    </svg>
+                    <div class="play-btn-content">
+                        <span class="play-badge-label">GET IT ON</span>
+                        <span class="play-badge-title">Google Play</span>
+                    </div>
+                </a>
+                <a href="https://mdm.mplat.store:8088/dist/mplatMirror.apk" class="btn-direct-apk" download>
+                    <span>📦 직접 APK 파일 다운로드 (v1.2.7 정식 빌드)</span>
+                </a>
+            </div>
+        </section>
+
+        <!-- FAQ Section with Modern Native Details -->
+        <section id="faq" class="faq-section">
+            <div class="section-header">
+                <span class="section-badge">Frequently Asked Questions</span>
+                <h2 class="section-title">자주 묻는 질문 (FAQ)</h2>
+                <p class="section-sub">mMirror 연결 및 사용 중 궁금하신 점을 확인하세요.</p>
+            </div>
+
+            <div class="faq-list">
+                <details class="faq-item" open>
+                    <summary>스마트폰 LTE/5G 모바일 데이터가 정말 1MB도 소모되지 않나요?</summary>
+                    <div class="faq-a">
+                        <strong>네, 100% 사실입니다!</strong> mMirror는 화면/오디오 데이터를 외부 클라우드나 릴레이 서버로 송출하지 않습니다. 스마트폰 모바일 핫스팟이 생성한 순수 로컬 Wi-Fi 서브넷 내부(10.x.x.x 또는 192.168.x.x)에서만 초고속 WebRTC UDP 패킷으로 P2P 직결 통신합니다. 따라서 몇 시간을 미러링하더라도 스마트폰 요금제 데이터는 <strong>0.00MB</strong> 소모됩니다.
+                    </div>
+                </details>
+
+                <details class="faq-item">
+                    <summary>테슬라 16인치(주니퍼/하이랜드/S/X)와 15.4인치 화면에서 여백 없이 볼 수 있나요?</summary>
+                    <div class="faq-a">
+                        <strong>네! 완벽하게 지원합니다.</strong> 신형 모델 Y(주니퍼), 모델 3(하이랜드), 모델 S/X에 탑재된 16인치 디스플레이의 경우 상단바의 <strong>[🚗 좌측 밀착]</strong> 버튼을 누르거나 스마트폰 앱에서 <strong>[16인치 1600×1120 여백 0% 추천]</strong> 프리셋을 선택하시면 좌우 검은 여백 없이 대화면 꽉 찬 화면으로 감상하실 수 있습니다.
+                    </div>
+                </details>
+
+                <details class="faq-item">
+                    <summary>주행 중(D기어)에 화면이 꺼지거나 Wi-Fi가 끊기지 않나요?</summary>
+                    <div class="faq-a">
+                        테슬라 차량 디스플레이의 <strong>[Wi-Fi 설정]</strong> 메뉴에서 현재 연결된 스마트폰 핫스팟 이름을 누르신 후 <strong>[주행 중 연결 유지(Remain connected in Drive)]</strong> 옵션을 반드시 체크해 주세요. 체크해두시면 기어를 D로 바꾸고 고속도로를 주행하더라도 Wi-Fi가 전혀 끊기지 않습니다.
+                    </div>
+                </details>
+
+                <details class="faq-item">
+                    <summary>접근성 권한을 켰는데 터치 반응이 정확한가요?</summary>
+                    <div class="faq-a">
+                        v1.2.7에서는 <strong>실시간 터치 드래그 추종 엔진</strong>과 <strong>절대 정밀 접근성 터치 엔진</strong>이 탑재되었습니다. 테슬라 대화면 터치 시 운전자의 미세 손떨림으로 인한 단발 탭 씹힘 현상을 방지하도록 스마트 터치 슬롭(15~35px)을 적용했으며, 네이버 지도·티맵 드래그 시 실시간 30ms 간격으로 화면이 즉시 따라 움직이며, 폴더블 기기의 물리 디스플레이 해상도를 실시간 1:1로 매핑하여 네이버 지도, 티맵, 유튜브의 버튼들이 정확하게 터치됩니다.
+                    </div>
+                </details>
+
+                <details class="faq-item">
+                    <summary>차량 스피커로 내비 음성과 음악 사운드가 나오게 하려면 어떻게 하나요?</summary>
+                    <div class="faq-a">
+                        테슬라 차량 화면 하단 미디어 소스를 <strong>[블루투스]</strong>로 선택하시고, 스마트폰과 테슬라 차량을 블루투스로 페어링해 두시면 됩니다. 브라우저 사운드 지연 없이 스마트폰의 고음질 티맵 안내음과 유튜브 음악이 차량의 모든 서브우퍼/스피커로 딜레이 없이 웅장하게 출력됩니다.
+                    </div>
+                </details>
+
+                <details class="faq-item">
+                    <summary>스마트폰 화면을 어둡게(절전) 유지하면서 테슬라 화면만 볼 수 있나요?</summary>
+                    <div class="faq-a">
+                        네! 스마트폰 앱 설정이나 테슬라 독바의 [🌙 절전] 버튼을 터치하시면 티맵 등 내비 실행 중에도 화면 송출을 100% 유지하면서 스마트폰 화면을 최저 하드웨어 백라이트(0.001f) 암전 상태로 유지하여 배터리 소모와 스마트폰 발열을 획기적으로 낮출 수 있습니다. v1.2.7에서는 절전 해제 시 원래 화면 밝기로 100% 즉시 원복됩니다.
+                    </div>
+                </details>
+
+                <details class="faq-item">
+                    <summary>컴퓨터 연결(ADB)이나 루팅(Rooting)이 필요한가요?</summary>
+                    <div class="faq-a">
+                        <strong>전혀 필요하지 않습니다!</strong> 일반 순정 안드로이드 스마트폰에 APK 파일만 다운로드하여 설치하시면 100% 바로 동작합니다. 컴퓨터 연결이나 개발자 모드 세팅이 전혀 불필요합니다.
+                    </div>
+                </details>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="page-footer">
+            <div class="legal-disclaimer-box">
+                <div class="legal-section">
+                    <h4>⚖️ 대한민국 도로교통법 준수 및 안전 운전 고지</h4>
+                    <p>본 소프트웨어는 차량 정차 중 미디어 감상 또는 주행 중 합법적인 지리안내(내비게이션) 편의를 위해 제공됩니다. 대한민국 도로교통법 제49조(모든 운전자의 준수사항 등) 제1항 제11호 및 제11호의2에 따라 운전 중 운전자가 볼 수 있는 위치에 영상표시장치를 표시하거나 조작하는 행위는 법률로 금지되어 있습니다. 주행 중 부주의한 조작이나 영상 시청으로 발생하는 모든 교통사고 및 민·형사상 법적 책임은 전적으로 운전자 본인에게 있습니다. 안전 운전을 최우선으로 준수해 주십시오.</p>
+                </div>
+                <div class="legal-section">
+                    <h4>🏷️ 상표권 비제휴 공지 (Trademarks Disclaimer)</h4>
+                    <p>Tesla는 Tesla, Inc., Apple CarPlay는 Apple Inc., TMAP은 티맵모빌리티(주)의 등록상표입니다. 본 프로젝트(mplat Mirror)는 Tesla, Apple, 티맵모빌리티 등과 어떠한 공식 제휴나 후원, 보증 관계도 없는 독립 서드파티 오픈소스 프로젝트입니다.</p>
+                </div>
+                <div class="legal-section">
+                    <h4>🔒 개인정보 보호 및 데이터 보안 (Privacy Policy)</h4>
+                    <p>본 서비스는 이용자의 개인정보, GPS 위치 기록, 화면 데이터, 음성 데이터를 외부 인터넷 서버로 수집·저장·유출하지 않습니다. 모든 비디오 및 터치 스트림은 스마트폰 핫스팟의 순수 로컬 Wi-Fi(UDP P2P) 내부에서만 순환 처리됩니다.</p>
+                </div>
+            </div>
+
+            <div class="footer-logo">
+                <img src="logo.png" alt="Logo" width="26" height="26">
+                <span>mplat Mirror v1.2.7</span>
+            </div>
+            <p>0MB 모바일 데이터 초저지연 WebRTC 로컬 P2P 직결 인카 미러링 엔진 · Copyright &copy; 2026 mplat. All rights reserved.</p>
+            <div class="footer-links">
+                <a href="/">🚗 테슬라 웹 플레이어</a>
+                <span>·</span>
+                <a href="https://play.google.com/store/apps/details?id=io.mmirror" target="_blank" rel="noopener">▶ Google Play 스토어</a>
+                <span>·</span>
+                <a href="https://mdm.mplat.store:8088/dist/mplatMirror.apk" download>📥 직접 APK 다운로드</a>
+                <span>·</span>
+                <a href="#features">핵심 기능</a>
+                <span>·</span>
+                <a href="#fold">폴더블 안내</a>
+                <span>·</span>
+                <a href="#install">설치 가이드</a>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Mobile Sticky Download Bottom Bar -->
+    <div class="mobile-bottom-bar">
+        <a href="https://play.google.com/store/apps/details?id=io.mmirror" class="mobile-bottom-btn" target="_blank" rel="noopener">
+            <span>▶ Google Play에서 설치 (v1.2.7)</span>
+        </a>
+    </div>
+    </div>
+</body>
+</html>

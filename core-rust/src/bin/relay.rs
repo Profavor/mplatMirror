@@ -1,457 +1,191 @@
+//! mplat Mirror 릴레이 서버 (VPS 바이너리)
+//!
+//! mdm.mplat.store:8088 에서 구동.
+//! 역할: (1) 최신 APK 배포 및 웹 플레이어 서빙
+//!       (2) WebRTC SDP/ICE 시그널링 중계 (실제 스트림은 로컬 P2P)
+//!       (3) 호스트 디스커버리 (공인 IP → 로컬 핫스팟 IP 매핑)
+//!       (4) 레거시 WebSocket 릴레이 (원격 디버깅 전용)
+
 use axum::{
-    extract::{
-        ws::{Message, WebSocket, WebSocketUpgrade},
-        ConnectInfo, Query, Request, State,
-    },
+    extract::{ConnectInfo, Request, State},
     http::{header, StatusCode},
     middleware::{self, Next},
     response::{Html, IntoResponse, Response},
     routing::get,
     Json, Router,
 };
-use futures_util::{SinkExt, StreamExt};
 use serde_json::json;
-use std::{net::SocketAddr, path::PathBuf, sync::Arc};
+use std::{collections::HashMap, net::SocketAddr, path::PathBuf, sync::Arc};
 use tokio::sync::{broadcast, RwLock};
 use tower_http::cors::CorsLayer;
-use tracing::info;
 
-use std::collections::HashMap;
-use std::net::IpAddr;
+use mmirror_core::relay::{self, RelayState};
+use mmirror_core::web_assets;
 
-const INDEX_HTML: &str = include_str!("../../../web/index.html");
-const STYLE_CSS: &str = include_str!("../../../web/style.css");
-const LEAFLET_CSS: &str = include_str!("../../../web/leaflet.css");
-const PLAYER_JS: &str = include_str!("../../../web/player.js");
-const TOUCH_JS: &str = include_str!("../../../web/touch.js");
-const TRIPLOG_JS: &str = include_str!("../../../web/triplog.js");
-const LEAFLET_JS: &str = include_str!("../../../web/leaflet.js");
-const LOGO_PNG: &[u8] = include_bytes!("../../../web/logo.png");
-const DOWNLOAD_HTML: &str = include_str!("../../../dist/index.html");
-const TESLA_HTML: &str = include_str!("../../../dist/tesla.html");
-
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
-struct HostRegistration {
-    local_ip: String,
-    port: u16,
-    timestamp: u64,
-}
-
-#[derive(serde::Deserialize)]
-struct RegisterHostPayload {
-    local_ip: String,
-    port: Option<u16>,
-}
-
-#[derive(Clone)]
-pub struct RoomChannels {
-    pub to_publisher: broadcast::Sender<String>,
-    pub to_viewer: broadcast::Sender<String>,
-    pub last_offer: Arc<RwLock<Option<String>>>,
-}
-
-#[derive(Clone)]
-struct RelayState {
-    broadcast_tx: broadcast::Sender<Arc<Vec<u8>>>,
-    control_tx: broadcast::Sender<String>,
-    current_config: Arc<RwLock<Option<Arc<Vec<u8>>>>>,
-    last_keyframe: Arc<RwLock<Option<Arc<Vec<u8>>>>>,
-    hosts: Arc<RwLock<HashMap<IpAddr, HostRegistration>>>,
-    webrtc_rooms: Arc<RwLock<HashMap<String, RoomChannels>>>,
-    apk_path: PathBuf,
-}
+// ─── 릴레이 전용 핸들러 (정적 페이지) ───
 
 async fn serve_mirror() -> impl IntoResponse {
     let mut headers = axum::http::HeaderMap::new();
-    headers.insert(header::CACHE_CONTROL, "no-cache, no-store, must-revalidate".parse().unwrap());
-    (StatusCode::OK, headers, Html(INDEX_HTML))
+    headers.insert(header::CACHE_CONTROL, web_assets::CACHE_NO_STORE.parse().unwrap());
+    (StatusCode::OK, headers, Html(web_assets::INDEX_HTML))
 }
 
 async fn serve_download() -> impl IntoResponse {
     let mut headers = axum::http::HeaderMap::new();
-    headers.insert(header::CACHE_CONTROL, "no-cache, no-store, must-revalidate".parse().unwrap());
-    (StatusCode::OK, headers, Html(DOWNLOAD_HTML))
+    headers.insert(header::CACHE_CONTROL, web_assets::CACHE_NO_STORE.parse().unwrap());
+    (StatusCode::OK, headers, Html(web_assets::DOWNLOAD_HTML))
 }
 
-async fn serve_tesla() -> impl IntoResponse {
+async fn serve_privacy() -> impl IntoResponse {
     let mut headers = axum::http::HeaderMap::new();
-    headers.insert(header::CACHE_CONTROL, "no-cache, no-store, must-revalidate".parse().unwrap());
-    (StatusCode::OK, headers, Html(INDEX_HTML))
+    headers.insert(header::CACHE_CONTROL, web_assets::CACHE_NO_STORE.parse().unwrap());
+    (StatusCode::OK, headers, Html(web_assets::PRIVACY_HTML))
+}
+
+async fn serve_apk_qr() -> impl IntoResponse {
+    web_assets::serve_text(web_assets::APK_QR_SVG, "image/svg+xml", web_assets::CACHE_PUBLIC_1DAY)
 }
 
 async fn get_trips() -> impl IntoResponse {
     Json(json!([]))
 }
 
-async fn serve_css() -> impl IntoResponse {
-    let mut headers = axum::http::HeaderMap::new();
-    headers.insert(header::CONTENT_TYPE, "text/css; charset=utf-8".parse().unwrap());
-    headers.insert(header::CACHE_CONTROL, "no-cache, no-store, must-revalidate".parse().unwrap());
-    (StatusCode::OK, headers, STYLE_CSS)
-}
+fn serve_file_with_range(
+    bytes: Vec<u8>,
+    content_type: &'static str,
+    filename: &'static str,
+    req_headers: &axum::http::HeaderMap,
+) -> Response {
+    let total_len = bytes.len();
+    let mut resp_headers = axum::http::HeaderMap::new();
+    resp_headers.insert(header::CONTENT_TYPE, content_type.parse().unwrap());
+    resp_headers.insert(
+        header::CONTENT_DISPOSITION,
+        format!("attachment; filename=\"{}\"", filename).parse().unwrap(),
+    );
+    resp_headers.insert(header::ACCEPT_RANGES, "bytes".parse().unwrap());
+    resp_headers.insert(header::CACHE_CONTROL, "no-cache, no-store, must-revalidate".parse().unwrap());
+    resp_headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*".parse().unwrap());
+    resp_headers.insert(
+        header::ACCESS_CONTROL_EXPOSE_HEADERS,
+        "Content-Range, Accept-Ranges, Content-Length, Content-Disposition".parse().unwrap(),
+    );
 
-async fn serve_player() -> impl IntoResponse {
-    let mut headers = axum::http::HeaderMap::new();
-    headers.insert(header::CONTENT_TYPE, "application/javascript; charset=utf-8".parse().unwrap());
-    headers.insert(header::CACHE_CONTROL, "no-cache, no-store, must-revalidate".parse().unwrap());
-    (StatusCode::OK, headers, PLAYER_JS)
-}
+    // Range 헤더 처리 (Android DownloadManager & 브라우저 멀티청크 다운로드 지원)
+    if let Some(range_val) = req_headers.get(header::RANGE).and_then(|v| v.to_str().ok()) {
+        if let Some(range_str) = range_val.strip_prefix("bytes=") {
+            let parts: Vec<&str> = range_str.split('-').collect();
+            let start = parts.first().and_then(|s| s.parse::<usize>().ok()).unwrap_or(0);
+            let end = parts.get(1).and_then(|s| {
+                if s.is_empty() {
+                    None
+                } else {
+                    s.parse::<usize>().ok()
+                }
+            }).unwrap_or(total_len.saturating_sub(1));
 
-async fn serve_touch() -> impl IntoResponse {
-    let mut headers = axum::http::HeaderMap::new();
-    headers.insert(header::CONTENT_TYPE, "application/javascript; charset=utf-8".parse().unwrap());
-    headers.insert(header::CACHE_CONTROL, "no-cache, no-store, must-revalidate".parse().unwrap());
-    (StatusCode::OK, headers, TOUCH_JS)
-}
+            if start >= total_len || start > end {
+                resp_headers.insert(
+                    header::CONTENT_RANGE,
+                    format!("bytes */{}", total_len).parse().unwrap(),
+                );
+                return (StatusCode::RANGE_NOT_SATISFIABLE, resp_headers, "").into_response();
+            }
 
-async fn serve_triplog() -> impl IntoResponse {
-    let mut headers = axum::http::HeaderMap::new();
-    headers.insert(header::CONTENT_TYPE, "application/javascript; charset=utf-8".parse().unwrap());
-    headers.insert(header::CACHE_CONTROL, "no-cache, no-store, must-revalidate".parse().unwrap());
-    (StatusCode::OK, headers, TRIPLOG_JS)
-}
-
-async fn serve_leaflet_css() -> impl IntoResponse {
-    let mut headers = axum::http::HeaderMap::new();
-    headers.insert(header::CONTENT_TYPE, "text/css; charset=utf-8".parse().unwrap());
-    headers.insert(header::CACHE_CONTROL, "no-cache, no-store, must-revalidate".parse().unwrap());
-    (StatusCode::OK, headers, LEAFLET_CSS)
-}
-
-async fn serve_leaflet_js() -> impl IntoResponse {
-    let mut headers = axum::http::HeaderMap::new();
-    headers.insert(header::CONTENT_TYPE, "application/javascript; charset=utf-8".parse().unwrap());
-    headers.insert(header::CACHE_CONTROL, "no-cache, no-store, must-revalidate".parse().unwrap());
-    (StatusCode::OK, headers, LEAFLET_JS)
-}
-
-async fn serve_logo() -> impl IntoResponse {
-    let mut headers = axum::http::HeaderMap::new();
-    headers.insert(header::CONTENT_TYPE, "image/png".parse().unwrap());
-    (StatusCode::OK, headers, LOGO_PNG)
-}
-
-async fn serve_apk(State(state): State<RelayState>) -> Response {
-    match tokio::fs::read(&state.apk_path).await {
-        Ok(bytes) => {
-            let mut headers = axum::http::HeaderMap::new();
-            headers.insert(header::CONTENT_TYPE, "application/vnd.android.package-archive".parse().unwrap());
-            headers.insert(
-                header::CONTENT_DISPOSITION,
-                "attachment; filename=\"mplatMirror.apk\"".parse().unwrap(),
+            let end_clamped = end.min(total_len.saturating_sub(1));
+            let slice_len = end_clamped - start + 1;
+            resp_headers.insert(
+                header::CONTENT_RANGE,
+                format!("bytes {}-{}/{}", start, end_clamped, total_len).parse().unwrap(),
             );
-            (StatusCode::OK, headers, bytes).into_response()
+            resp_headers.insert(header::CONTENT_LENGTH, slice_len.to_string().parse().unwrap());
+
+            let slice = bytes[start..=end_clamped].to_vec();
+            return (StatusCode::PARTIAL_CONTENT, resp_headers, slice).into_response();
         }
-        Err(_) => (StatusCode::NOT_FOUND, "APK not found").into_response(),
     }
+
+    resp_headers.insert(header::CONTENT_LENGTH, total_len.to_string().parse().unwrap());
+    (StatusCode::OK, resp_headers, bytes).into_response()
+}
+
+async fn serve_apk(
+    State(state): State<RelayState>,
+    headers: axum::http::HeaderMap,
+) -> Response {
+    let fallback_paths = [
+        state.apk_path.clone(),
+        PathBuf::from("/home/profavor/mMirror/dist/mplatMirror.apk"),
+        PathBuf::from("/home/profavor/mMirror/dist/mMirror.apk"),
+        PathBuf::from("/home/profavor/mMirror/mplatMirror.apk"),
+        PathBuf::from("/home/profavor/mMirror/mMirror.apk"),
+        PathBuf::from("/home/profavor/mMirror/android/app/build/outputs/apk/release/app-release.apk"),
+    ];
+
+    for path in &fallback_paths {
+        if let Ok(bytes) = tokio::fs::read(path).await {
+            return serve_file_with_range(
+                bytes,
+                "application/vnd.android.package-archive",
+                "mplatMirror.apk",
+                &headers,
+            );
+        }
+    }
+    (StatusCode::NOT_FOUND, "APK not found").into_response()
+}
+
+async fn serve_aab(headers: axum::http::HeaderMap) -> Response {
+    let fallback_paths = [
+        PathBuf::from("/home/profavor/mMirror/dist/mplatMirror.aab"),
+        PathBuf::from("/home/profavor/mMirror/mplatMirror.aab"),
+        PathBuf::from("/home/profavor/mMirror/android/app/build/outputs/bundle/release/app-release.aab"),
+    ];
+
+    for path in &fallback_paths {
+        if let Ok(bytes) = tokio::fs::read(path).await {
+            return serve_file_with_range(
+                bytes,
+                "application/octet-stream",
+                "mplatMirror.aab",
+                &headers,
+            );
+        }
+    }
+    (StatusCode::NOT_FOUND, "AAB not found").into_response()
 }
 
 async fn serve_info() -> impl IntoResponse {
     Json(json!({
         "app": "mplat Mirror Relay",
-        "version": "1.2.0",
-        "domain": "mdm.mplat.store:8088",
-        "status": "online"
+        "version": env!("CARGO_PKG_VERSION"),
+        "domain": "mplat-mirror.web.app",
+        "web_url": "https://mplat-mirror.web.app",
+        "relay_endpoint": "https://mdm.mplat.store:8088",
+        "status": "online",
+        "play_store_url": "https://play.google.com/store/apps/details?id=io.mmirror",
+        "apk_url": "https://mdm.mplat.store:8088/dist/mplatMirror.apk"
     }))
 }
 
-async fn register_host(
+async fn log_request_middleware(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    State(state): State<RelayState>,
-    Json(payload): Json<RegisterHostPayload>,
-) -> impl IntoResponse {
-    let caller_ip = addr.ip();
-    let reg = HostRegistration {
-        local_ip: payload.local_ip.clone(),
-        port: payload.port.unwrap_or(9999),
-        timestamp: std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs(),
-    };
-    info!("Registered host from {}: local_ip={}:{}", caller_ip, reg.local_ip, reg.port);
-    let mut lock = state.hosts.write().await;
-    lock.insert(caller_ip, reg);
-    (StatusCode::OK, Json(json!({"status": "ok", "caller_ip": caller_ip.to_string()})))
-}
-
-async fn discover_host(
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    State(state): State<RelayState>,
-) -> impl IntoResponse {
-    let caller_ip = addr.ip();
-    let lock = state.hosts.read().await;
-    if let Some(host) = lock.get(&caller_ip) {
-        Json(json!({
-            "found": true,
-            "local_ip": host.local_ip,
-            "port": host.port,
-            "url": format!("https://{}:{}", host.local_ip, host.port),
-        }))
-    } else {
-        // 일치하는 공인 IP가 없을 경우 최근 5분 이내에 등록된 최신 호스트 fallback 제공
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-        let fallback = lock.values().filter(|h| now.saturating_sub(h.timestamp) < 300).last();
-        if let Some(host) = fallback {
-            Json(json!({
-                "found": true,
-                "local_ip": host.local_ip,
-                "port": host.port,
-                "url": format!("https://{}:{}", host.local_ip, host.port),
-                "fallback": true
-            }))
-        } else {
-            Json(json!({
-                "found": false,
-                "caller_ip": caller_ip.to_string(),
-            }))
-        }
-    }
-}
-
-// 테슬라 브라우저 (시청자) WebSocket 핸들러
-async fn ws_handler(ws: WebSocketUpgrade, State(state): State<RelayState>) -> Response {
-    ws.on_upgrade(|socket| handle_tesla_viewer(socket, state))
-}
-
-async fn handle_tesla_viewer(socket: WebSocket, state: RelayState) {
-    println!("👀 [RELAY] Tesla/Tablet viewer connected to /ws");
-    let (mut sender, mut receiver) = socket.split();
-
-    // 초기 해상도 설정이 캐시되어 있으면 즉시 전달
-    if let Some(config_bytes) = state.current_config.read().await.clone() {
-        println!("📤 [RELAY] Sending cached config to viewer (len={})", config_bytes.len());
-        let _ = sender.send(Message::Binary((*config_bytes).clone())).await;
-    }
-
-    // 최신 키프레임(SPS/PPS + IDR)이 캐시되어 있으면 즉시 전달하여 1ms 즉시 렌더링
-    if let Some(keyframe_bytes) = state.last_keyframe.read().await.clone() {
-        println!("🔑 [RELAY] Sending cached keyframe to viewer (len={})", keyframe_bytes.len());
-        let _ = sender.send(Message::Binary((*keyframe_bytes).clone())).await;
-    }
-
-    // 캐시된 키프레임이 없을 때만 폰에 키프레임 요청 (불필요한 IDR 폭주 방지)
-    if state.last_keyframe.read().await.is_none() {
-        let _ = state.control_tx.send("{\"type\":\"request_keyframe\"}".to_string());
-    }
-
-    let mut broadcast_rx = state.broadcast_tx.subscribe();
-    let send_control_tx = state.control_tx.clone();
-    let recv_control_tx = state.control_tx.clone();
-
-    // 폰 화면 스트림 -> 테슬라 화면 (초저지연: 뒤처질 경우 낡은 프레임 즉시 드롭하고 실시간으로 스냅)
-    let send_task = tokio::spawn(async move {
-        loop {
-            match broadcast_rx.recv().await {
-                Ok(packet) => {
-                    if let Err(_) = sender.send(Message::Binary((*packet).clone())).await {
-                        break;
-                    }
-                }
-                Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
-                    println!("⚡ [RELAY] Viewer lagged, skipped {} stale frames to preserve 0ms latency!", skipped);
-                    let _ = send_control_tx.send("{\"type\":\"request_keyframe\"}".to_string());
-                }
-                Err(_) => break,
-            }
-        }
-    });
-
-    // 테슬라 터치 이벤트 -> 폰으로 전달
-    let recv_task = tokio::spawn(async move {
-        while let Some(Ok(msg)) = receiver.next().await {
-            if let Message::Text(text) = msg {
-                let _ = recv_control_tx.send(text);
-            }
-        }
-    });
-
-    tokio::select! {
-        _ = send_task => {},
-        _ = recv_task => {},
-    }
-    println!("👋 [RELAY] Tesla/Tablet viewer disconnected from /ws");
-}
-
-// 안드로이드 폰 (화면 송출자) WebSocket 핸들러
-async fn publish_handler(ws: WebSocketUpgrade, State(state): State<RelayState>) -> Response {
-    ws.on_upgrade(|socket| handle_phone_publisher(socket, state))
-}
-
-async fn handle_phone_publisher(socket: WebSocket, state: RelayState) {
-    println!("📱 [RELAY] Phone publisher connected to /publish!");
-    let (mut sender, mut receiver) = socket.split();
-
-    let mut control_rx = state.control_tx.subscribe();
-
-    // 테슬라의 터치 및 키프레임 요청을 폰으로 전송
-    let send_task = tokio::spawn(async move {
-        while let Ok(msg) = control_rx.recv().await {
-            if let Err(_) = sender.send(Message::Text(msg)).await {
-                break;
-            }
-        }
-    });
-
-    // 폰의 비디오/오디오/설정 스트림을 테슬라 뷰어들에게 브로드캐스트
-    let broadcast_tx = state.broadcast_tx.clone();
-    let current_config = state.current_config.clone();
-    let last_keyframe = state.last_keyframe.clone();
-
-    let recv_task = tokio::spawn(async move {
-        let mut frame_count = 0u64;
-        while let Some(Ok(msg)) = receiver.next().await {
-            match msg {
-                Message::Binary(bin) => {
-                    if !bin.is_empty() {
-                        let packet_type = bin[0];
-                        if packet_type == 0x03 {
-                            println!("⚙️ [RELAY] Received DeviceConfig from phone (len={})", bin.len());
-                            let mut lock = current_config.write().await;
-                            *lock = Some(Arc::new(bin.clone()));
-                        } else if packet_type == 0x01 && bin.len() > 5 {
-                            // H.264 NAL type 7(SPS) or 5(IDR Keyframe)
-                            let is_keyframe = bin[1..].windows(5).any(|w| {
-                                w[0..4] == [0, 0, 0, 1] && ((w[4] & 0x1F) == 7 || (w[4] & 0x1F) == 5)
-                            }) || bin[1..].windows(4).any(|w| {
-                                w[0..3] == [0, 0, 1] && ((w[3] & 0x1F) == 7 || (w[3] & 0x1F) == 5)
-                            });
-                            if is_keyframe {
-                                println!("🔑 [RELAY] Cached IDR Keyframe from phone (len={})", bin.len());
-                                let mut lock = last_keyframe.write().await;
-                                *lock = Some(Arc::new(bin.clone()));
-                            }
-                            frame_count += 1;
-                            if frame_count % 300 == 1 {
-                                println!("🎬 [RELAY] Relayed {} video frames from phone to viewers", frame_count);
-                            }
-                        }
-                        let _ = broadcast_tx.send(Arc::new(bin));
-                    }
-                }
-                _ => {}
-            }
-        }
-    });
-
-    tokio::select! {
-        _ = send_task => {},
-        _ = recv_task => {},
-    }
-    println!("📱 [RELAY] Phone publisher disconnected from /publish");
-}
-
-#[derive(serde::Deserialize)]
-struct WebrtcSignalQuery {
-    role: Option<String>,
-    room: Option<String>,
-}
-
-async fn webrtc_signal_handler(
-    ws: WebSocketUpgrade,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    Query(query): Query<WebrtcSignalQuery>,
-    State(state): State<RelayState>,
+    req: Request,
+    next: Next,
 ) -> Response {
-    let role = query.role.unwrap_or_else(|| "viewer".to_string());
-    let room = query.room.unwrap_or_else(|| "default".to_string());
-    ws.on_upgrade(move |socket| handle_webrtc_signal(socket, state, role, room))
+    let method = req.method().to_string();
+    let uri = req.uri().to_string();
+    let user_agent = req.headers().get(header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("-");
+    let range = req.headers().get(header::RANGE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("-");
+    println!("⚡ [RELAY REQUEST] {} {} from {} (UA: {}, Range: {})", method, uri, addr, user_agent, range);
+    next.run(req).await
 }
 
-async fn handle_webrtc_signal(
-    socket: WebSocket,
-    state: RelayState,
-    role: String,
-    room: String,
-) {
-    println!("📡 [WEBRTC SIGNAL] Connected: role={} room={}", role, room);
-
-    let (to_publisher, to_viewer, last_offer) = {
-        let mut rooms = state.webrtc_rooms.write().await;
-        let entry = rooms.entry(room.clone()).or_insert_with(|| {
-            let (to_pub, _) = broadcast::channel(128);
-            let (to_view, _) = broadcast::channel(128);
-            RoomChannels {
-                to_publisher: to_pub,
-                to_viewer: to_view,
-                last_offer: Arc::new(RwLock::new(None)),
-            }
-        });
-        (entry.to_publisher.clone(), entry.to_viewer.clone(), entry.last_offer.clone())
-    };
-
-    let (mut sender, mut receiver) = socket.split();
-
-    if role == "publisher" {
-        let mut rx = to_publisher.subscribe();
-        let send_task = tokio::spawn(async move {
-            while let Ok(msg) = rx.recv().await {
-                if let Err(_) = sender.send(Message::Text(msg)).await {
-                    break;
-                }
-            }
-        });
-
-        let forward_tx = to_viewer.clone();
-        let last_offer_clone = last_offer.clone();
-        let recv_task = tokio::spawn(async move {
-            while let Some(Ok(msg)) = receiver.next().await {
-                if let Message::Text(text) = msg {
-                    if text.contains("\"type\":\"offer\"") || text.contains("\"offer\"") {
-                        println!("📥 [SIGNAL] Cached SDP Offer from publisher (len={})", text.len());
-                        let mut lock = last_offer_clone.write().await;
-                        *lock = Some(text.clone());
-                    } else if text.contains("\"type\":\"candidate\"") {
-                        println!("📡 [SIGNAL] Forwarding Candidate from publisher");
-                    }
-                    let _ = forward_tx.send(text);
-                }
-            }
-        });
-
-        tokio::select! {
-            _ = send_task => {},
-            _ = recv_task => {},
-        }
-    } else {
-        // 시청자(테슬라 브라우저) 접속 시: 스마트폰 퍼블리셔에 뷰어 준비 완료 알림 -> 퍼블리셔가 즉시 최신 Offer 생성 전송
-        println!("📢 [SIGNAL] Viewer connected, requesting fresh SDP Offer from publisher");
-        let _ = to_publisher.send("{\"type\":\"ready\"}".to_string());
-
-        let mut rx = to_viewer.subscribe();
-        let send_task = tokio::spawn(async move {
-            while let Ok(msg) = rx.recv().await {
-                if let Err(_) = sender.send(Message::Text(msg)).await {
-                    break;
-                }
-            }
-        });
-
-        let forward_tx = to_publisher.clone();
-        let recv_task = tokio::spawn(async move {
-            while let Some(Ok(msg)) = receiver.next().await {
-                if let Message::Text(text) = msg {
-                    if text.contains("\"type\":\"answer\"") {
-                        println!("📥 [SIGNAL] Forwarding SDP Answer from viewer (len={})", text.len());
-                    } else if text.contains("\"type\":\"candidate\"") {
-                        println!("📡 [SIGNAL] Forwarding Candidate from viewer");
-                    }
-                    let _ = forward_tx.send(text);
-                }
-            }
-        });
-
-        tokio::select! {
-            _ = send_task => {},
-            _ = recv_task => {},
-        }
-    }
-
-    println!("📡 [WEBRTC SIGNAL] Disconnected: role={} room={}", role, room);
-}
+// ─── 진입점 ───
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -470,44 +204,57 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         apk_path: PathBuf::from("/home/profavor/mMirror/dist/mplatMirror.apk"),
     };
 
-async fn log_request_middleware(
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    req: Request,
-    next: Next,
-) -> Response {
-    let method = req.method().to_string();
-    let uri = req.uri().to_string();
-    println!("⚡ [RELAY REQUEST] {} {} from {}", method, uri, addr);
-    next.run(req).await
-}
-
     let base_app = Router::new()
+        // 페이지 라우트
         .route("/", get(serve_mirror))
         .route("/mirror", get(serve_mirror))
         .route("/tesla", get(serve_mirror))
         .route("/tesla.html", get(serve_mirror))
         .route("/download", get(serve_download))
+        .route("/download.html", get(serve_download))
+        .route("/privacy", get(serve_privacy))
+        .route("/privacy.html", get(serve_privacy))
+        .route("/intro", get(serve_download))
+        .route("/guide", get(serve_download))
+        // APK 다운로드
         .route("/mplatMirror.apk", get(serve_apk))
         .route("/dist/mplatMirror.apk", get(serve_apk))
-        .route("/api/register_host", axum::routing::post(register_host))
-        .route("/api/discover", get(discover_host))
-        .route("/style.css", get(serve_css))
-        .route("/player.js", get(serve_player))
-        .route("/touch.js", get(serve_touch))
-        .route("/triplog.js", get(serve_triplog))
-        .route("/leaflet.css", get(serve_leaflet_css))
-        .route("/leaflet.js", get(serve_leaflet_js))
-        .route("/logo.png", get(serve_logo))
-        .route("/app_logo.png", get(serve_logo))
+        .route("/mMirror.apk", get(serve_apk))
+        .route("/dist/mMirror.apk", get(serve_apk))
+        .route("/app-release.apk", get(serve_apk))
+        .route("/download/mplatMirror.apk", get(serve_apk))
+        // AAB (App Bundle) 다운로드
+        .route("/mplatMirror.aab", get(serve_aab))
+        .route("/dist/mplatMirror.aab", get(serve_aab))
+        .route("/app-release.aab", get(serve_aab))
+        .route("/download/mplatMirror.aab", get(serve_aab))
+        // API
+        .route("/api/register_host", axum::routing::post(relay::discovery::register_host))
+        .route("/api/discover", get(relay::discovery::discover_host))
         .route("/api/info", get(serve_info))
         .route("/api/trips", get(get_trips))
-        .route("/ws", get(ws_handler))
-        .route("/publish", get(publish_handler))
-        .route("/webrtc/signal", get(webrtc_signal_handler))
+        // 공용 정적 에셋 (web_assets 모듈)
+        .route("/style.css", get(web_assets::serve_css))
+        .route("/player.js", get(web_assets::serve_player))
+        .route("/touch.js", get(web_assets::serve_touch))
+        .route("/triplog.js", get(web_assets::serve_triplog))
+        .route("/leaflet.css", get(web_assets::serve_leaflet_css))
+        .route("/leaflet.js", get(web_assets::serve_leaflet_js))
+        .route("/firebase-config.js", get(web_assets::serve_firebase_config))
+        .route("/logo.png", get(web_assets::serve_logo))
+        .route("/app_logo.png", get(web_assets::serve_logo))
+        .route("/apk_qr.svg", get(serve_apk_qr))
+        .route("/dist/apk_qr.svg", get(serve_apk_qr))
+        // WebSocket & WebRTC
+        .route("/ws", get(relay::handlers::ws_handler))
+        .route("/publish", get(relay::handlers::publish_handler))
+        .route("/webrtc/signal", get(relay::signaling::webrtc_signal_handler))
+        // 미들웨어
         .layer(middleware::from_fn(log_request_middleware))
         .layer(CorsLayer::permissive())
         .with_state(state);
 
+    // TLS 설정
     let (cert_path, key_path) = if std::path::Path::new("/home/profavor/.letsencrypt/live/mplat.store/fullchain.pem").exists() {
         ("/home/profavor/.letsencrypt/live/mplat.store/fullchain.pem", "/home/profavor/.letsencrypt/live/mplat.store/privkey.pem")
     } else {
@@ -518,25 +265,12 @@ async fn log_request_middleware(
         .await
         .map_err(|e| format!("Failed to load certs: {}", e))?;
 
-    let app_8088 = base_app.clone();
-    let tls_8088 = tls_config.clone();
+    // 포트 8088 단일 서빙 (APK 배포 및 웹 플레이어 접속)
     let addr_8088: SocketAddr = ([0, 0, 0, 0], 8088).into();
-    tokio::spawn(async move {
-        println!("🚀 mplat Mirror Web Player & Relay Server running on https://0.0.0.0:8088 (mdm.mplat.store:8088)");
-        if let Err(e) = axum_server::bind_rustls(addr_8088, tls_8088)
-            .serve(app_8088.into_make_service_with_connect_info::<SocketAddr>())
-            .await
-        {
-            eprintln!("Port 8088 server error: {}", e);
-        }
-    });
+    println!("🚀 mplat Mirror Web Server running on https://0.0.0.0:8088 (mdm.mplat.store:8088)");
 
-    let app_9999 = base_app;
-    let addr_9999: SocketAddr = ([0, 0, 0, 0], 9999).into();
-    println!("🚀 mplat Mirror Official Port 9999 HTTPS Server running on https://0.0.0.0:9999 (mdm.mplat.store:9999)");
-
-    axum_server::bind_rustls(addr_9999, tls_config)
-        .serve(app_9999.into_make_service_with_connect_info::<SocketAddr>())
+    axum_server::bind_rustls(addr_8088, tls_config)
+        .serve(base_app.into_make_service_with_connect_info::<SocketAddr>())
         .await?;
 
     Ok(())

@@ -101,81 +101,88 @@
         <p>스마트폰 연결을 자동 감지하고 있습니다. 아래 버튼을 터치하여 바로 연결할 수도 있습니다.</p>
 
         <div id="statusBox" class="status-box">
-            <span>📡 스마트폰 로컬 미러링 서버 탐색 중...</span>
+            <span>📡 스마트폰 로컬 핫스팟 탐색 중...</span>
         </div>
 
-        <div class="btn-group">
-            <a href="https://teslamirror.net:9999" class="btn" style="background: #2ecc71;" id="btnTeslaMirror">
-                ⚡ 0MB 초고속 로컬 연결 (https://teslamirror.net:9999)
+        <div class="btn-group" id="btnGroup">
+            <a href="https://mdm.mplat.store:9999" class="btn btn-green" id="btnPrimaryConnect">
+                ⚡ 0MB 로컬 초저지연 바로 연결 (https://mdm.mplat.store:9999)
             </a>
-            <a href="http://td9.cc:7777" class="btn" id="btnTd9">
-                ⚡ 보조 로컬 가상 접속 (http://td9.cc:7777)
+            <a href="https://teslamirror.net:9999" class="btn" style="background: #2980b9;">
+                보조 1: 테슬라미러 주소 (https://teslamirror.net:9999)
             </a>
-            <a href="http://7.7.7.7:7777" class="btn btn-alt" id="btn7777">
-                ⚡ 직접 가상 주소 접속 (http://7.7.7.7:7777)
+            <a href="http://td9.cc:7777" class="btn btn-alt">
+                보조 2: HTTP 일반 주소 (http://td9.cc:7777)
             </a>
-            <a href="https://mdm.mplat.store:8088/" class="btn" style="background: #4a5568; font-size: 15px; padding: 12px;" id="btnRelay">
-                🌐 원격 릴레이 접속 (모바일 데이터 소모됨)
-            </a>
+            <div id="fallbackButtons" style="display: flex; flex-direction: column; gap: 10px;">
+                <button type="button" onclick="autoDetect()" class="btn" style="background: #2d303a; font-size: 15px; border: 1px solid #4a4e5d; cursor: pointer;">
+                    🔄 스마트폰 연결 상태 다시 확인
+                </button>
+            </div>
         </div>
 
         <div class="tips">
-            <strong>💡 연결 전 필수 체크리스트:</strong><br>
-            1. 스마트폰 <strong>mplat Mirror 앱에서 [미러링 시작]</strong>이 켜져 있어야 합니다.<br>
-            2. 테슬라 Wi-Fi가 스마트폰 핫스팟에 연결되어 있고, <strong>[드라이브 중 연결 유지]</strong>가 체크되어 있어야 합니다.<br>
-            3. 최초 접속 시 보안 경고가 뜨면 <strong>[고급] -> [계속 진행(안전하지 않음)]</strong>을 터치하시면 이후 자동 연결됩니다.<br>
-            4. 접속 후 상단 <strong>[✂️ 내비 확대]</strong> 버튼을 누르면 티맵이 2배로 시원하게 확대됩니다!
+            <strong>💡 테슬라 연결 필수 체크사항:</strong><br>
+            1. 스마트폰 <strong>mplat Mirror 앱에서 [미러링 시작]</strong> 버튼이 켜져 있어야 합니다.<br>
+            2. 테슬라 Wi-Fi가 스마트폰 핫스팟에 연결되어 있고, <strong>[드라이브(D) 기어 시 Wi-Fi 유지]</strong>가 체크되어 있어야 합니다.<br>
+            3. <strong>HTTPS 연결 시</strong> 보안 경고가 뜨면 [고급] ➔ [계속 진행(안전하지 않음)]을 1회만 눌러주시면 됩니다.<br>
+            4. 보안 경고 없이 접속하시려면 <strong>HTTP 일반 연결</strong>을 이용하실 수도 있습니다.
         </div>
     </div>
 
     <script>
-        const testUrls = [
-            "https://teslamirror.net:9999",
-            "http://td9.cc:7777",
-            "http://7.7.7.7:7777",
-            "http://100.99.9.9:9999"
-        ];
+        let detectedLocalIp = "";
+        let detectedPort = 9999;
 
-        let redirected = false;
-
-        function checkUrl(url) {
-            return new Promise((resolve) => {
-                const img = new Image();
-                img.onload = () => resolve(url);
-                img.onerror = () => {
-                    const controller = new AbortController();
-                    setTimeout(() => controller.abort(), 1200);
-                    fetch(url + '/status', { signal: controller.signal, mode: 'no-cors' })
-                        .then(() => resolve(url))
-                        .catch(() => resolve(null));
-                };
-                img.src = url + '/logo.png?t=' + Date.now();
-                setTimeout(() => resolve(null), 1200);
-            });
+        async function tryDiscover() {
+            try {
+                const res = await fetch('/api/discover?t=' + Date.now());
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && data.found && data.local_ip) {
+                        return data;
+                    }
+                }
+            } catch (_) {}
+            return null;
         }
 
         async function autoDetect() {
             const statusBox = document.getElementById('statusBox');
+            const btnPrimary = document.getElementById('btnPrimaryConnect');
+            const btnHttp = document.getElementById('btnHttpConnect');
+
+            statusBox.innerHTML = `<span>📡 스마트폰 로컬 핫스팟 탐색 중...</span>`;
+            statusBox.style.color = "#f1c40f";
+
             for (let i = 0; i < 20; i++) {
-                if (redirected) break;
-                for (const url of testUrls) {
-                    const result = await checkUrl(url);
-                    if (result && !redirected) {
-                        redirected = true;
-                        statusBox.innerHTML = `🟢 <b>로컬 연결 감지 성공!</b> ${url} (으)로 이동합니다...`;
-                        statusBox.style.color = "#2ecc71";
-                        setTimeout(() => {
-                            window.location.href = url;
-                        }, 500);
-                        return;
+                const data = await tryDiscover();
+                if (data) {
+                    detectedLocalIp = data.local_ip;
+                    detectedPort = data.port || 9999;
+                    const httpsUrl = `https://${detectedLocalIp}:${detectedPort}`;
+                    const httpUrl = `http://${detectedLocalIp}:8282`;
+
+                    statusBox.innerHTML = `🟢 <b>스마트폰 핫스팟 감지 성공! (${detectedLocalIp})</b><br><small style="color:#a0a5b1">앱에서 [미러링 시작] 확인 후 아래 버튼을 눌러주세요.</small>`;
+                    statusBox.style.color = "#2ecc71";
+                    
+                    if (btnPrimary) {
+                        btnPrimary.href = httpsUrl;
+                        btnPrimary.innerHTML = `⚡ 초고속 로컬 미러링 바로 연결 (권장)`;
+                        btnPrimary.style.display = "block";
                     }
+                    if (btnHttp) {
+                        btnHttp.href = httpUrl;
+                        btnHttp.innerHTML = `⚡ 보안경고 없는 로컬 연결 (HTTP:8282)`;
+                        btnHttp.style.display = "block";
+                    }
+                    return;
                 }
-                await new Promise(r => setTimeout(r, 1000));
+                await new Promise(r => setTimeout(r, 1200));
             }
-            if (!redirected) {
-                statusBox.innerHTML = `⚡ 테슬라 핫스팟 연결 확인 후 <b>초고속 로컬 연결</b> 버튼을 눌러주세요`;
-                statusBox.style.color = "#e67e22";
-            }
+
+            statusBox.innerHTML = `⚠️ <b>스마트폰을 찾는 중...</b><br><small>스마트폰 핫스팟을 켜고 mplat Mirror 앱에서 [미러링 시작]을 눌러주세요.</small>`;
+            statusBox.style.color = "#e67e22";
         }
 
         window.addEventListener('DOMContentLoaded', autoDetect);

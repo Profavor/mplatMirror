@@ -16,14 +16,8 @@ use tower_http::cors::CorsLayer;
 use futures_util::{SinkExt, StreamExt};
 use tracing::{info, warn};
 
-use crate::protocol::{ControlMessage, DeviceConfig, GpsData, TripRecord, PathPoint, PKT_TYPE_AUDIO, PKT_TYPE_VIDEO};
-use crate::web_assets::{INDEX_HTML, PLAYER_JS, STYLE_CSS, TOUCH_JS, TRIPLOG_JS, LEAFLET_CSS, LEAFLET_JS, LOGO_PNG};
-
-use rustls::server::{ClientHello, ResolvesServerCert};
-use rustls::sign::CertifiedKey;
-use rustls_pki_types::{CertificateDer, PrivateKeyDer};
-use rustls_pki_types::pem::PemObject;
-
+use crate::protocol::{ControlMessage, DeviceConfig, GpsData, TripRecord, PKT_TYPE_AUDIO, PKT_TYPE_VIDEO};
+use crate::web_assets;
 
 pub type ControlCallback = Arc<dyn Fn(ControlMessage) + Send + Sync>;
 
@@ -85,70 +79,16 @@ pub fn get_rust_logs() -> String {
     }
 }
 
-#[derive(Debug)]
-struct MultiCertResolver {
-    official: Option<Arc<CertifiedKey>>,
-    fallback: Arc<CertifiedKey>,
-}
-
-impl ResolvesServerCert for MultiCertResolver {
-    fn resolve(&self, client_hello: ClientHello) -> Option<Arc<CertifiedKey>> {
-        if let Some(sni) = client_hello.server_name() {
-            if sni.ends_with(".mplat.store") || sni.eq_ignore_ascii_case("mplat.store") {
-                if let Some(ref cert) = self.official {
-                    log_android(4, &format!("🔒 [TLS] SNI '{}' 감지 -> 공인 Let's Encrypt (*.mplat.store) 인증서 매칭 (녹색 자물쇠 보장)", sni));
-                    return Some(cert.clone());
-                }
-            }
-            log_android(4, &format!("🔓 [TLS] SNI '{}' 감지 -> 전용 SAN 인증서 매칭 (연결 유지)", sni));
-        } else {
-            log_android(4, "🔓 [TLS] SNI 없음 (IP 직접 접속) -> 기본 인증서 매칭");
-        }
-        Some(self.fallback.clone())
-    }
-}
-
-fn make_certified_key(cert_pem: &[u8], key_pem: &[u8]) -> Result<CertifiedKey, Box<dyn std::error::Error + Send + Sync>> {
-    let certs: Vec<CertificateDer<'static>> = CertificateDer::pem_slice_iter(cert_pem)
-        .collect::<Result<Vec<_>, _>>()?;
-    let key: PrivateKeyDer<'static> = PrivateKeyDer::from_pem_slice(key_pem)?;
-    let signing_key = rustls::crypto::aws_lc_rs::default_provider()
-        .key_provider
-        .load_private_key(key)?;
-    Ok(CertifiedKey::new(certs, signing_key))
-}
-
 pub struct MirrorServer {
     preferred_port: u16,
     bound_port: Arc<RwLock<u16>>,
     state: AppState,
     shutdown_tx: Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
-    tls_handles: Arc<Mutex<Vec<axum_server::Handle<std::net::SocketAddr>>>>,
 }
 
 impl MirrorServer {
     pub fn new(port: u16) -> Self {
         let (broadcast_tx, _) = broadcast::channel(128);
-
-        // 샘플 주행일지 초기화 (테슬라 브라우저 지도 렌더링 확인용)
-        let sample_trips = vec![
-            TripRecord {
-                id: "trip-001".to_string(),
-                start_time: "2026-09-28T09:15:00".to_string(),
-                end_time: "2026-09-28T09:42:00".to_string(),
-                distance_km: 18.4,
-                duration_sec: 1620,
-                avg_speed_kmh: 42.5,
-                max_speed_kmh: 88.0,
-                path: vec![
-                    PathPoint { lat: 37.5665, lng: 126.9780, speed: 35.0, time: 100 },
-                    PathPoint { lat: 37.5620, lng: 126.9820, speed: 45.0, time: 200 },
-                    PathPoint { lat: 37.5550, lng: 126.9910, speed: 65.0, time: 300 },
-                    PathPoint { lat: 37.5410, lng: 127.0050, speed: 82.0, time: 400 },
-                    PathPoint { lat: 37.5280, lng: 127.0280, speed: 40.0, time: 500 },
-                ],
-            }
-        ];
 
         Self {
             preferred_port: port,
@@ -157,10 +97,9 @@ impl MirrorServer {
                 broadcast_tx,
                 current_config: Arc::new(RwLock::new(None)),
                 control_callback: Arc::new(Mutex::new(None)),
-                trips: Arc::new(RwLock::new(sample_trips)),
+                trips: Arc::new(RwLock::new(Vec::new())),
             },
             shutdown_tx: Mutex::new(None),
-            tls_handles: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -185,8 +124,12 @@ impl MirrorServer {
         }
     }
 
+    pub fn has_clients(&self) -> bool {
+        self.state.broadcast_tx.receiver_count() > 0
+    }
+
     pub fn send_video(&self, nal_data: &[u8]) {
-        if self.state.broadcast_tx.receiver_count() == 0 {
+        if !self.has_clients() {
             return;
         }
         let mut packet = Vec::with_capacity(1 + nal_data.len());
@@ -227,8 +170,8 @@ impl MirrorServer {
 
         let app_state = self.state.clone();
 
-        // 후보 포트 목록 (우선 지정 포트 -> 8080 -> 8082 -> 8888 -> 8081 -> 7070 -> 9090)
-        let candidates = vec![self.preferred_port, 8080, 8082, 8888, 8081, 7070, 9090];
+        // 후보 포트 목록 (우선 지정 포트 -> 8282 -> 8284 -> 8888 -> 8080 -> 7070 -> 9090)
+        let candidates = vec![self.preferred_port, 8282, 8284, 8888, 8080, 7070, 9090];
         let (std_listener, actual_port) = bind_with_fallback(&candidates)?;
 
         if let Ok(mut lock) = self.bound_port.write() {
@@ -243,13 +186,14 @@ impl MirrorServer {
         let app = Router::new()
             .route("/", get(serve_index))
             .route("/status", get(serve_status))
-            .route("/style.css", get(serve_css))
-            .route("/player.js", get(serve_player))
-            .route("/touch.js", get(serve_touch))
-            .route("/triplog.js", get(serve_triplog))
-            .route("/leaflet.css", get(serve_leaflet_css))
-            .route("/leaflet.js", get(serve_leaflet_js))
-            .route("/logo.png", get(serve_logo))
+            .route("/style.css", get(web_assets::serve_css))
+            .route("/player.js", get(web_assets::serve_player))
+            .route("/touch.js", get(web_assets::serve_touch))
+            .route("/triplog.js", get(web_assets::serve_triplog))
+            .route("/firebase-config.js", get(web_assets::serve_firebase_config))
+            .route("/leaflet.css", get(web_assets::serve_leaflet_css))
+            .route("/leaflet.js", get(web_assets::serve_leaflet_js))
+            .route("/logo.png", get(web_assets::serve_logo))
             .route("/api/info", get(serve_info))
             .route("/api/logs", get(serve_logs))
             .route("/api/trips", get(get_trips).post(post_trip))
@@ -257,7 +201,6 @@ impl MirrorServer {
             .layer(middleware::from_fn(log_request_middleware))
             .layer(CorsLayer::permissive())
             .with_state(app_state);
-
 
         let app_main = app.clone();
         tokio::spawn(async move {
@@ -274,138 +217,8 @@ impl MirrorServer {
                 });
         });
 
-        // 보조 HTTP 포트 7777 (테슬라디스플레이 td9.cc 호환)
-        let app_7777 = app.clone();
-        tokio::spawn(async move {
-            let addr_7777: SocketAddr = ([0, 0, 0, 0], 7777).into();
-            if let Ok(std_listener_7777) = create_socket_listener(&addr_7777) {
-                if let Ok(tokio_listener_7777) = tokio::net::TcpListener::from_std(std_listener_7777) {
-                    log_android(4, "mMirror HTTP server also listening on http://0.0.0.0:7777");
-                    let _ = axum::serve(tokio_listener_7777, app_7777).await;
-                }
-            }
-        });
-
-        // 테슬라 브라우저 HTTPS(TLS) 전용 서버 가동 (내부 TLS 포트: 9999, 9998, 8443, 7679)
-        let app_https = app.clone();
-        let tls_handles = self.tls_handles.clone();
-        tokio::spawn(async move {
-            // 1. 공인 Let's Encrypt SSL 인증서(mdm.mplat.store) 로드
-            let official_key = match make_certified_key(
-                include_bytes!("../certs/fullchain.pem"),
-                include_bytes!("../certs/privkey.pem"),
-            ) {
-                Ok(k) => {
-                    log_android(4, "✅ 공인 Let's Encrypt SSL 인증서 로드 성공 (*.mplat.store) - 테슬라 브라우저 보안경고 0건 보장");
-                    Some(Arc::new(k))
-                }
-                Err(e) => {
-                    log_android(5, &format!("공인 인증서 로드 실패 (자체서명 폴백 전환): {}", e));
-                    None
-                }
-            };
-
-            // 2. 테슬라미러/IP/보조 도메인용 멀티 SAN 인증서 생성 (rcgen) - 도메인 불일치 커넥션 종료(Aborted) 원천 차단
-            let subject_alt_names = vec![
-                "mdm.mplat.store".to_string(),
-                "rnd.mplat.store".to_string(),
-                "*.mplat.store".to_string(),
-                "teslamirror.net".to_string(),
-                "*.teslamirror.net".to_string(),
-                "td9.cc".to_string(),
-                "*.td9.cc".to_string(),
-                "td7.cc".to_string(),
-                "*.td7.cc".to_string(),
-                "122.40.252.50".to_string(),
-                "100.99.9.9".to_string(),
-                "7.7.7.7".to_string(),
-                "3.3.3.3".to_string(),
-                "10.254.1.1".to_string(),
-                "192.168.43.1".to_string(),
-                "10.82.165.254".to_string(),
-                "127.0.0.1".to_string(),
-                "localhost".to_string(),
-                "tesla.local".to_string(),
-            ];
-            let certified_key = rcgen::generate_simple_self_signed(subject_alt_names).expect("Failed to gen self-signed cert");
-            let cert_pem = certified_key.cert.pem();
-            let key_pem = certified_key.signing_key.serialize_pem();
-            let fallback_key = Arc::new(make_certified_key(cert_pem.as_bytes(), key_pem.as_bytes()).expect("Failed to create fallback certified key"));
-
-            let resolver = Arc::new(MultiCertResolver {
-                official: official_key,
-                fallback: fallback_key,
-            });
-
-            let mut config = rustls::ServerConfig::builder()
-                .with_no_client_auth()
-                .with_cert_resolver(resolver);
-            config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
-            let tls_config = axum_server::tls_rustls::RustlsConfig::from_config(Arc::new(config));
-
-            let https_ports = vec![9999, 9998, 8443, 7679];
-            for https_port in https_ports {
-                let addr: SocketAddr = ([0, 0, 0, 0], https_port).into();
-                match create_socket_listener(&addr) {
-                    Ok(std_listener) => {
-                        let handle = axum_server::Handle::new();
-                        if let Ok(mut lock) = tls_handles.lock() {
-                            lock.push(handle.clone());
-                        }
-                                        let app_inst = app_https.clone();
-                                        let config_inst = tls_config.clone();
-                                        tokio::spawn(async move {
-                                            log_android(4, &format!("mMirror axum HTTPS server running on https://0.0.0.0:{}", https_port));
-                                            match axum_server::from_tcp_rustls(std_listener, config_inst) {
-                                                Ok(server) => {
-                                                    let res = server
-                                                        .handle(handle)
-                                                        .serve(app_inst.into_make_service())
-                                                        .await;
-                                                    if let Err(e) = res {
-                                                        log_android(6, &format!("mMirror axum HTTPS server error on port {}: {}", https_port, e));
-                                                    }
-                                                }
-                                                Err(e) => {
-                                                    log_android(6, &format!("from_tcp_rustls failed on port {}: {}", https_port, e));
-                                                }
-                                            }
-                                        });
-                                    }
-                                    Err(e) => {
-                                        log_android(5, &format!("Could not bind HTTPS port {}: {}", https_port, e));
-                                    }
-                                }
-                            }
-
-            // 테슬라 가상 프록시 — 추가 HTTP 포트 직접 바인딩 (7777 [td9.cc], 7678)
-            // 디스패처 대신 동일한 axum 앱을 직접 serve하여 안정성 확보
-            let extra_http_ports = vec![7777, 7678];
-            for eport in extra_http_ports {
-                if eport != actual_port {
-                    if let Ok(std_lis) = create_socket_listener(&([0, 0, 0, 0], eport).into()) {
-                        match tokio::net::TcpListener::from_std(std_lis) {
-                            Ok(listener) => {
-                                let app_clone = app_https.clone();
-                                tokio::spawn(async move {
-                                    log_android(4, &format!("mMirror HTTP server also listening on 0.0.0.0:{}", eport));
-                                    axum::serve(listener, app_clone.into_make_service())
-                                        .await
-                                        .unwrap_or_else(|e| {
-                                            log_android(6, &format!("HTTP server error on port {}: {}", eport, e));
-                                        });
-                                });
-                            }
-                            Err(e) => {
-                                log_android(5, &format!("Could not convert listener for port {}: {}", eport, e));
-                            }
-                        }
-                    } else {
-                        log_android(5, &format!("Could not bind extra HTTP port {}", eport));
-                    }
-                }
-            }
-        });
+        // 8282 단일 표준 포트만 바인딩 (불필요한 레거시 포트 7777, 7678, 9999 등 완전 차단)
+        log_android(4, &format!("✓ mMirror 단일 로컬 HTTP 포트(8282)만 바인딩 (불필요 포트 완전 폐쇄): http://0.0.0.0:{}", actual_port));
 
         Ok(actual_port)
     }
@@ -414,11 +227,6 @@ impl MirrorServer {
         if let Ok(mut lock) = self.shutdown_tx.lock() {
             if let Some(tx) = lock.take() {
                 let _ = tx.send(());
-            }
-        }
-        if let Ok(mut handles) = self.tls_handles.lock() {
-            for handle in handles.drain(..) {
-                handle.shutdown();
             }
         }
         if let Ok(mut lock) = self.bound_port.write() {
@@ -488,65 +296,21 @@ async fn log_request_middleware(
     res
 }
 
-// HTTP Static Handler
+// ─── 로컬 서버 전용 핸들러 ───
+
 async fn serve_index() -> impl IntoResponse {
-    let mut headers = HeaderMap::new();
-    headers.insert(header::CONTENT_TYPE, "text/html; charset=utf-8".parse().unwrap());
-    headers.insert(header::CACHE_CONTROL, "no-cache".parse().unwrap());
-    (StatusCode::OK, headers, INDEX_HTML)
+    web_assets::serve_text(web_assets::INDEX_HTML, "text/html; charset=utf-8", web_assets::CACHE_NO_CACHE)
 }
 
 async fn serve_status() -> impl IntoResponse {
+    let json = format!(
+        r#"{{"status":"ok","version":"{}","device":"mplat-mirror"}}"#,
+        env!("CARGO_PKG_VERSION")
+    );
     let mut headers = HeaderMap::new();
     headers.insert(header::CONTENT_TYPE, "application/json".parse().unwrap());
     headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*".parse().unwrap());
-    (StatusCode::OK, headers, "{\"status\":\"ok\",\"version\":\"1.2.0\",\"device\":\"mplat-mirror\"}")
-}
-
-async fn serve_css() -> impl IntoResponse {
-    let mut headers = HeaderMap::new();
-    headers.insert(header::CONTENT_TYPE, "text/css; charset=utf-8".parse().unwrap());
-    (StatusCode::OK, headers, STYLE_CSS)
-}
-
-async fn serve_player() -> impl IntoResponse {
-    let mut headers = HeaderMap::new();
-    headers.insert(header::CONTENT_TYPE, "application/javascript; charset=utf-8".parse().unwrap());
-    (StatusCode::OK, headers, PLAYER_JS)
-}
-
-async fn serve_touch() -> impl IntoResponse {
-    let mut headers = HeaderMap::new();
-    headers.insert(header::CONTENT_TYPE, "application/javascript; charset=utf-8".parse().unwrap());
-    (StatusCode::OK, headers, TOUCH_JS)
-}
-
-async fn serve_triplog() -> impl IntoResponse {
-    let mut headers = HeaderMap::new();
-    headers.insert(header::CONTENT_TYPE, "application/javascript; charset=utf-8".parse().unwrap());
-    (StatusCode::OK, headers, TRIPLOG_JS)
-}
-
-async fn serve_leaflet_css() -> impl IntoResponse {
-    let mut headers = HeaderMap::new();
-    headers.insert(header::CONTENT_TYPE, "text/css; charset=utf-8".parse().unwrap());
-    headers.insert(header::CACHE_CONTROL, "public, max-age=86400".parse().unwrap());
-    (StatusCode::OK, headers, LEAFLET_CSS)
-}
-
-async fn serve_leaflet_js() -> impl IntoResponse {
-    let mut headers = HeaderMap::new();
-    headers.insert(header::CONTENT_TYPE, "application/javascript; charset=utf-8".parse().unwrap());
-    headers.insert(header::CACHE_CONTROL, "public, max-age=86400".parse().unwrap());
-    (StatusCode::OK, headers, LEAFLET_JS)
-}
-
-async fn serve_logo() -> impl IntoResponse {
-
-    let mut headers = HeaderMap::new();
-    headers.insert(header::CONTENT_TYPE, "image/png".parse().unwrap());
-    headers.insert(header::CACHE_CONTROL, "public, max-age=86400".parse().unwrap());
-    (StatusCode::OK, headers, LOGO_PNG)
+    (StatusCode::OK, headers, json)
 }
 
 #[derive(serde::Serialize)]
@@ -560,7 +324,7 @@ struct AppInfo {
 async fn serve_info() -> impl IntoResponse {
     let info = AppInfo {
         name: "mplat Mirror",
-        version: "1.0.0",
+        version: env!("CARGO_PKG_VERSION"),
         license: "Apache-2.0",
         copyright: "Copyright (c) 2026 mplat. All rights reserved.",
     };
@@ -592,7 +356,8 @@ async fn post_trip(
     StatusCode::CREATED
 }
 
-// WebSocket 핸들러
+// ─── WebSocket 핸들러 ───
+
 async fn ws_handler(
     ws: WebSocketUpgrade,
     State(state): State<AppState>,

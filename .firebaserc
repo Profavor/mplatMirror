@@ -1,0 +1,14 @@
+{
+  "projects": {
+    "default": "mplat-33044"
+  },
+  "targets": {
+    "mplat-33044": {
+      "hosting": {
+        "mplat-mirror": [
+          "mplat-mirror"
+        ]
+      }
+    }
+  }
+}

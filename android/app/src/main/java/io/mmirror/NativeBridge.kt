@@ -36,16 +36,23 @@ object NativeBridge {
     external fun getServerPort(): Int
     @JvmStatic
     external fun stopServer()
+    @Deprecated("Superseded by WebRTC local UDP P2P (0MB mobile data)", level = DeprecationLevel.WARNING)
     @JvmStatic
     external fun startTunProxy(fd: Int, targetPort: Int): Boolean
+    @Deprecated("Superseded by WebRTC local UDP P2P (0MB mobile data)", level = DeprecationLevel.WARNING)
     @JvmStatic
     external fun stopTunProxy()
     @JvmStatic
     external fun getNativeLogs(): String
 
     fun isServerRunning(): Boolean = getServerPort() > 0
+
+    @JvmStatic
+    external fun hasConnectedClients(): Boolean
+
     @JvmStatic
     external fun sendVideoFrame(data: ByteArray, offset: Int, length: Int)
+    @Deprecated("Superseded by vehicle Bluetooth A2DP direct audio", level = DeprecationLevel.WARNING)
     @JvmStatic
     external fun sendAudioData(data: ByteArray, offset: Int, length: Int)
     @JvmStatic
@@ -69,5 +76,10 @@ object NativeBridge {
     @JvmStatic
     fun onCommandEvent(cmd: String) {
         touchListener?.onCommand(cmd)
+    }
+
+    @JvmStatic
+    fun onSetScreenPower(on: Boolean) {
+        ScreenDimmerManager.setDimmed(!on)
     }
 }

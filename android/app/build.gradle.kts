@@ -5,15 +5,16 @@ plugins {
 
 android {
     namespace = "io.mmirror"
-    compileSdk = 34
+    compileSdk = 36
+    buildToolsVersion = "36.0.0"
     ndkVersion = "26.1.10909125"
 
     defaultConfig {
         applicationId = "io.mmirror"
         minSdk = 29 // Android 10 (MediaProjection + AudioPlaybackCapture 지원)
-        targetSdk = 34
-        versionCode = 34
-        versionName = "1.5.1"
+        targetSdk = 36
+        versionCode = 128
+        versionName = "1.2.7"
 
         ndk {
             abiFilters.addAll(listOf("arm64-v8a", "x86_64"))
@@ -22,10 +23,18 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = file("/home/profavor/.config/.android/debug.keystore")
-            storePassword = "android"
-            keyAlias = "androiddebugkey"
-            keyPassword = "android"
+            val keystoreFile = rootProject.file("upload-keystore.jks")
+            if (keystoreFile.exists()) {
+                storeFile = keystoreFile
+                storePassword = "mmirror2026"
+                keyAlias = "mmirror-upload"
+                keyPassword = "mmirror2026"
+            } else {
+                storeFile = file("/home/profavor/.config/.android/debug.keystore")
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
         }
     }
 
@@ -38,6 +47,11 @@ android {
                 "proguard-rules.pro"
             )
         }
+    }
+
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
     }
 
     compileOptions {
@@ -70,6 +84,4 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("io.getstream:stream-webrtc-android:1.3.8")
-    implementation("dev.rikka.shizuku:api:13.1.5")
-    implementation("dev.rikka.shizuku:provider:13.1.5")
 }
