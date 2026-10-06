@@ -46,7 +46,7 @@
         } catch (_) {}
     }
 
-    const CURRENT_WEB_VERSION = '1.2.7';
+    const CURRENT_WEB_VERSION = '1.2.8';
 
     function checkAppVersionMismatch(appVersion) {
         if (!appVersion) return;
@@ -576,6 +576,10 @@
     let activeTrackReader = null;
     let processedPhoneCandidates = new Set();
     let currentOfferUfrag = null;
+    let lastHandledOfferTimestamp = 0;
+    let publisherOnline = false;
+    let publisherOnlineTimestamp = 0;
+    let pendingCandidates = [];
 
     // --- 스트림 종료 및 연결 해제 시 초기 화면 복귀 엔진 ---
     function resetToInitialScreen(reason, force = false) {
@@ -596,6 +600,8 @@
         watchdogKeyframeRequested = false;
         lastHandledOfferTimestamp = 0;
         currentOfferUfrag = null;
+        publisherOnline = false;
+        publisherOnlineTimestamp = 0;
 
         stopWebRtcStats();
         stopPingPong();
@@ -715,9 +721,9 @@
             isFirebaseSignaling = true;
             setupPeerConnection();
 
-            let publisherOnline = false;
-            let publisherOnlineTimestamp = 0;
-            let lastHandledOfferTimestamp = 0;
+            publisherOnline = false;
+            publisherOnlineTimestamp = 0;
+            lastHandledOfferTimestamp = 0;
 
             // 1. 퍼블리셔(스마트폰) 온라인 전환 감지 리스너
             firebaseRoomRef.child('publisher_status').on('value', (snapshot) => {
@@ -949,7 +955,6 @@
         };
     }
 
-    let pendingCandidates = [];
     let webrtcRfcId = null;
     let webrtcRfcFrames = 0;
     let webrtcLastRfcTime = performance.now();
