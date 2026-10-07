@@ -199,7 +199,7 @@
     const PKT_TYPE_AUDIO = 0x02; // Raw PCM Audio (48000Hz, 16bit Stereo)
     const PKT_TYPE_CONFIG = 0x03; // Metadata (Width, Height, FPS, etc.)
     const PKT_TYPE_GPS = 0x04;    // Realtime GPS
-    const CURRENT_WEB_VERSION = '1.3.8';
+    const CURRENT_WEB_VERSION = '1.3.9';
 
     // 오디오 및 A/V 싱크 제어 상태 변수 (100ms 지터 링 버퍼 엔진)
     let audioCtx = null;
@@ -207,7 +207,7 @@
     let audioScriptNode = null;
     let audioDummyOsc = null;
     let audioGainLevel = 1.0;
-    let isAudioStreamingActive = false; // 기본값: false (차량 블루투스 직결 모드)
+    let isAudioStreamingActive = (localStorage.getItem('mmirror_audio_mode') === 'web');
     let videoDelayMs = parseInt(localStorage.getItem('mmirror_video_delay') || '0', 10);
     let videoDelayQueue = []; // A/V 싱크 지연 버퍼 큐 [{ bytes, isKeyFrame, arrivalTime }]
     let webrtcAudioDataChannel = null;
@@ -642,10 +642,16 @@
                     return;
                 }
 
-                // 상태 1: DataChannel이 정상 OPEN되어 있는 경우 -> P2P 전송로는 100% 살아있음!
-                // 블루투스 음악 재생 등으로 인한 2.4GHz Wi-Fi 일시 지터(패킷 지연) 시, 세션을 폭파하지 않고 키프레임만 재요청!
+                // 상태 1: DataChannel이 정상 OPEN되어 있는 경우
                 if (dcState === 'open') {
-                    // 패킷 수신이 4.5초 이상 지연될 때만 키프레임 1회 요청 (Rule #4 준수, 디코더 파괴 절대 금지!)
+                    // 패킷 수신이 장시간(12초 이상) 두절되었거나, PONG 응답이 8초 이상 없을 경우 -> 좀비 DataChannel로 판정하고 자동 복구
+                    if (packetIdleMs >= 12000 || (pongIdleMs >= 8000 && packetIdleMs >= 6000)) {
+                        console.warn(`⚡ [WATCHDOG-WebRTC] 좀비 DataChannel 감지! (패킷: ${Math.round(packetIdleMs)}ms, PONG: ${Math.round(pongIdleMs)}ms 전) -> Self-Healing 재협상 실행`);
+                        triggerWebRtcAutoRecovery(`좀비 DataChannel 감지 (패킷 ${Math.round(packetIdleMs/1000)}초 지연)`);
+                        return;
+                    }
+
+                    // 일시적 패킷 지연(4.5초 이상) 시에는 키프레임 1회 요청 (Rule #4 준수, 디코더 파괴 방지)
                     if (packetIdleMs >= 4500 && (now - lastKeyframeRequestTime > 5000)) {
                         console.log(`🔑 [WATCHDOG-WebRTC] 패킷 지연 감지 (${Math.round(packetIdleMs)}ms) -> 키프레임 갱신 요청`);
                         if (statusText && !statusText.textContent.includes('대기') && !statusText.textContent.includes('복구')) {
@@ -653,7 +659,7 @@
                         }
                         requestKeyframe();
                     }
-                    return; // DataChannel이 열려있는 동안에는 절대 세션을 폭파하지 않음!
+                    return; // DataChannel이 열려있고 지연이 12초 미만인 동안에는 세션을 유지함
                 }
 
                 // 상태 2: DataChannel이 닫혔거나, WebRTC 연결 자체가 실패(failed/closed)한 경우
@@ -1855,7 +1861,12 @@
                 webrtcDataChannel.send(JSON.stringify({ type: 'request_keyframe' }));
                 webrtcDataChannel.send(JSON.stringify({ type: 'get_touch_status' }));
                 webrtcDataChannel.send(JSON.stringify({ type: 'get_apps' }));
-                webrtcDataChannel.send(JSON.stringify({ type: 'get_audio_mode' }));
+                const savedAudioMode = localStorage.getItem('mmirror_audio_mode') || 'bluetooth';
+                if (savedAudioMode === 'web') {
+                    webrtcDataChannel.send(JSON.stringify({ type: 'set_audio_mode', enabled: true }));
+                } else {
+                    webrtcDataChannel.send(JSON.stringify({ type: 'get_audio_mode' }));
+                }
             } catch (_) {}
         };
         webrtcDataChannel.onopen = handleChannelOpen;
@@ -3755,7 +3766,9 @@
     // 사용자 제스처 이벤트 리스너를 통한 AudioContext 자동 언락 (Autoplay 정책 대응)
     ['click', 'touchstart', 'pointerdown', 'keydown'].forEach(evt => {
         document.addEventListener(evt, () => {
-            if (audioCtx && audioCtx.state === 'suspended') {
+            if (!audioCtx) {
+                if (isAudioStreamingActive) initAudioContext();
+            } else if (audioCtx.state === 'suspended') {
                 audioCtx.resume().catch(() => {});
             }
         }, { passive: true });
@@ -3807,6 +3820,9 @@
     function setAudioMode(mode) {
         const enabled = (mode === 'web');
         isAudioStreamingActive = enabled;
+        try {
+            localStorage.setItem('mmirror_audio_mode', mode);
+        } catch (_) {}
         if (enabled) {
             const savedDelay = parseInt(localStorage.getItem('mmirror_video_delay') || '0', 10);
             setVideoDelay(savedDelay >= 0 ? savedDelay : 0);
@@ -3948,8 +3964,13 @@
             });
         }
 
-        // 초기 UI 상태 적용 (기본값: 블루투스 직결 모드)
-        updateAudioModeUI(false);
+        // 초기 UI 상태 적용 (localStorage 저장된 모드 복원)
+        const savedAudioMode = localStorage.getItem('mmirror_audio_mode') || 'bluetooth';
+        updateAudioModeUI(savedAudioMode === 'web');
+        if (savedAudioMode === 'web') {
+            const savedDelay = parseInt(localStorage.getItem('mmirror_video_delay') || '0', 10);
+            setVideoDelay(savedDelay >= 0 ? savedDelay : 0);
+        }
     }
     setupAudioModalListeners();
 

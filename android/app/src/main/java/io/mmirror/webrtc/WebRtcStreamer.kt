@@ -55,6 +55,7 @@ class WebRtcStreamer(
     private var dataChannel: DataChannel? = null
     private var audioDataChannel: DataChannel? = null
     private val pendingRemoteCandidates = mutableListOf<IceCandidate>()
+    private val sendLock = Any()
 
     private val okHttpClient = OkHttpClient.Builder()
         .retryOnConnectionFailure(true)
@@ -94,12 +95,20 @@ class WebRtcStreamer(
                 put("type", "screen_power_changed")
                 put("on", !dimmed)
             }
-            dataChannel?.send(DataChannel.Buffer(ByteBuffer.wrap(notify.toString().toByteArray(Charsets.UTF_8)), false))
+            synchronized(sendLock) {
+                dataChannel?.send(DataChannel.Buffer(ByteBuffer.wrap(notify.toString().toByteArray(Charsets.UTF_8)), false))
+            }
         } catch (_: Exception) {}
     }
 
     fun isPeerConnected(): Boolean {
-        return peerConnection?.connectionState() == PeerConnection.PeerConnectionState.CONNECTED
+        val pc = peerConnection ?: return false
+        val pcConnected = pc.connectionState() == PeerConnection.PeerConnectionState.CONNECTED
+        val iceConnected = pc.iceConnectionState() == PeerConnection.IceConnectionState.CONNECTED ||
+                           pc.iceConnectionState() == PeerConnection.IceConnectionState.COMPLETED
+        val dcOpen = dataChannel?.state() == DataChannel.State.OPEN ||
+                     audioDataChannel?.state() == DataChannel.State.OPEN
+        return pcConnected || iceConnected || dcOpen
     }
 
     fun start() {
@@ -620,6 +629,7 @@ class WebRtcStreamer(
         // [작업 지시서 3] DataChannel 전용: addTrack/addTransceiver/오디오소스를 만들지 않음
         val dcInit = DataChannel.Init().apply {
             ordered = true
+            maxRetransmitTimeMs = 1500 // 1.5초 이상 지연된 패킷은 자동 폐기하여 HOL 블로킹 및 영구 동결 방지
         }
         val dc = pc.createDataChannel("control", dcInit)
         setupDataChannel(dc)
@@ -727,7 +737,9 @@ class WebRtcStreamer(
             }
             val payload = resp.toString().toByteArray(Charsets.UTF_8)
             val buffer = DataChannel.Buffer(java.nio.ByteBuffer.wrap(payload), false)
-            dc.send(buffer)
+            synchronized(sendLock) {
+                dc.send(buffer)
+            }
             Log.i(TAG, "Sent touch status: granted=$isA11yGranted")
         } catch (e: Exception) {
             Log.w(TAG, "Failed to send touch status: ${e.message}")
@@ -915,7 +927,9 @@ class WebRtcStreamer(
                         put("type", "toast")
                         put("message", if (powerOn) "☀️ 스마트폰 화면 밝기가 정상 복원되었습니다." else "🌙 스마트폰 화면이 최저 밝기(초절전 암전)로 전환되었습니다.")
                     }
-                    dataChannel?.send(DataChannel.Buffer(java.nio.ByteBuffer.wrap(resp.toString().toByteArray(Charsets.UTF_8)), false))
+                    synchronized(sendLock) {
+                        dataChannel?.send(DataChannel.Buffer(java.nio.ByteBuffer.wrap(resp.toString().toByteArray(Charsets.UTF_8)), false))
+                    }
                 }
                 "ping" -> {
                     val t = json.optDouble("t", 0.0)
@@ -923,7 +937,9 @@ class WebRtcStreamer(
                         put("type", "pong")
                         put("t", t)
                     }
-                    dataChannel?.send(DataChannel.Buffer(java.nio.ByteBuffer.wrap(pong.toString().toByteArray(Charsets.UTF_8)), false))
+                    synchronized(sendLock) {
+                        dataChannel?.send(DataChannel.Buffer(java.nio.ByteBuffer.wrap(pong.toString().toByteArray(Charsets.UTF_8)), false))
+                    }
                 }
                 "net_stats" -> {
                     val rtt = json.optDouble("rtt", 0.0)
@@ -1276,8 +1292,8 @@ class WebRtcStreamer(
         val buffered = dc.bufferedAmount()
         val now = android.os.SystemClock.elapsedRealtime()
 
-        // 1. 소켓 버퍼가 512KB 이상 적체된 경우 네트워크 혼잡으로 판단하여 GOP 드롭 모드 진입
-        if (buffered > 512 * 1024L) {
+        // 1. 소켓 버퍼가 384KB 이상 적체된 경우 네트워크 혼잡으로 판단하여 GOP 드롭 모드 진입
+        if (buffered > 384 * 1024L) {
             if (!isDroppingGop) {
                 isDroppingGop = true
                 gopDropStartTime = now
@@ -1286,14 +1302,13 @@ class WebRtcStreamer(
         }
 
         if (isDroppingGop) {
-            val dropDuration = now - gopDropStartTime
-            if (buffered < 128 * 1024L || dropDuration > 1200L) {
-                // 버퍼가 128KB 이하로 원활하게 배출되었거나 1200ms 경과 시 GOP 드롭 해제 및 신규 키프레임 요청
+            if (buffered < 128 * 1024L) {
+                // 버퍼가 128KB 이하로 원활하게 배출된 경우 GOP 드롭 해제 및 신규 키프레임 요청
                 isDroppingGop = false
                 Log.i(TAG, "✓ WebRTC DataChannel 버퍼 해소 (${buffered / 1024}KB) -> 정상 전송 재개 및 키프레임 갱신")
                 io.mmirror.MediaProjectionService.instance?.requestKeyFrame()
-            } else if (!isKeyFrame) {
-                // 버퍼 해소 전까지 델타 프레임만 드롭 (신규 키프레임은 통과 허용)
+            } else if (buffered > 768 * 1024L || !isKeyFrame) {
+                // 버퍼가 768KB 이상이면 키프레임도 폐기하여 SCTP 마비 방지. 그 이하 구간에서는 신규 키프레임만 통과
                 return
             }
         }
@@ -1303,7 +1318,9 @@ class WebRtcStreamer(
             packet[0] = 0x01 // PKT_TYPE_VIDEO
             System.arraycopy(data, 0, packet, 1, data.size)
             val buffer = DataChannel.Buffer(java.nio.ByteBuffer.wrap(packet), true)
-            dc.send(buffer)
+            synchronized(sendLock) {
+                dc.send(buffer)
+            }
         } catch (e: Exception) {
             AppLogger.w(TAG, "⚠️ sendVideoPacket 실패: ${e.message}")
         }
@@ -1326,7 +1343,9 @@ class WebRtcStreamer(
             packet[0] = 0x02 // PKT_TYPE_AUDIO
             System.arraycopy(data, 0, packet, 1, length)
             val buffer = DataChannel.Buffer(java.nio.ByteBuffer.wrap(packet), true)
-            dc.send(buffer)
+            synchronized(sendLock) {
+                dc.send(buffer)
+            }
         } catch (e: Exception) {
             AppLogger.w(TAG, "⚠️ sendAudio 실패: ${e.message}")
         }
@@ -1343,7 +1362,9 @@ class WebRtcStreamer(
             }
             val payload = resp.toString().toByteArray(Charsets.UTF_8)
             val buffer = DataChannel.Buffer(java.nio.ByteBuffer.wrap(payload), false)
-            dc.send(buffer)
+            synchronized(sendLock) {
+                dc.send(buffer)
+            }
             AppLogger.i(TAG, "🔊 Sent audio mode status: enabled=$enabled")
         } catch (_: Exception) {}
     }
@@ -1357,7 +1378,9 @@ class WebRtcStreamer(
             packet[0] = 0x04 // PKT_TYPE_GPS
             System.arraycopy(payload, 0, packet, 1, payload.size)
             val buffer = DataChannel.Buffer(java.nio.ByteBuffer.wrap(packet), true)
-            dc.send(buffer)
+            synchronized(sendLock) {
+                dc.send(buffer)
+            }
         } catch (_: Exception) {}
     }
 }

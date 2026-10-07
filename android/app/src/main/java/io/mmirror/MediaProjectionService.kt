@@ -70,10 +70,16 @@ class MediaProjectionService : Service() {
     private var isAudioStreamingEnabled = false
 
     fun setAudioStreamingEnabled(enabled: Boolean) {
-        if (isAudioStreamingEnabled == enabled) return
-        isAudioStreamingEnabled = enabled
         val prefs = getSharedPreferences("mmirror_prefs", Context.MODE_PRIVATE)
         prefs.edit().putBoolean("pref_audio_stream_enabled", enabled).apply()
+        if (isAudioStreamingEnabled == enabled) {
+            if (enabled && audioCaptureService == null) {
+                startAudioCapture()
+            }
+            webRtcStreamer?.sendAudioModeStatus()
+            return
+        }
+        isAudioStreamingEnabled = enabled
         AppLogger.i(TAG, "🔊 Audio streaming mode changed: enabled=$enabled")
         if (enabled) {
             startAudioCapture()
@@ -123,6 +129,10 @@ class MediaProjectionService : Service() {
     private fun handleBluetoothDisconnectedOnExit() {
         carExitRunnable?.let { mainHandler.removeCallbacks(it) }
         val r = Runnable {
+            if (isAudioStreamingEnabled) {
+                AppLogger.i(TAG, "🔊 [차량 하차 감지 무시] 웹 사운드 스트리밍 모드 활성화 중이므로 블루투스 해제 자동 종료 건너뜀")
+                return@Runnable
+            }
             val isWebRtcConnected = webRtcStreamer?.isPeerConnected() == true
             if (!isWebRtcConnected && isStreaming) {
                 AppLogger.i(TAG, "🚗 [차량 하차 감지] 테슬라 브라우저 연결 단절 확인 -> 스마트폰 배터리 보호를 위해 미러링 자동 종료")
@@ -136,8 +146,8 @@ class MediaProjectionService : Service() {
             }
         }
         carExitRunnable = r
-        AppLogger.w(TAG, "🚗 차량 블루투스 해제 감지 -> 45초간 테슬라 브라우저 연결 유지 여부 감시")
-        mainHandler.postDelayed(r, 45_000L)
+        AppLogger.w(TAG, "🚗 차량 블루투스 해제 감지 -> 90초간 테슬라 브라우저 연결 유지 여부 감시")
+        mainHandler.postDelayed(r, 90_000L)
     }
 
     private fun sendRelayVideo(data: ByteArray, isKeyFrame: Boolean) {
