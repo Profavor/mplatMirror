@@ -133,8 +133,18 @@
 
     function isDashboardEvent(e) {
         const dash = document.getElementById('homeDashboard');
-        if (!dash || dash.classList.contains('hidden')) return false;
-        return !!(e.target && e.target.closest('#homeDashboard'));
+        if (dash && !dash.classList.contains('hidden') && e.target && e.target.closest('#homeDashboard')) {
+            return true;
+        }
+        const side = document.getElementById('mirrorSidePanel');
+        if (side && side.style.display !== 'none' && e.target && e.target.closest('#mirrorSidePanel')) {
+            return true;
+        }
+        const restoreBtn = document.getElementById('btnSidePanelRestore');
+        if (restoreBtn && restoreBtn.style.display !== 'none' && e.target && e.target.closest('#btnSidePanelRestore')) {
+            return true;
+        }
+        return false;
     }
 
     // --- 터치 이벤트 핸들러 (테슬라 디스플레이 전용 - 멀티터치 핀치 줌 & 1:1 직결 터치) ---

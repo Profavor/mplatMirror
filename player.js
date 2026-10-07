@@ -385,6 +385,51 @@
             canvas.style.marginLeft = '0';
             canvas.style.marginRight = 'auto';
         }
+        updateMirrorSidePanelLayout(cw, ch, parseInt(canvas.style.width) || targetW, mode);
+    }
+
+    // 미러링 우측 빈 공간 정보 패널 (시계, 실시간 날씨, 퀵 위젯) 레이아웃 동적 계산
+    function updateMirrorSidePanelLayout(cw, ch, canvasW, mode) {
+        const sidePanel = document.getElementById('mirrorSidePanel');
+        const restoreBtn = document.getElementById('btnSidePanelRestore');
+        if (!sidePanel) return;
+
+        if (window.currentViewMode !== 'mirror') {
+            sidePanel.style.display = 'none';
+            if (restoreBtn) restoreBtn.style.display = 'none';
+            return;
+        }
+
+        const isUserEnabled = localStorage.getItem('mmirror_show_side_widget') !== 'false';
+
+        let remainingW = 0;
+        let leftPos = 0;
+
+        if (mode === 'left') {
+            remainingW = cw - canvasW;
+            leftPos = canvasW;
+        } else if (mode === 'center') {
+            remainingW = Math.max(0, Math.round((cw - canvasW) / 2));
+            leftPos = Math.round((cw + canvasW) / 2);
+        } else {
+            remainingW = 0;
+        }
+
+        // 우측 여유 공간이 220px 이상 충분할 때만 위젯 표시 (가로 전체화면 내비 등으로 꽉 찼을 때는 미표시)
+        if (remainingW >= 220) {
+            if (isUserEnabled) {
+                sidePanel.style.display = 'flex';
+                sidePanel.style.left = leftPos + 'px';
+                sidePanel.style.width = remainingW + 'px';
+                if (restoreBtn) restoreBtn.style.display = 'none';
+            } else {
+                sidePanel.style.display = 'none';
+                if (restoreBtn) restoreBtn.style.display = 'block';
+            }
+        } else {
+            sidePanel.style.display = 'none';
+            if (restoreBtn) restoreBtn.style.display = 'none';
+        }
     }
 
     window.addEventListener('resize', () => updateCanvasDisplayLayout(true));
@@ -2982,6 +3027,10 @@
         window.currentViewMode = 'dashboard';
         const dash = document.getElementById('homeDashboard');
         if (dash) dash.classList.remove('hidden');
+        const sidePanel = document.getElementById('mirrorSidePanel');
+        if (sidePanel) sidePanel.style.display = 'none';
+        const restoreBtn = document.getElementById('btnSidePanelRestore');
+        if (restoreBtn) restoreBtn.style.display = 'none';
         updateModeBadge('dashboard');
         document.getElementById('btnDockHome')?.classList.add('active');
         document.getElementById('btnDockMirror')?.classList.remove('active');
@@ -2998,6 +3047,7 @@
         updateModeBadge('mirror');
         document.getElementById('btnDockHome')?.classList.remove('active');
         document.getElementById('btnDockMirror')?.classList.add('active');
+        updateCanvasDisplayLayout(true);
     }
 
     // 1. 대형 디지털 시계 & 캘린더
@@ -3014,7 +3064,8 @@
         const elAmPm = document.getElementById('dashClockAmPm');
         const elDate = document.getElementById('dashClockDate');
 
-        if (elTime) elTime.textContent = `${String(hours12).padStart(2, '0')}:${minutes}`;
+        const timeStr = `${String(hours12).padStart(2, '0')}:${minutes}`;
+        if (elTime) elTime.textContent = timeStr;
         if (elSec) elSec.textContent = seconds;
         if (elAmPm) elAmPm.textContent = ampm;
 
@@ -3023,7 +3074,19 @@
         const month = now.getMonth() + 1;
         const date = now.getDate();
         const dayName = days[now.getDay()];
-        if (elDate) elDate.textContent = `${year}년 ${month}월 ${date}일 ${dayName}`;
+        const dateStr = `${year}년 ${month}월 ${date}일 ${dayName}`;
+        if (elDate) elDate.textContent = dateStr;
+
+        // 미러링 우측 빈 공간 시계 위젯 동기화
+        const sideTime = document.getElementById('sideClockTime');
+        const sideSec = document.getElementById('sideClockSec');
+        const sideAmPm = document.getElementById('sideClockAmPm');
+        const sideDate = document.getElementById('sideClockDate');
+
+        if (sideTime) sideTime.textContent = timeStr;
+        if (sideSec) sideSec.textContent = seconds;
+        if (sideAmPm) sideAmPm.textContent = ampm;
+        if (sideDate) sideDate.textContent = dateStr;
     }
 
     // 2. 실시간 GPS 기반 날씨 엔진 (Open-Meteo & Nominatim)
@@ -3158,6 +3221,19 @@
             if (elLoc) elLoc.textContent = `📍 ${locName}`;
             if (elRange) elRange.textContent = `최저 ${minTemp}° / 최고 ${maxTemp}°`;
 
+            // 미러링 우측 빈 공간 날씨 위젯 동기화
+            const sideIcon = document.getElementById('sideWeatherIcon');
+            const sideTemp = document.getElementById('sideWeatherTemp');
+            const sideDesc = document.getElementById('sideWeatherDesc');
+            const sideLoc = document.getElementById('sideWeatherLocation');
+            const sideRange = document.getElementById('sideWeatherRange');
+
+            if (sideIcon) sideIcon.textContent = wInfo.icon;
+            if (sideTemp) sideTemp.textContent = `${temp}`;
+            if (sideDesc) sideDesc.textContent = wInfo.desc;
+            if (sideLoc) sideLoc.textContent = `📍 ${locName}`;
+            if (sideRange) sideRange.textContent = `최저 ${minTemp}° / 최고 ${maxTemp}°`;
+
             lastWeatherFetchTime = Date.now();
             lastWeatherLat = lat;
             lastWeatherLng = lng;
@@ -3189,6 +3265,18 @@
                     if (elLoc && c.locName) elLoc.textContent = `📍 ${c.locName}`;
                     if (elRange && c.minTemp !== undefined) elRange.textContent = `최저 ${c.minTemp}° / 최고 ${c.maxTemp}°`;
 
+                    const sideIcon = document.getElementById('sideWeatherIcon');
+                    const sideTemp = document.getElementById('sideWeatherTemp');
+                    const sideDesc = document.getElementById('sideWeatherDesc');
+                    const sideLoc = document.getElementById('sideWeatherLocation');
+                    const sideRange = document.getElementById('sideWeatherRange');
+
+                    if (sideIcon && c.icon) sideIcon.textContent = c.icon;
+                    if (sideTemp && c.temp !== undefined) sideTemp.textContent = `${c.temp}`;
+                    if (sideDesc && c.desc) sideDesc.textContent = c.desc;
+                    if (sideLoc && c.locName) sideLoc.textContent = `📍 ${c.locName}`;
+                    if (sideRange && c.minTemp !== undefined) sideRange.textContent = `최저 ${c.minTemp}° / 최고 ${c.maxTemp}°`;
+
                     if (c.lat && c.lng) {
                         lastWeatherLat = c.lat;
                         lastWeatherLng = c.lng;
@@ -3212,6 +3300,15 @@
                     { timeout: 3000, enableHighAccuracy: true, maximumAge: 60000 }
                 );
             } catch (_) {}
+        }
+
+        // 최초 기동 시 캐시/GPS가 아직 없더라도 서울 기준 기본 날씨 자동 로드
+        if (!lastWeatherFetchTime) {
+            setTimeout(() => {
+                if (!lastWeatherFetchTime) {
+                    fetchWeather(37.5665, 126.9780);
+                }
+            }, 3000);
         }
     }
 
@@ -4094,6 +4191,60 @@
         }
     }
     setupAudioModalListeners();
+
+    function setupMirrorSidePanelListeners() {
+        const btnToggle = document.getElementById('btnToggleSidePanel');
+        const btnRestore = document.getElementById('btnSidePanelRestore');
+        const sideBtnDash = document.getElementById('sideBtnDashboard');
+        const sideBtnPower = document.getElementById('sideBtnScreenPower');
+        const sideBtnFit = document.getElementById('sideBtnFitMode');
+        const sideBtnAud = document.getElementById('sideBtnAudio');
+
+        if (btnToggle) {
+            btnToggle.addEventListener('click', (e) => {
+                e.stopPropagation();
+                localStorage.setItem('mmirror_show_side_widget', 'false');
+                updateCanvasDisplayLayout(true);
+            });
+        }
+
+        if (btnRestore) {
+            btnRestore.addEventListener('click', (e) => {
+                e.stopPropagation();
+                localStorage.setItem('mmirror_show_side_widget', 'true');
+                updateCanvasDisplayLayout(true);
+            });
+        }
+
+        if (sideBtnDash) {
+            sideBtnDash.addEventListener('click', (e) => {
+                e.stopPropagation();
+                showDashboardView();
+            });
+        }
+
+        if (sideBtnPower) {
+            sideBtnPower.addEventListener('click', (e) => {
+                e.stopPropagation();
+                document.getElementById('dockBtnScreenPower')?.click();
+            });
+        }
+
+        if (sideBtnFit) {
+            sideBtnFit.addEventListener('click', (e) => {
+                e.stopPropagation();
+                document.getElementById('btnFitMode')?.click();
+            });
+        }
+
+        if (sideBtnAud) {
+            sideBtnAud.addEventListener('click', (e) => {
+                e.stopPropagation();
+                document.getElementById('btnDockAudio')?.click();
+            });
+        }
+    }
+    setupMirrorSidePanelListeners();
 
     // [작업 지시서 4] 가설 3 검증용 실험 지원 (URL 쿼리 기반)
     // ?test=ws : WebRTC 미사용, 순수 WebSocket(/ws) 모드만 사용

@@ -75,6 +75,77 @@
             <!-- 순수 캔버스 60 FPS 초저지연 하드웨어 가속 렌더러 (테슬라 오디오 간섭 0%) -->
             <canvas id="videoCanvas" class="fit-left"></canvas>
 
+            <!-- 미러링 시 우측 빈 공간 정보 패널 (시계, 실시간 날씨, 퀵 컨트롤) -->
+            <aside id="mirrorSidePanel" class="mirror-side-panel">
+                <div class="side-panel-header">
+                    <div class="side-panel-title-wrap">
+                        <span class="side-panel-badge">Tesla Smart Widget</span>
+                        <span class="side-panel-sub">실시간 운전 보조 정보</span>
+                    </div>
+                    <button id="btnToggleSidePanel" class="btn-side-toggle" title="위젯 숨기기">&times;</button>
+                </div>
+
+                <div class="side-panel-content">
+                    <!-- 위젯 1: 대형 디지털 시계 & 캘린더 -->
+                    <div class="side-card side-clock-card">
+                        <div class="side-clock-time-row">
+                            <span id="sideClockTime" class="side-clock-time">12:00</span>
+                            <span id="sideClockSec" class="side-clock-sec">00</span>
+                            <span id="sideClockAmPm" class="side-clock-ampm">PM</span>
+                        </div>
+                        <div class="side-clock-date-row">
+                            <span id="sideClockDate" class="side-clock-date">2026년 10월 7일 수요일</span>
+                        </div>
+                    </div>
+
+                    <!-- 위젯 2: 실시간 GPS 날씨 카드 -->
+                    <div class="side-card side-weather-card">
+                        <div class="side-weather-top-row">
+                            <span id="sideWeatherIcon" class="side-weather-icon">☀️</span>
+                            <div class="side-weather-temp-wrap">
+                                <div class="side-weather-temp-row">
+                                    <span id="sideWeatherTemp" class="side-weather-temp">--</span>
+                                    <span class="side-weather-unit">°C</span>
+                                </div>
+                                <span id="sideWeatherDesc" class="side-weather-desc">날씨 수신 중...</span>
+                            </div>
+                        </div>
+                        <div class="side-weather-bottom-row">
+                            <span id="sideWeatherLocation" class="side-weather-location">📍 위치 확인 중...</span>
+                            <span id="sideWeatherRange" class="side-weather-range">최저 --° / 최고 --°</span>
+                        </div>
+                    </div>
+
+                    <!-- 위젯 3: 퀵 컨트롤 버튼 모음 -->
+                    <div class="side-card side-actions-card">
+                        <div class="side-actions-title">빠른 설정</div>
+                        <div class="side-actions-grid">
+                            <button id="sideBtnDashboard" class="side-action-btn" title="대시보드로 전환">
+                                <span class="action-icon">📊</span>
+                                <span class="action-text">대시보드</span>
+                            </button>
+                            <button id="sideBtnScreenPower" class="side-action-btn" title="스마트폰 화면 절전">
+                                <span class="action-icon">🌙</span>
+                                <span class="action-text">폰 절전</span>
+                            </button>
+                            <button id="sideBtnFitMode" class="side-action-btn" title="화면 맞춤 모드 변경">
+                                <span class="action-icon">🚗</span>
+                                <span class="action-text">화면 맞춤</span>
+                            </button>
+                            <button id="sideBtnAudio" class="side-action-btn" title="사운드 출력 설정">
+                                <span class="action-icon">🔊</span>
+                                <span class="action-text">사운드</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- 위젯 숨겼을 때 다시 열기용 플로팅 미니 알약 버튼 -->
+            <button id="btnSidePanelRestore" class="btn-side-restore" style="display:none;" title="시계 &amp; 날씨 위젯 열기">
+                <span>🕒 시계·날씨</span>
+            </button>
+
             <!-- 테슬라 전용 홈 대시보드 (시계, 실시간 GPS 날씨, 주행 요약, 앱 런처) -->
             <div id="homeDashboard" class="home-dashboard">
                 <div class="dashboard-scroll-wrap">
@@ -471,12 +542,6 @@
                     <div class="diag-item">
                         <span class="diag-label">🚨 ontrack:</span>
                         <span id="diagOntrackCount" class="diag-val" style="color: #10b981;">0회 (정상)</span>
-                    </div>
-                    <div class="diag-item test-modes-row">
-                        <span class="diag-label">🧪 원클릭 테스트:</span>
-                        <a href="/" class="btn-test-link">기본(WebRTC)</a>
-                        <a href="?test=ws" class="btn-test-link" title="WebRTC 끄고 웹소켓만 사용">실험A: 순수 WS</a>
-                        <a href="?test=touch" class="btn-test-link" title="화면 터치 전까지 WebRTC 안 켬">실험B: 터치 후 WebRTC</a>
                     </div>
                 </div>
 
