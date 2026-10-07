@@ -1623,21 +1623,32 @@
             });
         }
 
+        if (location.search.includes('stopat=before_ca')) {
+            console.log('🧪 [TEST] ?stopat=before_ca: createAnswer 직전 중단');
+            if (statusText) statusText.textContent = '🧪 [테스트] createAnswer 직전 중단';
+            return;
+        }
+
         // [미디어 트랙 수신 차단] DataChannel 전용 오퍼에 대해 오디오/비디오 트랜시버 수신 완전 차단
         enforceSilentMediaSession();
-        const isCleanAns = location.search.includes('cleanans');
-        const answerOptions = isCleanAns ? {} : {
+        const isLegacyAns = location.search.includes('legacyans');
+        const answerOptions = isLegacyAns ? {
             offerToReceiveAudio: false,
             offerToReceiveVideo: false
-        };
-        if (isCleanAns) {
-            console.log('🧪 [TEST-CLEANANS] createAnswer() without legacy offerToReceiveAudio/Video options');
-        }
+        } : {};
+        console.log('🧪 [ANSWER] createAnswer options:', answerOptions);
         const answer = await peerConnection.createAnswer(answerOptions);
+
+        if (location.search.includes('stopat=ca_only')) {
+            console.log('🧪 [TEST] ?stopat=ca_only: createAnswer 완료 후 중단 (setLocalDescription 미호출)');
+            if (statusText) statusText.textContent = '🧪 [테스트] createAnswer 완료 (setLocalDescription 미호출)';
+            return;
+        }
+
         await peerConnection.setLocalDescription(answer);
         enforceSilentMediaSession();
 
-        if (location.search.includes('stopat=ans')) {
+        if (location.search.includes('stopat=ans') || location.search.includes('stopat=sld')) {
             console.log('🧪 [TEST] ?stopat=ans: setLocalDescription 완료 후 중단 (Answer 미전송, P2P 미성립)');
             if (statusText) statusText.textContent = '🧪 [테스트] Answer 생성 완료 (폰에 전송 안 함)';
             return;
