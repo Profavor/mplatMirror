@@ -48,6 +48,10 @@
           {
             "key": "Cache-Control",
             "value": "no-cache, no-store, must-revalidate"
+          },
+          {
+            "key": "Permissions-Policy",
+            "value": "microphone=(), camera=(), speaker-selection=(), autoplay=()"
           }
         ]
       },
@@ -61,6 +65,10 @@
           {
             "key": "Access-Control-Allow-Origin",
             "value": "*"
+          },
+          {
+            "key": "Permissions-Policy",
+            "value": "microphone=(), camera=(), speaker-selection=(), autoplay=()"
           }
         ]
       }

@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta http-equiv="Permissions-Policy" content="microphone=(), camera=(), speaker-selection=(), autoplay=()">
     <title>mplat Mirror - 테슬라 무선 미러링</title>
     <link rel="stylesheet" href="leaflet.css">
     <link rel="stylesheet" href="style.css">
@@ -16,8 +17,7 @@
                 <span id="statusText">연결 대기 중...</span>
                 <span class="app-version-badge">v1.3.2</span>
                 <span id="versionMismatchBadge" class="badge-mismatch" style="display:none;" title="스마트폰 앱 버전 불일치">⚠️ 앱 v<span id="mismatchAppVer"></span> 업데이트 필요</span>
-                <span id="modeBadge" class="badge-mode" style="display:none;"></span>
-                <button id="btnConsoleLog" class="btn-console-log" title="실시간 콘솔 로그 열기">📋 콘솔 로그</button>
+                <button id="btnConsoleLog" class="btn-console-log" title="실시간 콘솔 로그 열기">📋 로그</button>
             </div>
 
             <div class="metrics">

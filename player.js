@@ -199,6 +199,39 @@
     const PKT_TYPE_CONFIG = 0x03; // Metadata (Width, Height, FPS, etc.)
     const CURRENT_WEB_VERSION = '1.3.2';
 
+    // [미디어 세션 및 오디오 격리 방어 엔진]
+    // 테슬라 브라우저가 화면 미러링 시작 시 미디어 소스를 '웹'으로 전환하여
+    // 차량 인앱 뮤직(Spotify 등)이나 스마트폰 블루투스 음악을 가로채는 현상을 원천 방지합니다.
+    function enforceSilentMediaSession() {
+        if ('mediaSession' in navigator) {
+            try {
+                navigator.mediaSession.playbackState = 'none';
+                navigator.mediaSession.metadata = null;
+            } catch (_) {}
+        }
+    }
+
+    if ('mediaSession' in navigator) {
+        try {
+            navigator.mediaSession.playbackState = 'none';
+            navigator.mediaSession.metadata = null;
+            // playbackState를 'none'으로 영구 고정 (내부 엔진이나 브라우저가 'playing'으로 변경 불가)
+            try {
+                Object.defineProperty(navigator.mediaSession, 'playbackState', {
+                    get: () => 'none',
+                    set: () => {},
+                    configurable: true,
+                    enumerable: true
+                });
+            } catch (_) {}
+            // 미디어 액션 핸들러 무력화 (미디어 제어 카드가 테슬라 OS에 등록되는 것 원천 차단)
+            try {
+                navigator.mediaSession.setActionHandler = () => {};
+            } catch (_) {}
+            console.log('🛡️ [AUDIO-SHIELD] MediaSession permanently locked to playbackState="none" (Zero Audio Interference)');
+        } catch (_) {}
+    }
+
     function checkAppVersionMismatch(appVersion) {
         if (!appVersion) return;
         lastReportedAppVersion = appVersion;
@@ -370,6 +403,11 @@
     let skippedDeltaFramesBeforeKey = 0;
 
     function initVideoDecoder() {
+        if (location.search.includes('nodec')) {
+            console.log('🧪 [TEST-NODEC] ?nodec 모드 활성화: VideoDecoder 초기화 생략');
+            return;
+        }
+
         if (!('VideoDecoder' in window)) {
             console.warn('WebCodecs VideoDecoder 미지원 브라우저 (WebRTC P2P 모드 사용)');
             return;
@@ -384,6 +422,7 @@
         videoConfigured = false;
         hasReceivedFirstKeyFrame = false;
         skippedDeltaFramesBeforeKey = 0;
+        enforceSilentMediaSession();
 
         videoDecoder = new VideoDecoder({
             output: renderVideoFrame,
@@ -405,6 +444,7 @@
 
         // 첫 프레임 수신 시 오버레이 숨김 및 상태 업데이트
         if (statusText && (!statusText.textContent.includes('0MB') || statusText.textContent.includes('협상') || statusText.textContent.includes('복구') || statusText.textContent.includes('대기') || statusText.textContent.includes('지연'))) {
+            enforceSilentMediaSession();
             statusText.textContent = '0MB 로컬 WebRTC 스트리밍 중';
             if (statusDot) statusDot.className = 'dot connected';
         }
@@ -855,7 +895,7 @@
 
             console.log('🔥 [FIREBASE] Realtime Database signaling initialized for room:', roomName);
             isFirebaseSignaling = true;
-            setupPeerConnection();
+            enforceSilentMediaSession();
             startWatchdog();
 
             publisherOnline = false;
@@ -1326,6 +1366,7 @@
         };
 
         peerConnection = new RTCPeerConnection(rtcConfig);
+        enforceSilentMediaSession();
 
         peerConnection.onicecandidate = (event) => {
             if (event.candidate) {
@@ -1349,6 +1390,7 @@
             if (diagRtc) diagRtc.textContent = state;
             try {
                 if (state === 'connected') {
+                    enforceSilentMediaSession();
                     console.log('🎉 [WEBRTC] Direct P2P Connected to Phone! 0MB Local Stream Active!');
                     isWebRtcConnected = true;
                     isConnected = true;
@@ -1537,9 +1579,14 @@
             });
         }
 
-        // [작업 지시서 2] 레거시 offerToReceive* 옵션 제거 (Unified Plan 표준)
-        const answer = await peerConnection.createAnswer();
+        // [미디어 트랙 수신 차단] DataChannel 전용 오퍼에 대해 오디오/비디오 트랜시버 수신 완전 차단
+        enforceSilentMediaSession();
+        const answer = await peerConnection.createAnswer({
+            offerToReceiveAudio: false,
+            offerToReceiveVideo: false
+        });
         await peerConnection.setLocalDescription(answer);
+        enforceSilentMediaSession();
 
         console.log('📡 [WEBRTC] Sending Answer to phone (offerId:', offerId || 'none', ')');
         sendSignalingMessage({
@@ -1582,19 +1629,28 @@
             webrtcDataChannel.binaryType = 'arraybuffer';
         } catch (_) {}
         const handleChannelOpen = () => {
+            enforceSilentMediaSession();
             console.log('💬 [WEBRTC] DataChannel OPEN! 0ms Touch, Control, and Video ready.');
             isWebRtcConnected = true;
             isConnected = true;
             lastWebRtcFrameTime = performance.now();
-            initVideoDecoder();
-            if (canvas) {
+            if (!location.search.includes('nodec')) {
+                initVideoDecoder();
+            }
+            if (canvas && !location.search.includes('noview')) {
                 canvas.style.display = 'block';
                 canvas.className = 'fit-' + (window.screenFitMode || 'left');
             }
-            if (statusText) statusText.textContent = '0MB 로컬 WebRTC 스트리밍 중';
+            if (statusText) {
+                statusText.textContent = location.search.includes('nodec')
+                    ? '🧪 [테스트] WebRTC 연결됨 (디코더 OFF: ?nodec)'
+                    : '0MB 로컬 WebRTC 스트리밍 중';
+            }
             if (statusDot) statusDot.className = 'dot connected';
             if (disconnectOverlay) disconnectOverlay.classList.add('hidden');
-            if (typeof showMirrorView === 'function') showMirrorView();
+            if (typeof showMirrorView === 'function' && !location.search.includes('noview')) {
+                showMirrorView();
+            }
             startPingPong();
             startWatchdog();
             try {
@@ -1831,6 +1887,18 @@
 
     // NAL 패킷 처리 (초저지연 워치독 연동)
     function handleVideoPacket(payload) {
+        // [원인 분리 테스트 스위치 1: 가설 B(WebCodecs 디코더) 격리 검증]
+        // ?nodec 접속 시 WebRTC 연결 및 DataChannel 수신은 정상 유지하되 WebCodecs 비디오 디코딩만 건너뜀
+        if (location.search.includes('nodec')) {
+            lastVideoPacketTime = performance.now();
+            hasEverReceivedVideo = true;
+            hasEverReceivedWebRtcVideo = true;
+            if (statusText && !statusText.textContent.includes('?nodec')) {
+                statusText.textContent = '🧪 [테스트] WebRTC 수신 중 (디코더 OFF: ?nodec)';
+            }
+            return;
+        }
+
         if (!videoDecoder) {
             initVideoDecoder();
             if (!videoDecoder) return;
@@ -1856,13 +1924,15 @@
             lastDcBitrateTime = now;
         }
 
-        // 캔버스 가시화 & 미러링 뷰 전환
-        if (canvas && canvas.style.display !== 'block') {
-            canvas.style.display = 'block';
-            canvas.className = 'fit-' + (window.screenFitMode || 'left');
-        }
-        if (typeof showMirrorView === 'function' && window.currentViewMode !== 'mirror') {
-            showMirrorView();
+        // 캔버스 가시화 & 미러링 뷰 전환 (가설 C 검증 스위치 ?noview)
+        if (!location.search.includes('noview')) {
+            if (canvas && canvas.style.display !== 'block') {
+                canvas.style.display = 'block';
+                canvas.className = 'fit-' + (window.screenFitMode || 'left');
+            }
+            if (typeof showMirrorView === 'function' && window.currentViewMode !== 'mirror') {
+                showMirrorView();
+            }
         }
 
         // NAL 유닛 타입 다중 스캔 (AUD/SEI 등 접두 NAL이 있어도 IDR(5) 또는 SPS(7) 검출)
@@ -2241,17 +2311,8 @@
 
     function updateModeBadge(mode) {
         const badge = document.getElementById('modeBadge');
-        if (!badge) return;
-        badge.style.display = 'inline-flex';
-        const isDash = (mode === 'dashboard' || (mode === undefined && window.currentViewMode === 'dashboard'));
-        if (isDash) {
-            badge.className = 'badge-mode standalone';
-            badge.textContent = '🖥️ 대시보드';
-            badge.title = '테슬라 전용 홈 대시보드 (시계/날씨/주행 요약/앱 런처)';
-        } else {
-            badge.className = 'badge-mode mirror';
-            badge.textContent = '📱 1:1 폰 미러링';
-            badge.title = '스마트폰 화면 1:1 실시간 미러링 모드 (티맵·유튜브 등 100% 호환)';
+        if (badge) {
+            badge.style.display = 'none';
         }
     }
 

@@ -1865,23 +1865,29 @@ html, body {
 /* --- 차량 실시간 콘솔 로그 & 진단 모달 스타일 --- */
 .btn-console-log {
     cursor: pointer;
-    background: rgba(59, 130, 246, 0.25);
-    border: 1px solid #3b82f6;
-    color: #93c5fd;
-    padding: 2px 7px;
-    border-radius: 5px;
-    font-size: 11px;
+    font-size: 9px;
     font-weight: 700;
-    margin-left: 6px;
+    color: #93c5fd;
+    background: rgba(59, 130, 246, 0.18);
+    border: 1px solid rgba(59, 130, 246, 0.45);
+    padding: 0 5px;
+    border-radius: 3px;
+    letter-spacing: 0.3px;
+    line-height: 14px;
+    height: 16px;
+    box-sizing: border-box;
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: 3px;
+    margin-left: 5px;
     transition: all 0.15s ease;
+    vertical-align: middle;
 }
 
 .btn-console-log:hover, .btn-console-log:active {
-    background: rgba(59, 130, 246, 0.5);
+    background: rgba(59, 130, 246, 0.45);
     color: #ffffff;
+    border-color: #60a5fa;
 }
 
 .console-modal-card {
