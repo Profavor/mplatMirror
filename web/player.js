@@ -197,7 +197,7 @@
     // 패킷 타입 식별자
     const PKT_TYPE_VIDEO = 0x01; // H.264 NAL Frame
     const PKT_TYPE_CONFIG = 0x03; // Metadata (Width, Height, FPS, etc.)
-    const CURRENT_WEB_VERSION = '1.3.2';
+    const CURRENT_WEB_VERSION = '1.3.3';
 
     // [미디어 세션 및 오디오 격리 방어 엔진]
     // 테슬라 브라우저가 화면 미러링 시작 시 미디어 소스를 '웹'으로 전환하여
