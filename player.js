@@ -37,7 +37,7 @@
     // 패킷 타입 식별자
     const PKT_TYPE_VIDEO = 0x01; // H.264 NAL Frame
     const PKT_TYPE_CONFIG = 0x03; // Metadata (Width, Height, FPS, etc.)
-    const CURRENT_WEB_VERSION = '1.3.1';
+    const CURRENT_WEB_VERSION = '1.3.2';
 
     function checkAppVersionMismatch(appVersion) {
         if (!appVersion) return;
@@ -1276,12 +1276,14 @@
         };
 
         peerConnection.ontrack = (event) => {
-            console.warn('⚠️ [WEBRTC] Unexpected remote track received, disabling:', event.track.kind);
+            console.warn(`🚨 [WEBRTC-ONTRACK] ontrack triggered! kind=${event.track ? event.track.kind : 'unknown'}, id=${event.track ? event.track.id : 'unknown'}`);
             // 비디오 화면은 DataChannel을 통해 WebCodecs -> <canvas>로만 렌더링됩니다.
-            // 미디어 트랙을 즉시 정지시켜 MPRIS 카드 팝업 및 오디오 탈취 원천 방지.
+            // 미디어 트랙을 즉시 정지시켜 테슬라 미디어 소스 전환 원천 방지.
             try {
-                event.track.enabled = false;
-                event.track.stop();
+                if (event.track) {
+                    event.track.enabled = false;
+                    event.track.stop();
+                }
             } catch (_) {}
         };
 
@@ -1296,6 +1298,13 @@
         currentOfferUfrag = ufragMatch ? ufragMatch[1].trim() : null;
         console.log(`🔄 WebRTC resetting PeerConnection for fresh incoming offer (offerId: ${offerId || 'none'}, ufrag: ${currentOfferUfrag})`);
 
+        // [작업 지시서 1] 수신한 Offer SDP의 m= 줄 전체와 a=sendrecv/sendonly/recvonly/inactive 줄 로깅
+        const sdpLines = sdp.split(/\r\n|\n/);
+        const mLines = sdpLines.filter(l => l.startsWith('m='));
+        const dirLines = sdpLines.filter(l => /^(a=sendrecv|a=sendonly|a=recvonly|a=inactive)/.test(l));
+        console.log('📡 [SDP-OFFER-AUDIT] m= lines from phone:', mLines);
+        console.log('📡 [SDP-OFFER-AUDIT] direction lines from phone:', dirLines);
+
         // 새 세션 오퍼 수신 시 디코더 및 키프레임 상태 초기화 (참조 프레임 꼬임 및 디코더 큐 밀림 방지)
         hasReceivedFirstKeyFrame = false;
         videoConfigured = false;
@@ -1309,8 +1318,40 @@
         setupPeerConnection();
         processedPhoneCandidates.clear();
 
+        // [작업 지시서 2] 수신 쪽 방어: setRemoteDescription 전에 SDP의 audio/video m-section 포트를 0으로 거부
+        const sanitizedSdp = sdpLines.map(line => {
+            if (line.startsWith('m=audio ')) {
+                console.warn('🛡️ [SDP-DEFENSE] Rejecting incoming audio m-section (port 0):', line);
+                return line.replace(/^m=audio \d+/, 'm=audio 0');
+            }
+            if (line.startsWith('m=video ')) {
+                console.warn('🛡️ [SDP-DEFENSE] Rejecting incoming video m-section (port 0, using DataChannel):', line);
+                return line.replace(/^m=video \d+/, 'm=video 0');
+            }
+            return line;
+        }).join('\r\n');
+
         // SDP 오퍼를 표준 규격 그대로 원본 적용 (BUNDLE mid 및 ICE candidate 페어링 100% 보장)
-        await peerConnection.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: sdp }));
+        await peerConnection.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: sanitizedSdp }));
+
+        // [작업 지시서 2] setRemoteDescription 후 getTransceivers()에서 audio/video 트랜시버를 direction='inactive' + stop() 처리
+        try {
+            if (typeof peerConnection.getTransceivers === 'function') {
+                const transceivers = peerConnection.getTransceivers();
+                transceivers.forEach(tc => {
+                    const kind = (tc.receiver && tc.receiver.track && tc.receiver.track.kind) || 'unknown';
+                    console.warn(`🛑 [SDP-DEFENSE] Inactivating and stopping transceiver: kind=${kind}, mid=${tc.mid}`);
+                    try {
+                        tc.direction = 'inactive';
+                        if (tc.stop) tc.stop();
+                    } catch (e) {
+                        console.warn('Transceiver stop warning:', e);
+                    }
+                });
+            }
+        } catch (e) {
+            console.warn('getTransceivers warning:', e);
+        }
 
         // remoteDescription 설정 완료 후 대기 중이던 ICE 후보들 중 현재 세션 일치 후보만 일괄 주입
         while (pendingCandidates.length > 0) {
@@ -1347,10 +1388,8 @@
             });
         }
 
-        const answer = await peerConnection.createAnswer({
-            offerToReceiveAudio: false,
-            offerToReceiveVideo: false
-        });
+        // [작업 지시서 2] 레거시 offerToReceive* 옵션 제거 (Unified Plan 표준)
+        const answer = await peerConnection.createAnswer();
         await peerConnection.setLocalDescription(answer);
 
         console.log('📡 [WEBRTC] Sending Answer to phone (offerId:', offerId || 'none', ')');
@@ -2832,9 +2871,32 @@
         });
     }
 
-    // 앱 시작 시 소켓 연결, WebRTC P2P 시그널링 가동
+    // [작업 지시서 4] 가설 3 검증용 실험 지원 (URL 쿼리 기반)
+    // ?test=ws : WebRTC 미사용, 순수 WebSocket(/ws) 모드만 사용
+    // ?test=touch : 사용자 첫 터치/클릭 이후에만 connectWebRtc() 호출
+    const testModeParams = new URLSearchParams(window.location.search);
+    const testMode = (testModeParams.get('test') || testModeParams.get('mode') || '').toLowerCase();
+
     requestWakeLock();
     startWatchdog();
-    connectWebRtc();
-    connectWebSocket();
+
+    if (testMode === 'ws') {
+        console.log('🧪 [EXP-A] 테스트 모드 A: RTCPeerConnection 미사용, 순수 WebSocket(/ws) 모드 활성화');
+        connectWebSocket();
+    } else if (testMode === 'touch' || testMode === 'gesture') {
+        console.log('🧪 [EXP-B] 테스트 모드 B: 사용자 터치 대기 후 WebRTC 연결');
+        let touchWebRtcStarted = false;
+        const startOnTouch = () => {
+            if (touchWebRtcStarted) return;
+            touchWebRtcStarted = true;
+            console.log('🧪 [EXP-B] 사용자 터치 감지됨 -> WebRTC 연결 시작');
+            connectWebRtc();
+            connectWebSocket();
+            ['click', 'touchstart', 'pointerdown'].forEach(evt => document.removeEventListener(evt, startOnTouch));
+        };
+        ['click', 'touchstart', 'pointerdown'].forEach(evt => document.addEventListener(evt, startOnTouch, { passive: true, once: true }));
+    } else {
+        connectWebRtc();
+        connectWebSocket();
+    }
 })();

@@ -506,9 +506,24 @@ class MediaProjectionService : Service() {
             val audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
             if (audioManager != null) {
                 try {
+                    // [작업 지시서 3] AudioManager 모드가 MODE_NORMAL로 유지되는지, 블루투스 SCO가 시작되지 않는지 확인
+                    @Suppress("DEPRECATION")
+                    if (audioManager.isBluetoothScoOn) {
+                        audioManager.stopBluetoothSco()
+                        audioManager.isBluetoothScoOn = false
+                    }
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        try {
+                            audioManager.clearCommunicationDevice()
+                        } catch (_: Exception) {}
+                    }
+                    if (audioManager.mode != AudioManager.MODE_NORMAL) {
+                        audioManager.mode = AudioManager.MODE_NORMAL
+                    }
                     val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
                     val currVol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
-                    Log.i(TAG, "🔊 Audio Volume (STREAM_MUSIC): $currVol / $maxVol")
+                    @Suppress("DEPRECATION")
+                    Log.i(TAG, "🔊 Audio Volume (STREAM_MUSIC): $currVol / $maxVol, Mode: ${audioManager.mode} (MODE_NORMAL=${AudioManager.MODE_NORMAL}), SCO: ${audioManager.isBluetoothScoOn}")
                     if (currVol <= 0 && maxVol > 0) {
                         val targetVol = (maxVol * 0.85).toInt().coerceAtLeast(1)
                         audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetVol, 0)

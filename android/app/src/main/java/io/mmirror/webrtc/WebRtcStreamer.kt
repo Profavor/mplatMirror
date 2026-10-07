@@ -136,8 +136,38 @@ class WebRtcStreamer(
             networkIgnoreMask = 0
         }
 
+        val adm = org.webrtc.audio.JavaAudioDeviceModule.builder(context)
+            .setUseHardwareAcousticEchoCanceler(false)
+            .setUseHardwareNoiseSuppressor(false)
+            .setEnableVolumeLogger(false)
+            .createAudioDeviceModule().apply {
+                setSpeakerMute(true)
+                setMicrophoneMute(true)
+            }
+
+        // [작업 지시서 3] AudioManager 모드가 MODE_NORMAL로 유지되는지 확인 및 SCO 비활성화
+        val audioManager = context.getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager
+        if (audioManager != null) {
+            @Suppress("DEPRECATION")
+            if (audioManager.isBluetoothScoOn) {
+                audioManager.stopBluetoothSco()
+                audioManager.isBluetoothScoOn = false
+            }
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                try {
+                    audioManager.clearCommunicationDevice()
+                } catch (_: Exception) {}
+            }
+            if (audioManager.mode != android.media.AudioManager.MODE_NORMAL) {
+                audioManager.mode = android.media.AudioManager.MODE_NORMAL
+            }
+            @Suppress("DEPRECATION")
+            AppLogger.i(TAG, "🔊 [AUDIO-CHECK] AudioManager mode: ${audioManager.mode} (MODE_NORMAL=${android.media.AudioManager.MODE_NORMAL}), SCO: ${audioManager.isBluetoothScoOn}")
+        }
+
         peerConnectionFactory = PeerConnectionFactory.builder()
             .setOptions(options)
+            .setAudioDeviceModule(adm)
             .setVideoEncoderFactory(encoderFactory)
             .setVideoDecoderFactory(decoderFactory)
             .createPeerConnectionFactory()
@@ -249,18 +279,14 @@ class WebRtcStreamer(
         val hotspotIp = getHotspotIp()
 
         val result = mutableListOf<String>()
-        var skipAudioBlock = false
         for (line in lines) {
-            if (line.startsWith("m=audio")) {
-                skipAudioBlock = true
-                continue
-            } else if (skipAudioBlock && line.startsWith("m=")) {
-                skipAudioBlock = false
-            }
-            if (skipAudioBlock) {
-                continue
-            }
             var l = line
+            // [작업 지시서 3] audio/video m-section이 있을 경우 포트를 0으로 거부하여 DataChannel만 활성화
+            if (l.startsWith("m=audio ")) {
+                l = l.replaceFirst(Regex("^m=audio \\d+"), "m=audio 0")
+            } else if (l.startsWith("m=video ")) {
+                l = l.replaceFirst(Regex("^m=video \\d+"), "m=video 0")
+            }
             if (l.startsWith("c=IN IP4") && !l.contains("0.0.0.0") && hotspotIp.isNotEmpty()) {
                 l = "c=IN IP4 $hotspotIp"
             }
@@ -562,29 +588,29 @@ class WebRtcStreamer(
         }
         peerConnection = pc
 
-        videoTrack?.let { vTrack ->
-            pc.addTrack(vTrack, listOf("stream_mmirror"))
-        }
-
+        // [작업 지시서 3] DataChannel 전용: addTrack/addTransceiver/오디오소스를 만들지 않음
         val dcInit = DataChannel.Init().apply {
             ordered = true
         }
         val dc = pc.createDataChannel("control", dcInit)
         setupDataChannel(dc)
 
-        val sdpConstraints = MediaConstraints().apply {
-            mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", "false"))
-            mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "false"))
-        }
+        // WebRTC 표준 MediaConstraints (레거시 옵션 제거)
+        val sdpConstraints = MediaConstraints()
 
         pc.createOffer(object : SdpObserver {
             override fun onCreateSuccess(desc: SessionDescription) {
-                AppLogger.i(TAG, "✓ SDP Offer 생성 완료, LocalDescription 설정 중...")
+                // [작업 지시서 1] 송출단에서 생성된 Offer SDP m-section 전체 로깅
+                val rawMlines = desc.description.lines().filter { it.startsWith("m=") }
+                AppLogger.i(TAG, "📡 [SDP-OFFER-RAW] Generated m-lines: $rawMlines")
+
                 val mungedSdp = mungeSdpForLowLatency(desc.description)
+                val mungedDesc = SessionDescription(desc.type, mungedSdp)
+
                 pc.setLocalDescription(object : SdpObserver {
                     override fun onCreateSuccess(p0: SessionDescription?) {}
                     override fun onSetSuccess() {
-                        AppLogger.i(TAG, "✓ LocalDescription 설정 완료 (3.5Mbps 저지연 SDP), Offer 전송 중...")
+                        AppLogger.i(TAG, "✓ LocalDescription 설정 완료 (DataChannel 전용 SDP), Offer 전송 중...")
                         val json = JSONObject().apply {
                             put("type", "offer")
                             put("offerId", currentOfferId)
@@ -602,7 +628,7 @@ class WebRtcStreamer(
                     }
                     override fun onCreateFailure(err: String?) { AppLogger.e(TAG, "❌ setLocalDescription createFailure: $err") }
                     override fun onSetFailure(err: String?) { AppLogger.e(TAG, "❌ setLocalDescription setFailure: $err") }
-                }, desc)
+                }, mungedDesc)
             }
 
             override fun onSetSuccess() {}
