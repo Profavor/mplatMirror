@@ -2666,51 +2666,113 @@ html, body {
     color: #64748b;
 }
 
-/* 퀵 액션 카드 */
-.side-actions-card {
-    background: rgba(20, 24, 34, 0.82);
-    border: 1px solid rgba(255, 255, 255, 0.06);
+/* 공식 스폰서 / 광고 배너 영역 */
+.side-ad-card {
+    background: linear-gradient(135deg, rgba(20, 30, 56, 0.92) 0%, rgba(12, 18, 34, 0.95) 100%);
+    border: 1px solid rgba(59, 130, 246, 0.28);
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    display: flex;
+    flex-direction: column;
 }
 
-.side-actions-title {
-    font-size: 12px;
-    font-weight: 700;
-    color: #64748b;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+.side-ad-card:hover, .side-ad-card:active {
+    background: linear-gradient(135deg, rgba(28, 44, 80, 0.96) 0%, rgba(16, 24, 46, 0.98) 100%);
+    border-color: rgba(96, 165, 250, 0.55);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 26px rgba(37, 99, 235, 0.25);
+}
+
+.side-ad-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     margin-bottom: 12px;
 }
 
-.side-actions-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
+.side-ad-badge {
+    font-size: 10px;
+    font-weight: 800;
+    color: #f59e0b;
+    background: rgba(245, 158, 11, 0.15);
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    padding: 2px 7px;
+    border-radius: 4px;
+    letter-spacing: 0.6px;
 }
 
-.side-action-btn {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 12px;
-    padding: 12px 14px;
+.side-ad-domain {
+    font-size: 11px;
+    font-weight: 600;
+    color: #60a5fa;
+    font-family: monospace;
+    letter-spacing: 0.2px;
+}
+
+.side-ad-body {
     display: flex;
     align-items: center;
-    gap: 10px;
-    color: #e2e8f0;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.15s ease;
-    text-align: left;
-}
-.side-action-btn:hover, .side-action-btn:active {
-    background: rgba(59, 130, 246, 0.15);
-    border-color: rgba(59, 130, 246, 0.35);
-    color: #60a5fa;
-    transform: translateY(-1px);
+    gap: 14px;
+    margin-bottom: 12px;
 }
 
-.side-action-btn .action-icon {
-    font-size: 18px;
+.side-ad-icon-box {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
+    flex-shrink: 0;
+}
+
+.side-ad-text-wrap {
+    flex: 1;
+    min-width: 0;
+}
+
+.side-ad-title {
+    margin: 0 0 4px 0;
+    font-size: 16px;
+    font-weight: 700;
+    color: #ffffff;
+    letter-spacing: -0.2px;
+}
+
+.side-ad-desc {
+    margin: 0;
+    font-size: 12px;
+    color: #94a3b8;
+    line-height: 1.4;
+}
+
+.side-ad-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    font-size: 11px;
+}
+
+.side-ad-tag {
+    color: #38bdf8;
+    font-weight: 600;
+}
+
+.side-ad-cta {
+    color: #60a5fa;
+    font-weight: 700;
+    transition: transform 0.15s ease;
+}
+
+.side-ad-card:hover .side-ad-cta {
+    transform: translateX(3px);
+    color: #93c5fd;
 }
 
 /* 위젯 숨겼을 때 우측 하단 복원 버튼 */

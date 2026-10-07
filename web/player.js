@@ -4235,10 +4235,6 @@
     function setupMirrorSidePanelListeners() {
         const btnToggle = document.getElementById('btnToggleSidePanel');
         const btnRestore = document.getElementById('btnSidePanelRestore');
-        const sideBtnDash = document.getElementById('sideBtnDashboard');
-        const sideBtnPower = document.getElementById('sideBtnScreenPower');
-        const sideBtnFit = document.getElementById('sideBtnFitMode');
-        const sideBtnAud = document.getElementById('sideBtnAudio');
 
         if (btnToggle) {
             btnToggle.addEventListener('click', (e) => {
@@ -4253,34 +4249,6 @@
                 e.stopPropagation();
                 localStorage.setItem('mmirror_show_side_widget', 'true');
                 updateCanvasDisplayLayout(true);
-            });
-        }
-
-        if (sideBtnDash) {
-            sideBtnDash.addEventListener('click', (e) => {
-                e.stopPropagation();
-                showDashboardView();
-            });
-        }
-
-        if (sideBtnPower) {
-            sideBtnPower.addEventListener('click', (e) => {
-                e.stopPropagation();
-                document.getElementById('dockBtnScreenPower')?.click();
-            });
-        }
-
-        if (sideBtnFit) {
-            sideBtnFit.addEventListener('click', (e) => {
-                e.stopPropagation();
-                document.getElementById('btnFitMode')?.click();
-            });
-        }
-
-        if (sideBtnAud) {
-            sideBtnAud.addEventListener('click', (e) => {
-                e.stopPropagation();
-                document.getElementById('btnDockAudio')?.click();
             });
         }
     }
