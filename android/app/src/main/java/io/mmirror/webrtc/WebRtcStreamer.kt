@@ -757,103 +757,122 @@ class WebRtcStreamer(
         return android.util.Base64.encodeToString(baos.toByteArray(), android.util.Base64.NO_WRAP)
     }
 
-    fun sendAppList() {
+    @Volatile
+    private var isSendingAppList = false
+    private var lastAppListSendTime = 0L
+
+    fun sendAppList(force: Boolean = false) {
+        val now = System.currentTimeMillis()
+        if (!force && (now - lastAppListSendTime < 30_000L)) {
+            Log.d(TAG, "sendAppList skipped (throttled, last sent ${now - lastAppListSendTime}ms ago)")
+            return
+        }
         val dc = dataChannel ?: return
         if (dc.state() != DataChannel.State.OPEN) return
+        if (isSendingAppList) {
+            Log.d(TAG, "sendAppList already in progress, skipping")
+            return
+        }
+        isSendingAppList = true
+        lastAppListSendTime = now
+
         Thread {
             try {
                 val pm = context.packageManager
-            val launcherIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-            val installedList = pm.queryIntentActivities(launcherIntent, 0)
+                val launcherIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+                val installedList = pm.queryIntentActivities(launcherIntent, 0)
 
-            // 우선 표시할 주요 앱 패키지 (정렬 우선순위)
-            val priorityPkgs = listOf(
-                "com.skt.tmap.ku", "com.skt.skaf.l001mtm091",
-                "com.locnall.KimGiSa", "com.nhn.android.nmap",
-                "com.google.android.youtube", "com.netflix.mediaclient",
-                "com.google.android.apps.youtube.music",
-                "com.iloen.melon", "com.spotify.music",
-                "com.android.chrome",
-                "com.coupang.mobile.play", "net.cj.cjenm.tving",
-                "kr.co.captv.pooqV2", "com.disney.disneyplus"
-            )
+                // 우선 표시할 주요 앱 패키지 (정렬 우선순위)
+                val priorityPkgs = listOf(
+                    "com.skt.tmap.ku", "com.skt.skaf.l001mtm091",
+                    "com.locnall.KimGiSa", "com.nhn.android.nmap",
+                    "com.google.android.youtube", "com.netflix.mediaclient",
+                    "com.google.android.apps.youtube.music",
+                    "com.iloen.melon", "com.spotify.music",
+                    "com.android.chrome",
+                    "com.coupang.mobile.play", "net.cj.cjenm.tving",
+                    "kr.co.captv.pooqV2", "com.disney.disneyplus"
+                )
 
-            data class AppEntry(val name: String, val pkg: String, val resolveInfo: android.content.pm.ResolveInfo, val priority: Int)
+                data class AppEntry(val name: String, val pkg: String, val resolveInfo: android.content.pm.ResolveInfo, val priority: Int)
 
-            val appEntries = mutableListOf<AppEntry>()
-            val seenPkgs = mutableSetOf<String>()
+                val appEntries = mutableListOf<AppEntry>()
+                val seenPkgs = mutableSetOf<String>()
 
-            for (resolveInfo in installedList) {
-                val pkg = resolveInfo.activityInfo?.packageName ?: continue
-                if (pkg == context.packageName) continue
-                if (seenPkgs.contains(pkg)) continue
-                seenPkgs.add(pkg)
+                for (resolveInfo in installedList) {
+                    val pkg = resolveInfo.activityInfo?.packageName ?: continue
+                    if (pkg == context.packageName) continue
+                    if (seenPkgs.contains(pkg)) continue
+                    seenPkgs.add(pkg)
 
-                val label = resolveInfo.loadLabel(pm).toString()
-                val priority = priorityPkgs.indexOf(pkg).let { if (it >= 0) it else 999 }
-                appEntries.add(AppEntry(label, pkg, resolveInfo, priority))
-            }
-
-            // 정렬: 우선 앱 먼저, 나머지는 한글/영어 이름순
-            appEntries.sortWith(compareBy<AppEntry> { it.priority }.thenBy { it.name })
-
-            // 1차: 아이콘 없이 앱 목록 먼저 전송 (즉시 UI 렌더링, 0ms 지연)
-            val jsonArray = org.json.JSONArray()
-            for (entry in appEntries) {
-                val item = JSONObject().apply {
-                    put("name", entry.name)
-                    put("package", entry.pkg)
-                    put("installed", true)
+                    val label = resolveInfo.loadLabel(pm).toString()
+                    val priority = priorityPkgs.indexOf(pkg).let { if (it >= 0) it else 999 }
+                    appEntries.add(AppEntry(label, pkg, resolveInfo, priority))
                 }
-                jsonArray.put(item)
-            }
 
-            val isA11yGranted = io.mmirror.TouchControlService.isAccessibilityServiceEnabled(context)
-            val resp = JSONObject().apply {
-                put("type", "app_list")
-                put("apps", jsonArray)
-                put("touchControl", isA11yGranted)
-                put("touchRunning", isA11yGranted)
-                put("virtualDisplayId", -1)
-                put("isStandalone", false)
-            }
-            val payload = resp.toString().toByteArray(Charsets.UTF_8)
-            dc.send(DataChannel.Buffer(java.nio.ByteBuffer.wrap(payload), false))
-            Log.i(TAG, "Sent app_list to viewer (${jsonArray.length()} apps)")
+                // 정렬: 우선 앱 먼저, 나머지는 한글/영어 이름순
+                appEntries.sortWith(compareBy<AppEntry> { it.priority }.thenBy { it.name })
 
-            // 2차: 아이콘을 백그라운드에서 지연 추출하여 배치(batch)로 전송 (메모리 캐시 재활용)
-            val batchSize = 12
-            for (i in appEntries.indices step batchSize) {
-                val dcNow = dataChannel
-                if (dcNow == null || dcNow.state() != DataChannel.State.OPEN) break
-
-                val end = minOf(i + batchSize, appEntries.size)
-                val batch = appEntries.subList(i, end)
-                val iconsObj = JSONObject()
-                for (entry in batch) {
-                    val iconStr = cachedAppIcons.getOrPut(entry.pkg) {
-                        try {
-                            val icon = entry.resolveInfo.loadIcon(pm)
-                            drawableToBase64(icon)
-                        } catch (_: Throwable) { "" }
+                // 1차: 아이콘 없이 앱 목록 먼저 전송 (즉시 UI 렌더링, 0ms 지연)
+                val jsonArray = org.json.JSONArray()
+                for (entry in appEntries) {
+                    val item = JSONObject().apply {
+                        put("name", entry.name)
+                        put("package", entry.pkg)
+                        put("installed", true)
                     }
-                    if (iconStr.isNotBlank()) {
-                        iconsObj.put(entry.pkg, iconStr)
+                    jsonArray.put(item)
+                }
+
+                val isA11yGranted = io.mmirror.TouchControlService.isAccessibilityServiceEnabled(context)
+                val resp = JSONObject().apply {
+                    put("type", "app_list")
+                    put("apps", jsonArray)
+                    put("touchControl", isA11yGranted)
+                    put("touchRunning", isA11yGranted)
+                    put("virtualDisplayId", -1)
+                    put("isStandalone", false)
+                }
+                val payload = resp.toString().toByteArray(Charsets.UTF_8)
+                synchronized(sendLock) {
+                    dc.send(DataChannel.Buffer(java.nio.ByteBuffer.wrap(payload), false))
+                }
+                Log.i(TAG, "Sent app_list to viewer (${jsonArray.length()} apps)")
+
+                // 2차: 차량 도크 및 우선순위 주요 앱(최대 16개) 아이콘만 1회 전송 (불필요한 전체 300개 앱 아이콘 추출/전송 및 로그 도배 원천 방지)
+                val iconTargetApps = appEntries.filter { it.priority < 999 }.ifEmpty { appEntries.take(8) }.take(16)
+                if (iconTargetApps.isNotEmpty()) {
+                    val dcNow = dataChannel
+                    if (dcNow != null && dcNow.state() == DataChannel.State.OPEN) {
+                        val iconsObj = JSONObject()
+                        for (entry in iconTargetApps) {
+                            val iconStr = cachedAppIcons.getOrPut(entry.pkg) {
+                                try {
+                                    val icon = entry.resolveInfo.loadIcon(pm)
+                                    drawableToBase64(icon)
+                                } catch (_: Throwable) { "" }
+                            }
+                            if (iconStr.isNotBlank()) {
+                                iconsObj.put(entry.pkg, iconStr)
+                            }
+                        }
+                        if (iconsObj.length() > 0) {
+                            val iconResp = JSONObject().apply {
+                                put("type", "app_icons")
+                                put("icons", iconsObj)
+                            }
+                            val iconPayload = iconResp.toString().toByteArray(Charsets.UTF_8)
+                            synchronized(sendLock) {
+                                dcNow.send(DataChannel.Buffer(java.nio.ByteBuffer.wrap(iconPayload), false))
+                            }
+                            Log.i(TAG, "Sent priority app_icons (${iconsObj.length()} apps)")
+                        }
                     }
                 }
-                if (iconsObj.length() > 0) {
-                    val iconResp = JSONObject().apply {
-                        put("type", "app_icons")
-                        put("icons", iconsObj)
-                    }
-                    val iconPayload = iconResp.toString().toByteArray(Charsets.UTF_8)
-                    dcNow.send(DataChannel.Buffer(java.nio.ByteBuffer.wrap(iconPayload), false))
-                    Thread.sleep(20) // 캐시된 아이콘은 빠른 전송 허용 (20ms)
-                }
-            }
-
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to send app list: ${e.message}")
+            } finally {
+                isSendingAppList = false
             }
         }.start()
     }

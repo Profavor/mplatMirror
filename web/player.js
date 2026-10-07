@@ -199,7 +199,7 @@
     const PKT_TYPE_AUDIO = 0x02; // Raw PCM Audio (48000Hz, 16bit Stereo)
     const PKT_TYPE_CONFIG = 0x03; // Metadata (Width, Height, FPS, etc.)
     const PKT_TYPE_GPS = 0x04;    // Realtime GPS
-    const CURRENT_WEB_VERSION = '1.4.0';
+    const CURRENT_WEB_VERSION = '1.4.1';
 
     // 오디오 및 A/V 싱크 제어 상태 변수 (100ms 지터 링 버퍼 엔진)
     let audioCtx = null;
@@ -1832,7 +1832,10 @@
         try {
             webrtcDataChannel.binaryType = 'arraybuffer';
         } catch (_) {}
+        let isChannelOpenHandled = false;
         const handleChannelOpen = () => {
+            if (isChannelOpenHandled) return;
+            isChannelOpenHandled = true;
             enforceSilentMediaSession();
             console.log('💬 [WEBRTC] DataChannel OPEN! 0ms Touch, Control, and Video ready.');
             isWebRtcConnected = true;
@@ -1860,7 +1863,7 @@
             try {
                 webrtcDataChannel.send(JSON.stringify({ type: 'request_keyframe' }));
                 webrtcDataChannel.send(JSON.stringify({ type: 'get_touch_status' }));
-                webrtcDataChannel.send(JSON.stringify({ type: 'get_apps' }));
+                // 안드로이드 앱에서 DataChannel 연결 즉시 app_list 및 필수 도크 아이콘을 자동 푸시하므로 중복 요청 제거
                 const savedAudioMode = localStorage.getItem('mmirror_audio_mode') || 'bluetooth';
                 if (savedAudioMode === 'web') {
                     webrtcDataChannel.send(JSON.stringify({ type: 'set_audio_mode', enabled: true }));
@@ -1874,6 +1877,7 @@
             handleChannelOpen();
         }
         webrtcDataChannel.onclose = () => {
+            isChannelOpenHandled = false;
             console.warn('💬 [WEBRTC] DataChannel CLOSED -> 즉각 Self-Healing 자동 복구 가동');
             stopPingPong();
             if (isWebRtcConnected || hasEverReceivedWebRtcVideo) {
@@ -1966,7 +1970,8 @@
                         });
                         handleAppList(data.apps, touchOk, data.virtualDisplayId);
                     } else if (data.type === 'app_icons' && data.icons) {
-                        console.log('🖼️ [WEBRTC] Received app icons batch');
+                        const iconCount = Object.keys(data.icons).length;
+                        console.log(`🖼️ [WEBRTC] Received priority app icons (${iconCount} apps)`);
                         handleAppIcons(data.icons);
                     } else if (data.type === 'gps') {
                         if (window.mMirrorGps && window.mMirrorGps.onGpsUpdate) {
@@ -2695,13 +2700,21 @@
         }
     }
 
+    let iconSaveTimer = null;
+    let renderDockTimer = null;
+
     function handleAppIcons(icons) {
         if (!icons) return;
+        let updated = false;
         // Cache icons
         for (const [pkg, icon] of Object.entries(icons)) {
-            appIconCache[pkg] = icon;
+            if (icon && appIconCache[pkg] !== icon) {
+                appIconCache[pkg] = icon;
+                updated = true;
+            }
         }
-        saveAppIconCache();
+        if (!updated) return;
+
         // Update installedPhoneApps with icons
         installedPhoneApps.forEach(app => {
             if (icons[app.package]) {
@@ -2714,12 +2727,20 @@
                 app.icon = icons[app.package];
             }
         });
-        // Re-render dock with real icons
-        renderDock();
-        // If app manager is open, re-render it too
-        if (appManagerModal && !appManagerModal.classList.contains('hidden')) {
-            renderAppManager();
-        }
+
+        // 지연 디바운스로 DOM 재구성 및 로컬 스토리지 부하 방지
+        clearTimeout(iconSaveTimer);
+        iconSaveTimer = setTimeout(() => {
+            saveAppIconCache();
+        }, 300);
+
+        clearTimeout(renderDockTimer);
+        renderDockTimer = setTimeout(() => {
+            renderDock();
+            if (appManagerModal && !appManagerModal.classList.contains('hidden')) {
+                renderAppManager();
+            }
+        }, 100);
     }
 
     // --- 앱 관리 모달 (App Manager Modal) ---
