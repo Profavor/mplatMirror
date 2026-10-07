@@ -521,26 +521,38 @@ class WebRtcStreamer(
                 if (newState == PeerConnection.PeerConnectionState.CONNECTED) {
                     AppLogger.i(TAG, "🎉 [WEBRTC] Direct P2P Connected to Tesla! 0MB Local Streaming Active!")
                     proactiveReconnectRunnable?.let { mainHandler.removeCallbacks(it) }
+                    pendingReconnectRunnable?.let { mainHandler.removeCallbacks(it); pendingReconnectRunnable = null }
                     // 차량 연결됨 → GPS 주행 기록 시작
                     io.mmirror.DrivingLogManager.currentInstance?.onPeerConnected()
-                    io.mmirror.MediaProjectionService.instance?.requestKeyFrame()
-                } else if (newState == PeerConnection.PeerConnectionState.DISCONNECTED ||
-                           newState == PeerConnection.PeerConnectionState.FAILED) {
-                    AppLogger.w(TAG, "🔌 WebRTC peer disconnected/failed: $newState")
-                    // 차량 연결 해제 → GPS 주행 기록 중지 & 저장
-                    io.mmirror.DrivingLogManager.currentInstance?.onPeerDisconnected()
-                    // Android 능동적 자가치유: 연결 단절이 4500ms 이상 지속 시 폰에서 먼저 신규 Offer 생성 발행
+                    io.mmirror.MediaProjectionService.instance?.requestKeyFrame(immediateCached = true)
+                } else if (newState == PeerConnection.PeerConnectionState.DISCONNECTED) {
+                    AppLogger.w(TAG, "🔌 WebRTC peer disconnected (일시 지터 감지 - 8초 자연 복구 대기): $newState")
                     proactiveReconnectRunnable?.let { mainHandler.removeCallbacks(it) }
                     val r = Runnable {
-                        if (isRunning && peerConnection?.connectionState() != PeerConnection.PeerConnectionState.CONNECTED) {
-                            AppLogger.i(TAG, "⚡ [SELF-HEALING] Connection lost for 4.5s -> Phone proactively generating fresh Offer!")
+                        val currState = peerConnection?.connectionState()
+                        if (isRunning && currState != PeerConnection.PeerConnectionState.CONNECTED) {
+                            AppLogger.i(TAG, "⚡ [SELF-HEALING] Connection lost for 8s (state=$currState) -> Phone proactively generating fresh Offer!")
+                            io.mmirror.DrivingLogManager.currentInstance?.onPeerDisconnected()
                             createPeerConnectionAndOffer(force = true)
                         }
                     }
                     proactiveReconnectRunnable = r
-                    mainHandler.postDelayed(r, 4500L)
+                    mainHandler.postDelayed(r, 8000L)
+                } else if (newState == PeerConnection.PeerConnectionState.FAILED) {
+                    AppLogger.w(TAG, "🔌 WebRTC peer failed: $newState")
+                    io.mmirror.DrivingLogManager.currentInstance?.onPeerDisconnected()
+                    proactiveReconnectRunnable?.let { mainHandler.removeCallbacks(it) }
+                    val r = Runnable {
+                        if (isRunning && peerConnection?.connectionState() == PeerConnection.PeerConnectionState.FAILED) {
+                            AppLogger.i(TAG, "⚡ [SELF-HEALING] Connection failed -> Phone generating fresh Offer!")
+                            createPeerConnectionAndOffer(force = true)
+                        }
+                    }
+                    proactiveReconnectRunnable = r
+                    mainHandler.postDelayed(r, 3000L)
                 } else if (newState == PeerConnection.PeerConnectionState.CLOSED) {
                     proactiveReconnectRunnable?.let { mainHandler.removeCallbacks(it) }
+                    pendingReconnectRunnable?.let { mainHandler.removeCallbacks(it); pendingReconnectRunnable = null }
                 }
             }
 
@@ -549,21 +561,34 @@ class WebRtcStreamer(
             }
             override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) {
                 AppLogger.i(TAG, "🧊 ICE Connection State: $state")
-                if (state == PeerConnection.IceConnectionState.FAILED || state == PeerConnection.IceConnectionState.DISCONNECTED) {
-                    AppLogger.w(TAG, "⚠️ [WEBRTC] ICE 연결 끊김/실패 (4.5s 대기 후 자가치유 Offer 가동)")
+                if (state == PeerConnection.IceConnectionState.CONNECTED || state == PeerConnection.IceConnectionState.COMPLETED) {
+                    AppLogger.i(TAG, "✓ [WEBRTC] ICE P2P 직결 바인딩 성공!")
+                    proactiveReconnectRunnable?.let { mainHandler.removeCallbacks(it) }
+                    pendingReconnectRunnable?.let { mainHandler.removeCallbacks(it); pendingReconnectRunnable = null }
+                } else if (state == PeerConnection.IceConnectionState.DISCONNECTED) {
+                    AppLogger.w(TAG, "⚠️ [WEBRTC] ICE 일시 연결 지연 (8s 자연 복구 대기)")
                     proactiveReconnectRunnable?.let { mainHandler.removeCallbacks(it) }
                     val r = Runnable {
                         val currIce = peerConnection?.iceConnectionState()
                         if (isRunning && currIce != PeerConnection.IceConnectionState.CONNECTED && currIce != PeerConnection.IceConnectionState.COMPLETED) {
-                            AppLogger.i(TAG, "⚡ [SELF-HEALING] ICE state=$currIce for 4.5s -> Phone proactively generating fresh Offer!")
+                            AppLogger.i(TAG, "⚡ [SELF-HEALING] ICE state=$currIce for 8s -> Phone proactively generating fresh Offer!")
                             createPeerConnectionAndOffer(force = true)
                         }
                     }
                     proactiveReconnectRunnable = r
-                    mainHandler.postDelayed(r, 4500L)
-                } else if (state == PeerConnection.IceConnectionState.CONNECTED || state == PeerConnection.IceConnectionState.COMPLETED) {
-                    AppLogger.i(TAG, "✓ [WEBRTC] ICE P2P 직결 바인딩 성공!")
+                    mainHandler.postDelayed(r, 8000L)
+                } else if (state == PeerConnection.IceConnectionState.FAILED) {
+                    AppLogger.w(TAG, "⚠️ [WEBRTC] ICE 연결 실패 (3s 후 자가치유 Offer 가동)")
                     proactiveReconnectRunnable?.let { mainHandler.removeCallbacks(it) }
+                    val r = Runnable {
+                        val currIce = peerConnection?.iceConnectionState()
+                        if (isRunning && currIce == PeerConnection.IceConnectionState.FAILED) {
+                            AppLogger.i(TAG, "⚡ [SELF-HEALING] ICE failed -> Phone proactively generating fresh Offer!")
+                            createPeerConnectionAndOffer(force = true)
+                        }
+                    }
+                    proactiveReconnectRunnable = r
+                    mainHandler.postDelayed(r, 3000L)
                 }
             }
             override fun onIceConnectionReceivingChange(receiving: Boolean) {
@@ -969,6 +994,12 @@ class WebRtcStreamer(
                         AppLogger.i(TAG, "Debouncing rapid reconnect (${elapsed}ms) - scheduling delayed retry in ${1200L - elapsed}ms")
                         pendingReconnectRunnable?.let { mainHandler.removeCallbacks(it) }
                         val r = Runnable {
+                            val pc = peerConnection
+                            if (pc != null && (pc.connectionState() == PeerConnection.PeerConnectionState.CONNECTED ||
+                                              pc.iceConnectionState() == PeerConnection.IceConnectionState.CONNECTED)) {
+                                AppLogger.i(TAG, "⚡ Connection already established during cooldown! Cancelling delayed reconnect.")
+                                return@Runnable
+                            }
                             AppLogger.i(TAG, "Executing debounced reconnect after cooldown")
                             createPeerConnectionAndOffer(force = true)
                         }
@@ -1211,23 +1242,24 @@ class WebRtcStreamer(
         val buffered = dc.bufferedAmount()
         val now = android.os.SystemClock.elapsedRealtime()
 
-        // 1. 소켓 버퍼가 1MB(1024*1024) 이상 적체된 경우에만 네트워크 혼잡으로 판단
-        if (buffered > 1024 * 1024L) {
+        // 1. 소켓 버퍼가 512KB 이상 적체된 경우 네트워크 혼잡으로 판단하여 GOP 드롭 모드 진입
+        if (buffered > 512 * 1024L) {
             if (!isDroppingGop) {
                 isDroppingGop = true
                 gopDropStartTime = now
-                Log.w(TAG, "⚠️ WebRTC DataChannel 버퍼 과적체 (${buffered / 1024}KB) -> GOP 드롭 모드 진입 및 키프레임 요청")
-                io.mmirror.MediaProjectionService.instance?.requestKeyFrame()
+                Log.w(TAG, "⚠️ WebRTC DataChannel 버퍼 과적체 (${buffered / 1024}KB) -> GOP 드롭 모드 진입")
             }
         }
 
         if (isDroppingGop) {
             val dropDuration = now - gopDropStartTime
-            if (dropDuration > 800L || buffered < 256 * 1024L || isKeyFrame) {
-                // 키프레임 도착, 버퍼 해소(<256KB), 또는 800ms 경과 시 GOP 드롭 모드 즉각 해제 및 전송 재개
+            if (buffered < 128 * 1024L || dropDuration > 1200L) {
+                // 버퍼가 128KB 이하로 원활하게 배출되었거나 1200ms 경과 시 GOP 드롭 해제 및 신규 키프레임 요청
                 isDroppingGop = false
-            } else {
-                // 신규 키프레임이 도착할 때까지 중간 델타 프레임만 드롭
+                Log.i(TAG, "✓ WebRTC DataChannel 버퍼 해소 (${buffered / 1024}KB) -> 정상 전송 재개 및 키프레임 갱신")
+                io.mmirror.MediaProjectionService.instance?.requestKeyFrame()
+            } else if (!isKeyFrame) {
+                // 버퍼 해소 전까지 델타 프레임만 드롭 (신규 키프레임은 통과 허용)
                 return
             }
         }

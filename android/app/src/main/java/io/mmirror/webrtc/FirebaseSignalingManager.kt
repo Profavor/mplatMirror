@@ -217,18 +217,20 @@ class FirebaseSignalingManager(
                     }
                 }
 
+                var reconnectHandled = false
                 if (data.has("reconnect_request")) {
                     val rr = data.optJSONObject("reconnect_request")
                     val ts = rr?.optLong("timestamp") ?: data.optLong("reconnect_request", 0L)
                     val age = Math.abs(System.currentTimeMillis() - ts)
                     if (ts > 0L && ts != lastProcessedReconnectTimestamp && age < 60_000L) {
                         lastProcessedReconnectTimestamp = ts
+                        reconnectHandled = true
                         android.util.Log.i(TAG, "🔄 Fresh reconnect_request detected in room snapshot (age: ${age}ms, ts=$ts)")
                         onMessage(JSONObject().put("type", "reconnect").put("timestamp", ts).toString())
                     }
                 }
 
-                if (data.has("viewer_ready")) {
+                if (!reconnectHandled && data.has("viewer_ready")) {
                     val vr = data.optJSONObject("viewer_ready")
                     val isReady = vr?.optBoolean("ready", false) ?: (data.opt("viewer_ready") == true)
                     val ts = vr?.optLong("timestamp") ?: 0L
