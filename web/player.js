@@ -995,7 +995,7 @@
         }
         const overlayTitleText = document.getElementById('overlayTitleText');
         if (overlayTitleText) {
-            overlayTitleText.textContent = "mplat Mirror 테슬라 연결 가이드";
+            overlayTitleText.textContent = "mplat Mirror 차량 연결 가이드";
         }
         if (overlayMessage) {
             overlayMessage.innerHTML = (reason ? `<strong>${reason}</strong><br>` : '') + "스마트폰 mplat Mirror 앱에서 파란색 <strong>[미러링 시작]</strong> 버튼을 누르고 <strong>'지금 시작'</strong>을 선택하세요.";
@@ -2160,7 +2160,7 @@
                 statusText.textContent = '스마트폰 송출 대기 중...';
                 const overlayTitleText = document.getElementById('overlayTitleText');
                 if (overlayTitleText) overlayTitleText.textContent = "스마트폰에서 '미러링 시작'을 눌러주세요";
-                if (overlayMessage) overlayMessage.innerHTML = "테슬라 화면과 스마트폰이 정상 연결되었습니다.<br>스마트폰 화면의 <strong>mplat Mirror 앱</strong>에서 <strong>[미러링 시작]</strong> 버튼을 누르면 즉시 화면이 송출됩니다.";
+                if (overlayMessage) overlayMessage.innerHTML = "차량 화면과 스마트폰이 정상 연결되었습니다.<br>스마트폰 화면의 <strong>mplat Mirror 앱</strong>에서 <strong>[미러링 시작]</strong> 버튼을 누르면 즉시 화면이 송출됩니다.";
                 disconnectOverlay.classList.remove('hidden');
             }
             initVideoDecoder();
@@ -2641,7 +2641,7 @@
             btn.className = 'dock-item-btn';
             btn.setAttribute('data-pkg', app.package);
             btn.title = (app.package === 'builtin:triplog' || app.isBuiltin)
-                ? `${app.name} (테슬라 주행일지 & GPS 지도)`
+                ? `${app.name} (차량 주행일지 & GPS 지도)`
                 : `${app.name} 가상화면 단독 실행`;
 
             // 실제 앱 아이콘 또는 캐시에서 가져오기
@@ -4053,7 +4053,7 @@
             }
             if (dockAudioEmoji) dockAudioEmoji.textContent = '🌐';
             if (tipEl) {
-                tipEl.innerHTML = '🌐 <strong>웹 브라우저 송출 중</strong>: 테슬라 브라우저로 소리가 직접 스트리밍됩니다. (A/V 싱크 지연 조절로 립싱크를 맞출 수 있습니다)';
+                tipEl.innerHTML = '🌐 <strong>웹 브라우저 송출 중</strong>: 차량 브라우저로 소리가 직접 스트리밍됩니다. (A/V 싱크 지연 조절로 립싱크를 맞출 수 있습니다)';
             }
             flushAudioBuffer();
             initAudioContext();

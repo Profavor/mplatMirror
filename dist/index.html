@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta http-equiv="Permissions-Policy" content="microphone=(), camera=(), speaker-selection=(), autoplay=()">
-    <title>mplat Mirror - 테슬라 무선 미러링</title>
+    <title>mplat Mirror - 차량 무선 미러링</title>
     <link rel="stylesheet" href="leaflet.css">
     <link rel="stylesheet" href="style.css">
 </head>
@@ -30,10 +30,10 @@
             </div>
         </header>
 
-        <!-- 테슬라 맞춤형 우측 고정 앱 팔레트 (CarPlay Dock) -->
+        <!-- 차량 맞춤형 우측 고정 앱 팔레트 (CarPlay Dock) -->
         <aside id="appDock" class="app-dock">
             <div class="dock-top-section">
-                <button class="dock-item-btn" id="btnDockHome" title="테슬라 대시보드 (시계/날씨/HUD)">
+                <button class="dock-item-btn" id="btnDockHome" title="차량 대시보드 (시계/날씨/HUD)">
                     <span class="dock-emoji">📊</span>
                     <span class="dock-text">대시보드</span>
                 </button>
@@ -59,7 +59,7 @@
                     <span class="dock-emoji" id="dockAudioEmoji">🔊</span>
                     <span class="dock-text" id="dockAudioText">사운드</span>
                 </button>
-                <button class="dock-item-btn" id="dockBtnTextInput" title="테슬라 키보드로 스마트폰에 텍스트/목적지 입력">
+                <button class="dock-item-btn" id="dockBtnTextInput" title="차량 키보드로 스마트폰에 텍스트/목적지 입력">
                     <span class="dock-emoji">⌨️</span>
                     <span class="dock-text">입력</span>
                 </button>
@@ -72,14 +72,14 @@
 
         <!-- 메인 뷰어 영역 -->
         <main id="viewportContainer">
-            <!-- 순수 캔버스 60 FPS 초저지연 하드웨어 가속 렌더러 (테슬라 오디오 간섭 0%) -->
+            <!-- 순수 캔버스 60 FPS 초저지연 하드웨어 가속 렌더러 (오디오 간섭 0%) -->
             <canvas id="videoCanvas" class="fit-left"></canvas>
 
             <!-- 미러링 시 우측 빈 공간 정보 패널 (시계, 실시간 날씨, 퀵 컨트롤) -->
             <aside id="mirrorSidePanel" class="mirror-side-panel">
                 <div class="side-panel-header">
                     <div class="side-panel-title-wrap">
-                        <span class="side-panel-badge">Tesla Smart Widget</span>
+                        <span class="side-panel-badge">In-Car Smart Widget</span>
                         <span class="side-panel-sub">실시간 운전 보조 정보</span>
                     </div>
                     <button id="btnToggleSidePanel" class="btn-side-toggle" title="위젯 숨기기">&times;</button>
@@ -144,12 +144,12 @@
                                     </div>
                                 </a>
 
-                                <!-- 슬라이드 2: 테슬라 전용 스마트 드라이빙 스토어 -->
+                                <!-- 슬라이드 2: 스마트 드라이빙 스토어 -->
                                 <a href="https://mdm.mplat.store" target="_blank" rel="noopener" class="side-card side-ad-slide slide-purple" title="mplat 스마트 마켓 바로가기">
                                     <div class="side-ad-header">
                                         <div class="side-ad-badge-group">
                                             <span class="side-ad-badge">AD</span>
-                                            <span class="side-ad-category">테슬라 라이프</span>
+                                            <span class="side-ad-category">스마트 카라이프</span>
                                         </div>
                                         <span class="side-ad-domain">mdm.mplat.store ↗</span>
                                     </div>
@@ -159,11 +159,11 @@
                                         </div>
                                         <div class="side-ad-text-wrap">
                                             <h4 class="side-ad-title">mplat 스마트 드라이빙 마켓</h4>
-                                            <p class="side-ad-desc">테슬라 오너를 위한 차량용 무선 충전 거치대 &amp; 인카 커스텀 디바이스</p>
+                                            <p class="side-ad-desc">스마트 드라이빙을 위한 차량용 무선 충전 거치대 &amp; 인카 커스텀 디바이스</p>
                                         </div>
                                     </div>
                                     <div class="side-ad-footer">
-                                        <span class="side-ad-tag">🔥 모델 3/Y/X/S 완벽 호환 액세서리</span>
+                                        <span class="side-ad-tag">🔥 차량 전 차종 완벽 호환 액세서리</span>
                                         <span class="side-ad-cta">스토어 가기 ➔</span>
                                     </div>
                                 </a>
@@ -213,7 +213,7 @@
                 <span>🕒 시계·날씨</span>
             </button>
 
-            <!-- 테슬라 전용 홈 대시보드 (시계, 실시간 GPS 날씨, 주행 요약, 앱 런처) -->
+            <!-- 차량 전용 홈 대시보드 (시계, 실시간 GPS 날씨, 주행 요약, 앱 런처) -->
             <div id="homeDashboard" class="home-dashboard">
                 <div class="dashboard-scroll-wrap">
                     <!-- 상단 위젯 그리드 (시계, 실시간 날씨, 주행 요약) -->
@@ -277,7 +277,7 @@
                             <span class="banner-icon">📱</span>
                             <div class="banner-text">
                                 <strong>스마트폰 화면 1:1 미러링</strong>
-                                <span>현재 스마트폰에 떠있는 화면을 테슬라 화면에서 직접 조작합니다</span>
+                                <span>현재 스마트폰에 떠있는 화면을 차량 화면에서 직접 조작합니다</span>
                             </div>
                         </div>
                         <button class="btn-banner-go">화면 보기 ➔</button>
@@ -296,7 +296,7 @@
                 </div>
             </div>
             
-            <!-- 플로팅 줌 컨트롤러 (테슬라 운전자 전용 원터치 확대/축소) -->
+            <!-- 플로팅 줌 컨트롤러 (운전자 전용 원터치 확대/축소) -->
             <div id="floatingZoomControls" class="floating-zoom-controls">
                 <button id="btnZoomIn" class="zoom-btn" title="화면 확대 (Zoom In)">+</button>
                 <div class="zoom-divider"></div>
@@ -309,7 +309,7 @@
                     <div class="guide-header">
                         <img src="logo.png" alt="mplat Mirror Logo" class="guide-logo">
                         <div class="guide-title-box">
-                            <h2 id="overlayTitle"><span id="overlayTitleText">mplat Mirror 테슬라 연결 가이드</span> <span class="badge-version">v1.4.2</span></h2>
+                            <h2 id="overlayTitle"><span id="overlayTitleText">mplat Mirror 차량 연결 가이드</span> <span class="badge-version">v1.4.2</span></h2>
                             <p class="guide-sub">컴퓨터 연결이나 개발자 모드 없이 3초 만에 시작하세요</p>
                         </div>
                     </div>
@@ -319,7 +319,7 @@
                             <div class="step-num">✓</div>
                             <div class="step-content">
                                 <strong>1단계: 차량 핫스팟 및 블루투스 확인</strong>
-                                <span>테슬라 Wi-Fi를 스마트폰 핫스팟에 연결하고 차량 블루투스를 켜두세요. (고음질 무손실 출력)</span>
+                                <span>차량 Wi-Fi를 스마트폰 핫스팟에 연결하고 차량 블루투스를 켜두세요. (고음질 무손실 출력)</span>
                             </div>
                         </div>
                         <div class="guide-step-item step-active">
@@ -332,14 +332,14 @@
                         <div class="guide-step-item">
                             <div class="step-num">3</div>
                             <div class="step-content">
-                                <strong>3단계: 테슬라 대화면 60FPS 감상 &amp; 드라이빙</strong>
+                                <strong>3단계: 차량 대화면 60FPS 감상 &amp; 드라이빙</strong>
                                 <span>초저지연 60FPS로 티맵 내비게이션과 미디어를 대화면으로 감상하세요!</span>
                             </div>
                         </div>
                     </div>
 
                     <div class="guide-tips">
-                        <span>💡 <strong>운전자 꿀팁</strong>: 현재 주소를 테슬라 브라우저 <strong>★ 즐겨찾기(북마크)</strong>에 등록해두시면 다음부터 원클릭 접속됩니다!</span>
+                        <span>💡 <strong>운전자 꿀팁</strong>: 현재 주소를 차량 브라우저 <strong>★ 즐겨찾기(북마크)</strong>에 등록해두시면 다음부터 원클릭 접속됩니다!</span>
                         <span style="display:block; margin-top:6px; color:#60a5fa;">🔊 <strong>차량 사운드 안내</strong>: 차량 화면 하단 미디어 소스를 <strong>[블루투스]</strong>로 선택하시면 스마트폰 티맵 내비 음성과 음악이 차 스피커로 즉시 출력됩니다.</span>
                         <div id="overlayVersionWarning" class="guide-version-warning" style="display: none; margin-top: 8px; background: rgba(245, 158, 11, 0.15); border: 1px solid #f59e0b; border-radius: 8px; padding: 10px; font-size: 12px; color: #fbbf24;">
                             ⚠️ <strong>스마트폰 앱 업데이트 안내</strong>: 연결된 스마트폰의 앱 버전(v<span id="overlayMismatchVer"></span>)이 최신 버전(v1.4.2)과 일치하지 않습니다. 안정적인 60FPS 전송을 위해 <a href="https://play.google.com/store/apps/details?id=io.mmirror" target="_blank" style="color:#60a5fa; text-decoration:underline; font-weight:bold;">Google Play 스토어</a> 또는 <a href="https://github.com/Profavor/mplatMirror/releases/latest/download/mplatMirror.apk" style="color:#38bdf8; text-decoration:underline; font-weight:bold;">직접 APK 다운로드</a>로 최신 앱으로 업데이트해 주세요.
@@ -369,7 +369,7 @@
                 <div class="modal-header">
                     <div class="modal-title">
                         <span class="modal-icon">🚗</span>
-                        <h2>테슬라 주행일지 &amp; GPS 지도</h2>
+                        <h2>차량 주행일지 &amp; GPS 지도</h2>
                     </div>
                     <button id="btnCloseTripModal" class="btn-close-modal" title="닫기">✕ 닫기</button>
                 </div>
@@ -458,7 +458,7 @@
             </div>
         </div>
 
-        <!-- 텍스트/목적지 직접 입력 모달 (테슬라 키보드 연동) -->
+        <!-- 텍스트/목적지 직접 입력 모달 (차량 키보드 연동) -->
         <div id="textInputModal" class="modal-overlay hidden" style="display: none;">
             <div class="input-modal-card">
                 <div class="modal-header" style="background: transparent; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding: 0 0 14px 0; margin-bottom: 14px; height: auto;">
@@ -512,13 +512,13 @@
                                         <strong>웹 브라우저 직접 송출 (Web Audio)</strong>
                                         <span class="mode-tag-web">브라우저 재생</span>
                                     </div>
-                                    <small>블루투스 없이 테슬라 브라우저로 소리 스트리밍 (유튜브/미디어용)</small>
+                                    <small>블루투스 없이 차량 브라우저로 소리 스트리밍 (유튜브/미디어용)</small>
                                 </div>
                                 <span class="mode-check">✓</span>
                             </button>
                         </div>
                         <div class="audio-tip" id="audioModeTip">
-                            💡 <strong>안내</strong>: 테슬라 화면 하단 미디어 소스를 <strong>[블루투스]</strong>로 선택하시면 스마트폰의 티맵 안내와 음악이 차량 스피커로 최고 음질로 즉시 출력됩니다.
+                            💡 <strong>안내</strong>: 차량 화면 하단 미디어 소스를 <strong>[블루투스]</strong>로 선택하시면 스마트폰의 티맵 안내와 음악이 차량 스피커로 최고 음질로 즉시 출력됩니다.
                         </div>
                     </div>
 
@@ -572,13 +572,13 @@
             </div>
         </div>
 
-        <!-- 차량 실시간 콘솔 로그 & 진단 모달 (테슬라 터치스크린 전용) -->
+        <!-- 차량 실시간 콘솔 로그 & 진단 모달 (차량 터치스크린 전용) -->
         <div id="consoleLogModal" class="modal-overlay hidden" style="display: none;">
             <div class="console-modal-card">
                 <div class="console-modal-header">
                     <div class="console-header-left">
                         <span class="console-title-icon">💻</span>
-                        <h3 class="console-title">테슬라 실시간 콘솔 로그</h3>
+                        <h3 class="console-title">실시간 콘솔 로그</h3>
                         <span id="consoleLogCount" class="console-badge">0건</span>
                     </div>
                     <div class="console-header-actions">
