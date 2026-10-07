@@ -1563,6 +1563,12 @@
         // SDP 오퍼를 표준 규격 그대로 원본 적용 (BUNDLE mid 및 ICE candidate 페어링 100% 보장)
         await peerConnection.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: sanitizedSdp }));
 
+        if (location.search.includes('stopat=srd')) {
+            console.log('🧪 [TEST] ?stopat=srd: setRemoteDescription 완료 후 중단 (Answer 미생성)');
+            if (statusText) statusText.textContent = '🧪 [테스트] setRemoteDescription 완료 (Answer 생성 안 함)';
+            return;
+        }
+
         // [작업 지시서 2] setRemoteDescription 후 getTransceivers()에서 audio/video 트랜시버를 direction='inactive' + stop() 처리
         try {
             if (typeof peerConnection.getTransceivers === 'function') {
@@ -1630,6 +1636,12 @@
         const answer = await peerConnection.createAnswer(answerOptions);
         await peerConnection.setLocalDescription(answer);
         enforceSilentMediaSession();
+
+        if (location.search.includes('stopat=ans')) {
+            console.log('🧪 [TEST] ?stopat=ans: setLocalDescription 완료 후 중단 (Answer 미전송, P2P 미성립)');
+            if (statusText) statusText.textContent = '🧪 [테스트] Answer 생성 완료 (폰에 전송 안 함)';
+            return;
+        }
 
         console.log('📡 [WEBRTC] Sending Answer to phone (offerId:', offerId || 'none', ')');
         sendSignalingMessage({
