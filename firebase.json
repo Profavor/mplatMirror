@@ -51,7 +51,7 @@
           },
           {
             "key": "Permissions-Policy",
-            "value": "microphone=(), camera=(), speaker-selection=(), autoplay=()"
+            "value": "microphone=(), camera=(), speaker-selection=(), autoplay=(self)"
           }
         ]
       },
@@ -68,7 +68,7 @@
           },
           {
             "key": "Permissions-Policy",
-            "value": "microphone=(), camera=(), speaker-selection=(), autoplay=()"
+            "value": "microphone=(), camera=(), speaker-selection=(), autoplay=(self)"
           }
         ]
       }

@@ -68,10 +68,39 @@ class MediaProjectionService : Service() {
     private var audioCaptureService: AudioCaptureService? = null
     @Volatile
     private var isAudioStreamingEnabled = false
+    private var savedMediaVolume: Int? = null
 
     fun setAudioStreamingEnabled(enabled: Boolean) {
         val prefs = getSharedPreferences("mmirror_prefs", Context.MODE_PRIVATE)
         prefs.edit().putBoolean("pref_audio_stream_enabled", enabled).apply()
+        val audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+        if (enabled) {
+            // 웹소리 모드: 현재 스마트폰 미디어 음량을 저장하고 0으로 음소거 (차량 스피커 단독 출력)
+            if (savedMediaVolume == null) {
+                val currentVol = audioManager?.getStreamVolume(AudioManager.STREAM_MUSIC) ?: 0
+                if (currentVol > 0) {
+                    savedMediaVolume = currentVol
+                }
+            }
+            try {
+                audioManager?.setStreamVolume(AudioManager.STREAM_MUSIC, 0, 0)
+                AppLogger.i(TAG, "🔊 웹 사운드 활성화: 스마트폰 스피커 음량 0으로 설정 (이전 음량: $savedMediaVolume)")
+            } catch (e: Exception) {
+                AppLogger.w(TAG, "스마트폰 음량 0 설정 실패: ${e.message}")
+            }
+        } else {
+            // 블루투스 모드 복귀: 원래 스마트폰 미디어 음량으로 복원
+            savedMediaVolume?.let { prevVol ->
+                try {
+                    audioManager?.setStreamVolume(AudioManager.STREAM_MUSIC, prevVol, 0)
+                    AppLogger.i(TAG, "🔊 웹 사운드 해제: 스마트폰 스피커 원래 음량($prevVol)으로 복원")
+                } catch (e: Exception) {
+                    AppLogger.w(TAG, "스마트폰 음량 복원 실패: ${e.message}")
+                }
+                savedMediaVolume = null
+            }
+        }
+
         if (isAudioStreamingEnabled == enabled) {
             if (enabled && audioCaptureService == null) {
                 startAudioCapture()
@@ -589,24 +618,35 @@ class MediaProjectionService : Service() {
                     val currVol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
                     @Suppress("DEPRECATION")
                     Log.i(TAG, "🔊 Audio Volume (STREAM_MUSIC): $currVol / $maxVol, Mode: ${audioManager.mode} (MODE_NORMAL=${AudioManager.MODE_NORMAL}), SCO: ${audioManager.isBluetoothScoOn}")
-                    if (currVol <= 0 && maxVol > 0) {
-                        val targetVol = (maxVol * 0.85).toInt().coerceAtLeast(1)
-                        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetVol, 0)
-                        Log.i(TAG, "✓ Unmuted Bluetooth STREAM_MUSIC volume to $targetVol / $maxVol")
+
+                    // 3. 오디오 전송 모드 확인 및 오디오 캡처 서비스 초기화
+                    val prefs = getSharedPreferences("mmirror_prefs", Context.MODE_PRIVATE)
+                    isAudioStreamingEnabled = prefs.getBoolean("pref_audio_stream_enabled", false)
+                    if (isAudioStreamingEnabled) {
+                        // 웹소리 모드: 스마트폰 음량을 0으로 설정하고 오디오 캡처 시작 (차량 스피커 단독 출력)
+                        if (savedMediaVolume == null && currVol > 0) {
+                            savedMediaVolume = currVol
+                        }
+                        try {
+                            audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, 0, 0)
+                            AppLogger.i(TAG, "🔊 웹 사운드 모드 기동: 스마트폰 스피커 음량 0으로 설정 (이전: $savedMediaVolume)")
+                        } catch (e: Exception) {
+                            AppLogger.w(TAG, "스마트폰 음량 0 설정 실패: ${e.message}")
+                        }
+                        AppLogger.i(TAG, "🔊 웹 브라우저 직접 사운드 송출 모드 활성화됨 -> AudioCaptureService 기동")
+                        startAudioCapture()
+                    } else {
+                        // 블루투스 모드: 음량이 0이면 85%로 언뮤트하여 차량 블루투스 출력 보장
+                        if (currVol <= 0 && maxVol > 0) {
+                            val targetVol = (maxVol * 0.85).toInt().coerceAtLeast(1)
+                            audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetVol, 0)
+                            Log.i(TAG, "✓ Unmuted Bluetooth STREAM_MUSIC volume to $targetVol / $maxVol")
+                        }
+                        AppLogger.i(TAG, "✓ Vehicle Bluetooth audio priority: all audio routes via phone Bluetooth A2DP directly (Audio capture disabled)")
                     }
                 } catch (e: Exception) {
-                    Log.w(TAG, "Bluetooth volume adjust warning: ${e.message}")
+                    Log.w(TAG, "Audio volume configuration warning: ${e.message}")
                 }
-            }
-
-            // 3. 오디오 전송 모드 확인 및 오디오 캡처 서비스 초기화
-            val prefs = getSharedPreferences("mmirror_prefs", Context.MODE_PRIVATE)
-            isAudioStreamingEnabled = prefs.getBoolean("pref_audio_stream_enabled", false)
-            if (isAudioStreamingEnabled) {
-                AppLogger.i(TAG, "🔊 웹 브라우저 직접 사운드 송출 모드 활성화됨 -> AudioCaptureService 기동")
-                startAudioCapture()
-            } else {
-                AppLogger.i(TAG, "✓ Vehicle Bluetooth audio priority: all audio routes via phone Bluetooth A2DP directly (Audio capture disabled)")
             }
 
             // 4. GPS 주행일지 추적 시작
@@ -1065,6 +1105,16 @@ class MediaProjectionService : Service() {
         webRtcStreamer = null
 
         stopAudioCapture()
+        savedMediaVolume?.let { prevVol ->
+            try {
+                val audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+                audioManager?.setStreamVolume(AudioManager.STREAM_MUSIC, prevVol, 0)
+                AppLogger.i(TAG, "🔊 미러링 종료: 스마트폰 스피커 원래 음량($prevVol)으로 복원 완료")
+            } catch (e: Exception) {
+                AppLogger.w(TAG, "미러링 종료 시 음량 복원 실패: ${e.message}")
+            }
+            savedMediaVolume = null
+        }
 
         encodingThread?.interrupt()
         encodingThread = null

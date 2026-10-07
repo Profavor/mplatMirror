@@ -45,7 +45,7 @@ class AudioCaptureService(private val mediaProjection: MediaProjection) {
                 .build()
 
             val minBufferSize = AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL_CONFIG, AUDIO_FORMAT)
-            val internalBufferSize = (minBufferSize * 4).coerceAtLeast(32768)
+            val internalBufferSize = (minBufferSize * 4).coerceAtLeast(65536)
 
             audioRecord = AudioRecord.Builder()
                 .setAudioPlaybackCaptureConfig(config)

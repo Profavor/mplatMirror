@@ -139,6 +139,9 @@
 
     // --- 터치 이벤트 핸들러 (테슬라 디스플레이 전용 - 멀티터치 핀치 줌 & 1:1 직결 터치) ---
     viewportContainer.addEventListener('touchstart', (e) => {
+        if (typeof window.ensureAudioContextUnlocked === 'function') {
+            window.ensureAudioContextUnlocked();
+        }
         if (isDashboardEvent(e)) return;
         e.preventDefault();
         if (typeof window.flushVideoDelayQueue === 'function') {
@@ -364,6 +367,9 @@
 
     // --- 마우스 이벤트 폴백 (PC 브라우저 테스트 지원) ---
     viewportContainer.addEventListener('mousedown', (e) => {
+        if (typeof window.ensureAudioContextUnlocked === 'function') {
+            window.ensureAudioContextUnlocked();
+        }
         if (isDashboardEvent(e)) return;
         isMouseDown = true;
         if (typeof window.flushVideoDelayQueue === 'function') {

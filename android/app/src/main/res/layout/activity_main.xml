@@ -317,7 +317,7 @@
                     android:layout_marginBottom="12dp"
                     android:background="#22252e" />
 
-                <!-- 2. 차량 블루투스 오디오 (고음질 A2DP) -->
+                <!-- 2. 차량 오디오 출력 설정 (블루투스 & 웹 브라우저 통합) -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -333,7 +333,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="🎧 차량 블루투스 오디오"
+                            android:text="🎧 차량 오디오 설정"
                             android:textColor="#ecf0f1"
                             android:textSize="14sp"
                             android:textStyle="bold" />
@@ -362,13 +362,49 @@
                         app:cornerRadius="8dp" />
                 </LinearLayout>
 
-                <TextView
+                <!-- 웹 브라우저 직접 사운드 송출 토글 통합 -->
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="※ 오디오(내비/음악)는 차량 블루투스(A2DP)로 0딜레이 무손실 직결 출력됩니다."
-                    android:textColor="#3498db"
-                    android:textSize="11sp" />
+                    android:layout_marginTop="10dp"
+                    android:background="#151921"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="12dp"
+                    android:paddingTop="10dp"
+                    android:paddingEnd="12dp"
+                    android:paddingBottom="10dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🌐 웹 브라우저 직접 사운드 송출"
+                            android:textColor="#ecf0f1"
+                            android:textSize="13sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/tvAudioStreamingDesc"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="OFF: 블루투스 직결 (권장) / ON: 테슬라 브라우저 송출 (폰 음량 0)"
+                            android:textColor="#8e9aa8"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/switchAudioStreaming"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="false" />
+                </LinearLayout>
 
                 <View
                     android:layout_width="match_parent"
@@ -1015,54 +1051,6 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:checked="true" />
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
-
-        <!-- 웹 브라우저 사운드 직접 송출 옵션 -->
-        <com.google.android.material.card.MaterialCardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            app:cardBackgroundColor="#1c2430"
-            app:cardCornerRadius="12dp"
-            app:strokeColor="#2d3748"
-            app:strokeWidth="1dp">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:padding="16dp">
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="웹 브라우저 직접 사운드 송출"
-                        android:textColor="#ffffff"
-                        android:textSize="14sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:text="블루투스 없이 테슬라 브라우저로 소리를 송출합니다 (기본값 OFF: 블루투스 직결 권장)"
-                        android:textColor="#8e9aa8"
-                        android:textSize="11sp" />
-                </LinearLayout>
-
-                <com.google.android.material.materialswitch.MaterialSwitch
-                    android:id="@+id/switchAudioStreaming"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:checked="false" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 

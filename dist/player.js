@@ -199,7 +199,7 @@
     const PKT_TYPE_AUDIO = 0x02; // Raw PCM Audio (48000Hz, 16bit Stereo)
     const PKT_TYPE_CONFIG = 0x03; // Metadata (Width, Height, FPS, etc.)
     const PKT_TYPE_GPS = 0x04;    // Realtime GPS
-    const CURRENT_WEB_VERSION = '1.3.9';
+    const CURRENT_WEB_VERSION = '1.4.0';
 
     // 오디오 및 A/V 싱크 제어 상태 변수 (100ms 지터 링 버퍼 엔진)
     let audioCtx = null;
@@ -3610,7 +3610,8 @@
         });
     }
 
-    // --- Web Audio 시스템 & PCM 48kHz 스테레오 100ms 지터 링 버퍼 엔진 ---
+    // --- Web Audio 시스템 & PCM 48kHz 스테레오 250ms 적응형 엘라스틱 지터 버퍼 엔진 ---
+    // 클록 드리프트(스마트폰 ↔ 테슬라 사운드카드 오차) 자동 보정 및 무손실 스트리밍
     function initAudioContext() {
         if (!audioCtx) {
             const AudioContextClass = window.AudioContext || window.webkitAudioContext;
@@ -3621,13 +3622,11 @@
                 audioGainNode.connect(audioCtx.destination);
 
                 // 2048 샘플 크기 (~42.6ms @ 48kHz) 연속 오디오 프로세서
-                // 매 패킷마다 일회용 노드를 생성/파괴하던 기존 방식을 버리고,
-                // 하드웨어 사운드카드 클록에 맞춰 링 버퍼에서 실시간 추출하는 연속 스트리밍 엔진 구축
                 try {
                     audioScriptNode = audioCtx.createScriptProcessor(2048, 1, 2);
                     audioScriptNode.onaudioprocess = handleAudioProcess;
 
-                    // Chromium 오디오 그래프 절전(Power save/Optimization) 방지를 위한 더미 오실레이터
+                    // Chromium 오디오 그래프 절전 방지용 더미 오실레이터
                     audioDummyOsc = audioCtx.createOscillator();
                     const dummyGain = audioCtx.createGain();
                     dummyGain.gain.value = 0.0;
@@ -3636,7 +3635,7 @@
                     audioDummyOsc.start();
 
                     audioScriptNode.connect(audioGainNode);
-                    console.log('🔊 [AUDIO] Web Audio 100ms 지터 링 버퍼 엔진 초기화 완료 (sampleRate=' + audioCtx.sampleRate + ')');
+                    console.log('🔊 [AUDIO] Web Audio 250ms 엘라스틱 지터 버퍼 엔진 초기화 완료 (sampleRate=' + audioCtx.sampleRate + ')');
                 } catch (e) {
                     console.error('🔊 [AUDIO] ScriptProcessor 초기화 실패:', e);
                 }
@@ -3645,9 +3644,76 @@
         if (audioCtx && audioCtx.state === 'suspended') {
             audioCtx.resume().then(() => {
                 console.log('🔊 [AUDIO] AudioContext resume 성공 (state: running)');
+                hideAudioUnlockBanner();
             }).catch(() => {});
+        } else if (audioCtx && audioCtx.state === 'running') {
+            hideAudioUnlockBanner();
         }
     }
+
+    function showAudioUnlockBanner() {
+        if (!isAudioStreamingActive) return;
+        let banner = document.getElementById('audioUnlockBanner');
+        if (!banner) {
+            banner = document.createElement('div');
+            banner.id = 'audioUnlockBanner';
+            banner.style.position = 'fixed';
+            banner.style.top = '14px';
+            banner.style.left = '50%';
+            banner.style.transform = 'translateX(-50%)';
+            banner.style.background = 'linear-gradient(135deg, #1e3a8a, #2563eb)';
+            banner.style.color = '#ffffff';
+            banner.style.padding = '10px 22px';
+            banner.style.borderRadius = '30px';
+            banner.style.boxShadow = '0 8px 25px rgba(0,0,0,0.6), 0 0 15px rgba(59,130,246,0.5)';
+            banner.style.fontSize = '14px';
+            banner.style.fontWeight = 'bold';
+            banner.style.zIndex = '999999';
+            banner.style.cursor = 'pointer';
+            banner.style.display = 'flex';
+            banner.style.alignItems = 'center';
+            banner.style.gap = '8px';
+            banner.style.border = '1px solid rgba(255,255,255,0.3)';
+            banner.innerHTML = '<span>🔊 [소리 켜기] 화면을 터치하면 오디오가 즉시 재생됩니다</span>';
+            banner.addEventListener('click', (e) => {
+                e.stopPropagation();
+                ensureAudioContextUnlocked();
+            });
+            document.body.appendChild(banner);
+        }
+        banner.style.display = 'flex';
+    }
+
+    function hideAudioUnlockBanner() {
+        const banner = document.getElementById('audioUnlockBanner');
+        if (banner) {
+            banner.style.display = 'none';
+        }
+    }
+
+    function ensureAudioContextUnlocked() {
+        if (!audioCtx) {
+            initAudioContext();
+        }
+        if (audioCtx && audioCtx.state === 'suspended') {
+            audioCtx.resume().then(() => {
+                console.log('🔊 [AUDIO] AudioContext resumed via user gesture (state: running)');
+                hideAudioUnlockBanner();
+            }).catch((err) => {
+                console.warn('🔊 [AUDIO] AudioContext resume failed:', err);
+            });
+        } else if (audioCtx && audioCtx.state === 'running') {
+            hideAudioUnlockBanner();
+        }
+    }
+    window.ensureAudioContextUnlocked = ensureAudioContextUnlocked;
+
+    // 캡처 단계(capture: true)에서 모든 사용자 터치/클릭 제스처를 선점하여 AudioContext 즉각 언락
+    ['click', 'touchstart', 'touchend', 'pointerdown', 'mousedown', 'keydown'].forEach(evt => {
+        window.addEventListener(evt, () => {
+            ensureAudioContextUnlocked();
+        }, { capture: true, passive: true });
+    });
 
     function handleAudioProcess(e) {
         const outL = e.outputBuffer.getChannelData(0);
@@ -3660,10 +3726,14 @@
             return;
         }
 
-        // 100ms 프리버퍼 기준치 (48kHz 기준 4800 샘플, 44.1kHz 기준 4410 샘플)
-        const targetPrebuffer = Math.floor((audioCtx ? audioCtx.sampleRate : 48000) * 0.10);
+        const ctxSampleRate = (audioCtx ? audioCtx.sampleRate : 48000);
+        // 기준 워터마크: 타겟 250ms, 언더런 탈출 최소 프리버퍼 180ms
+        const targetPrebuffer = Math.floor(ctxSampleRate * 0.18); // 180ms 프리버퍼
+        const minBufferThreshold = Math.floor(ctxSampleRate * 0.15); // 150ms 미만: 미세 감속 (버퍼 충전)
+        const highBufferThreshold = Math.floor(ctxSampleRate * 0.35); // 350ms 초과: 미세 가속 (버퍼 방출)
+        const maxBufferLimit = Math.floor(ctxSampleRate * 0.50); // 500ms 상한 (Bufferbloat 방지)
 
-        // 초기 시작 또는 언더런 후 재버퍼링: 100ms 완충될 때까지 부드럽게 무음 출력 대기
+        // 초기 시작 또는 언더런 후 재버퍼링: 180ms 완충될 때까지 대기
         if (isPcmBuffering) {
             if (pcmRingAvailable >= targetPrebuffer) {
                 isPcmBuffering = false;
@@ -3674,14 +3744,28 @@
             }
         }
 
-        // 버퍼 고갈(Underflow): 남은 샘플을 출력하고 무음 전환 후 100ms 재버퍼링 돌입
-        if (pcmRingAvailable < frames) {
-            for (let i = 0; i < pcmRingAvailable; i++) {
-                outL[i] = pcmRingBufferL[pcmRingReadPos];
-                outR[i] = pcmRingBufferR[pcmRingReadPos];
+        // 클록 드리프트 적응형 재생 속도 보정 (Elastic Rate Matching)
+        // 버퍼가 부족하면 1.5% 천천히 재생하여 버퍼를 자연 보충하고, 버퍼가 많으면 1.5% 빠르게 재생하여 250ms 수렴
+        let rate = 1.0;
+        if (pcmRingAvailable < minBufferThreshold) {
+            rate = 0.985; // 1.5% 감속 (청각상 피치 변화 감지 불가)
+        } else if (pcmRingAvailable > highBufferThreshold) {
+            rate = 1.015; // 1.5% 가속
+        }
+
+        const needed = Math.round(frames * rate);
+
+        // 버퍼 고갈(Underflow) 발생 시: 남은 샘플을 부드럽게 페이드아웃 출력 후 재버퍼링 돌입
+        if (pcmRingAvailable < needed) {
+            const avail = Math.min(pcmRingAvailable, frames);
+            for (let i = 0; i < avail; i++) {
+                // 끝부분 32샘플 페이드아웃으로 팝/클릭 노이즈 완벽 제거
+                const fade = (avail > 32 && i >= avail - 32) ? (avail - i) / 32.0 : 1.0;
+                outL[i] = pcmRingBufferL[pcmRingReadPos] * fade;
+                outR[i] = pcmRingBufferR[pcmRingReadPos] * fade;
                 pcmRingReadPos = (pcmRingReadPos + 1) % PCM_RING_CAPACITY;
             }
-            for (let i = pcmRingAvailable; i < frames; i++) {
+            for (let i = avail; i < frames; i++) {
                 outL[i] = 0;
                 outR[i] = 0;
             }
@@ -3690,13 +3774,35 @@
             return;
         }
 
-        // 정상 연속 스트리밍: 링 버퍼에서 2048 샘플을 사운드카드 출력 버퍼로 직결 복사
-        for (let i = 0; i < frames; i++) {
-            outL[i] = pcmRingBufferL[pcmRingReadPos];
-            outR[i] = pcmRingBufferR[pcmRingReadPos];
-            pcmRingReadPos = (pcmRingReadPos + 1) % PCM_RING_CAPACITY;
+        // 정상 연속 스트리밍: rate에 따른 고음질 선형 보간 출력
+        if (rate === 1.0) {
+            for (let i = 0; i < frames; i++) {
+                outL[i] = pcmRingBufferL[pcmRingReadPos];
+                outR[i] = pcmRingBufferR[pcmRingReadPos];
+                pcmRingReadPos = (pcmRingReadPos + 1) % PCM_RING_CAPACITY;
+            }
+            pcmRingAvailable -= frames;
+        } else {
+            for (let i = 0; i < frames; i++) {
+                const pos = i * rate;
+                const idx0 = Math.floor(pos);
+                const frac = pos - idx0;
+                const r0 = (pcmRingReadPos + idx0) % PCM_RING_CAPACITY;
+                const r1 = (r0 + 1) % PCM_RING_CAPACITY;
+                outL[i] = pcmRingBufferL[r0] * (1.0 - frac) + pcmRingBufferL[r1] * frac;
+                outR[i] = pcmRingBufferR[r0] * (1.0 - frac) + pcmRingBufferR[r1] * frac;
+            }
+            pcmRingReadPos = (pcmRingReadPos + needed) % PCM_RING_CAPACITY;
+            pcmRingAvailable -= needed;
         }
-        pcmRingAvailable -= frames;
+
+        // 지연 누적(Bufferbloat) 자동 억제: 500ms 초과 시 타겟 250ms로 부드럽게 조정
+        if (pcmRingAvailable > maxBufferLimit) {
+            const targetBufferSamples = Math.floor(ctxSampleRate * 0.25);
+            const dropSamples = pcmRingAvailable - targetBufferSamples;
+            pcmRingReadPos = (pcmRingReadPos + dropSamples) % PCM_RING_CAPACITY;
+            pcmRingAvailable = targetBufferSamples;
+        }
     }
 
     function playPcmAudio(arrayBuffer) {
@@ -3706,7 +3812,12 @@
             if (!audioCtx) return;
         }
         if (audioCtx.state === 'suspended') {
-            audioCtx.resume().catch(() => {});
+            showAudioUnlockBanner();
+            audioCtx.resume().then(() => {
+                hideAudioUnlockBanner();
+            }).catch(() => {});
+        } else if (audioCtx.state === 'running') {
+            hideAudioUnlockBanner();
         }
 
         // 16-bit PCM Stereo (Interleaved L/R, 48000Hz)
@@ -3715,8 +3826,6 @@
         if (inNumSamples <= 0) return;
 
         const ctxSampleRate = audioCtx.sampleRate || 48000;
-        const targetPrebuffer = Math.floor(ctxSampleRate * 0.10); // 100ms
-        const maxBufferLimit = Math.floor(ctxSampleRate * 0.25);  // 250ms 한계
 
         if (ctxSampleRate === 48000) {
             // 48kHz 1:1 직결 입력
@@ -3748,11 +3857,13 @@
             pcmRingAvailable += outNumSamples;
         }
 
-        // 지연 누적(Bufferbloat) 자동 억제: 버퍼가 250ms를 초과하면 초과분을 스킵하여 100ms 타겟 유지
+        // 지연 누적(Bufferbloat) 자동 억제: 500ms 한계 초과 시 타겟 250ms로 점진 스킵
+        const maxBufferLimit = Math.floor(ctxSampleRate * 0.50);
         if (pcmRingAvailable > maxBufferLimit) {
-            const dropSamples = pcmRingAvailable - targetPrebuffer;
+            const targetBufferSamples = Math.floor(ctxSampleRate * 0.25);
+            const dropSamples = pcmRingAvailable - targetBufferSamples;
             pcmRingReadPos = (pcmRingReadPos + dropSamples) % PCM_RING_CAPACITY;
-            pcmRingAvailable = targetPrebuffer;
+            pcmRingAvailable = targetBufferSamples;
         }
     }
 
@@ -3762,17 +3873,6 @@
         pcmRingAvailable = 0;
         isPcmBuffering = true;
     }
-
-    // 사용자 제스처 이벤트 리스너를 통한 AudioContext 자동 언락 (Autoplay 정책 대응)
-    ['click', 'touchstart', 'pointerdown', 'keydown'].forEach(evt => {
-        document.addEventListener(evt, () => {
-            if (!audioCtx) {
-                if (isAudioStreamingActive) initAudioContext();
-            } else if (audioCtx.state === 'suspended') {
-                audioCtx.resume().catch(() => {});
-            }
-        }, { passive: true });
-    });
 
     function updateAudioModeUI(enabled) {
         isAudioStreamingActive = enabled;

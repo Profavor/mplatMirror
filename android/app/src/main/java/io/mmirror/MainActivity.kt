@@ -370,14 +370,25 @@ class MainActivity : AppCompatActivity() {
 
         val audioStreamSaved = prefs.getBoolean("pref_audio_stream_enabled", false)
         binding.switchAudioStreaming.isChecked = audioStreamSaved
+        fun updateAudioStreamingDesc(isWeb: Boolean) {
+            if (isWeb) {
+                binding.tvAudioStreamingDesc.text = "🌐 웹 브라우저 송출 중 (폰 스피커 음소거 0, 테슬라 스피커 출력)"
+                binding.tvAudioStreamingDesc.setTextColor(0xFF3498DB.toInt())
+            } else {
+                binding.tvAudioStreamingDesc.text = "🔊 차량 블루투스 직결 모드 (권장: 0딜레이 무손실, 차량 미디어 = BT)"
+                binding.tvAudioStreamingDesc.setTextColor(0xFF8E9AA8.toInt())
+            }
+        }
+        updateAudioStreamingDesc(audioStreamSaved)
         binding.switchAudioStreaming.setOnCheckedChangeListener { _, isChecked ->
             prefs.edit().putBoolean("pref_audio_stream_enabled", isChecked).apply()
+            updateAudioStreamingDesc(isChecked)
             if (MediaProjectionService.isRunning) {
                 MediaProjectionService.instance?.setAudioStreamingEnabled(isChecked)
             }
             Toast.makeText(
                 this,
-                if (isChecked) "🌐 웹 브라우저 사운드 송출 켜짐 (테슬라 브라우저로 소리 전송)" else "🚗 차량 블루투스 직결 모드 (0ms 무손실 전송)",
+                if (isChecked) "🌐 웹 브라우저 사운드 송출 켜짐 (폰 음량 0, 테슬라 스피커 출력)" else "🚗 차량 블루투스 직결 모드 (0ms 무손실 전송)",
                 Toast.LENGTH_SHORT
             ).show()
         }

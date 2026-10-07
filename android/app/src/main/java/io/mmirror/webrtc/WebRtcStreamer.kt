@@ -634,10 +634,10 @@ class WebRtcStreamer(
         val dc = pc.createDataChannel("control", dcInit)
         setupDataChannel(dc)
 
-        // 오디오 전용 DataChannel (비디오 프레임과 완벽 분리된 독립 SCTP 스트림, 무지연 UDP 모드)
+        // 오디오 전용 DataChannel (비디오 프레임과 완벽 분리된 독립 SCTP 스트림, 저지연 무손실 모드)
         val audioDcInit = DataChannel.Init().apply {
-            ordered = false
-            maxRetransmits = 0
+            ordered = true
+            maxRetransmitTimeMs = 500 // 로컬 Wi-Fi 패킷 일시 유실 시 5~10ms 내 고속 재전송으로 오디오 결손 및 버퍼 부족 원천 차단
         }
         val aDc = pc.createDataChannel("audio", audioDcInit)
         setupAudioDataChannel(aDc)
@@ -1292,8 +1292,8 @@ class WebRtcStreamer(
         val buffered = dc.bufferedAmount()
         val now = android.os.SystemClock.elapsedRealtime()
 
-        // 1. 소켓 버퍼가 384KB 이상 적체된 경우 네트워크 혼잡으로 판단하여 GOP 드롭 모드 진입
-        if (buffered > 384 * 1024L) {
+        // 1. 소켓 버퍼가 512KB 이상 적체된 경우 네트워크 혼잡으로 판단하여 GOP 드롭 모드 진입
+        if (buffered > 512 * 1024L) {
             if (!isDroppingGop) {
                 isDroppingGop = true
                 gopDropStartTime = now
@@ -1302,13 +1302,14 @@ class WebRtcStreamer(
         }
 
         if (isDroppingGop) {
-            if (buffered < 128 * 1024L) {
-                // 버퍼가 128KB 이하로 원활하게 배출된 경우 GOP 드롭 해제 및 신규 키프레임 요청
+            val dropDuration = now - gopDropStartTime
+            if (buffered < 192 * 1024L || dropDuration > 1000L) {
+                // 버퍼가 192KB 이하로 원활하게 배출되었거나 1000ms 경과 시 GOP 드롭 즉시 해제 및 신규 키프레임 요청
                 isDroppingGop = false
-                Log.i(TAG, "✓ WebRTC DataChannel 버퍼 해소 (${buffered / 1024}KB) -> 정상 전송 재개 및 키프레임 갱신")
+                Log.i(TAG, "✓ WebRTC DataChannel 버퍼 해소 (${buffered / 1024}KB, duration=${dropDuration}ms) -> 정상 전송 재개 및 키프레임 갱신")
                 io.mmirror.MediaProjectionService.instance?.requestKeyFrame()
-            } else if (buffered > 768 * 1024L || !isKeyFrame) {
-                // 버퍼가 768KB 이상이면 키프레임도 폐기하여 SCTP 마비 방지. 그 이하 구간에서는 신규 키프레임만 통과
+            } else if (!isKeyFrame) {
+                // 버퍼 해소 전까지 델타 프레임만 드롭 (신규 키프레임은 항상 통과 허용)
                 return
             }
         }
