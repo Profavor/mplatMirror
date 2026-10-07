@@ -2,10 +2,12 @@ package io.mmirror.webrtc
 
 import android.content.Context
 import android.content.Intent
+import android.media.AudioManager
 import android.media.projection.MediaProjection
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.view.KeyEvent
 import io.mmirror.AppLogger
 import io.mmirror.MediaProjectionService
 import io.mmirror.NetworkUtils
@@ -428,6 +430,7 @@ class WebRtcStreamer(
     @Volatile private var hasSynthesizedHotspotCandidate = false
     @Volatile private var hasNativeHotspotCandidate = false
     @Volatile private var lastRemoteAnswerUfrag: String? = null
+    @Volatile private var hasTriggeredBtAudioAutoRecovery = false
     private var pendingReconnectRunnable: Runnable? = null
     private var proactiveReconnectRunnable: Runnable? = null
 
@@ -449,6 +452,7 @@ class WebRtcStreamer(
         currentOfferId = java.util.UUID.randomUUID().toString()
         hasSynthesizedHotspotCandidate = false
         hasNativeHotspotCandidate = false
+        hasTriggeredBtAudioAutoRecovery = false
         lastRemoteAnswerUfrag = null
 
         val pcf = peerConnectionFactory ?: return
@@ -521,6 +525,7 @@ class WebRtcStreamer(
                     // 차량 연결됨 → GPS 주행 기록 시작
                     io.mmirror.DrivingLogManager.currentInstance?.onPeerConnected()
                     io.mmirror.MediaProjectionService.instance?.requestKeyFrame()
+                    triggerBluetoothAudioAutoRecovery()
                 } else if (newState == PeerConnection.PeerConnectionState.DISCONNECTED ||
                            newState == PeerConnection.PeerConnectionState.FAILED) {
                     AppLogger.w(TAG, "🔌 WebRTC peer disconnected/failed: $newState")
@@ -635,6 +640,53 @@ class WebRtcStreamer(
             override fun onCreateFailure(err: String?) { AppLogger.e(TAG, "❌ createOffer failure: $err") }
             override fun onSetFailure(err: String?) { AppLogger.e(TAG, "❌ createOffer setFailure: $err") }
         }, sdpConstraints)
+    }
+
+    /**
+     * [작업 지시서 3-a] 테슬라 브라우저 WebRTC 연결 직후 미디어 소스 블루투스 자동 재탈환
+     * WebRTC P2P 연결 시 테슬라 OS가 브라우저(웹)로 소스를 가로채는 현상에 대응하여,
+     * 연결 2.5초 후 폰에서 음악 재생 중일 경우 MEDIA_PAUSE -> 0.8초 후 MEDIA_PLAY 펄스를 전송합니다.
+     * 테슬라 블루투스 스택(AVRCP)이 신규 재생 상태를 감지하여 미디어 소스를 블루투스로 자동 복귀시킵니다.
+     */
+    private fun triggerBluetoothAudioAutoRecovery() {
+        if (hasTriggeredBtAudioAutoRecovery) return
+        hasTriggeredBtAudioAutoRecovery = true
+
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+        if (!audioManager.isMusicActive) {
+            AppLogger.d(TAG, "🎵 [BT-AUDIO-AUTO-RECOVER] Music is not active on phone, skipping AVRCP toggle.")
+            return
+        }
+
+        AppLogger.i(TAG, "🎵 [BT-AUDIO-AUTO-RECOVER] Active music playback detected! Scheduling MEDIA_PAUSE -> MEDIA_PLAY in 2500ms to reclaim Tesla Bluetooth focus...")
+        mainHandler.postDelayed({
+            try {
+                if (isRunning && isPeerConnected() && audioManager.isMusicActive) {
+                    AppLogger.i(TAG, "🎵 [BT-AUDIO-AUTO-RECOVER] Step 1: Dispatching MEDIA_PAUSE to reset AVRCP state")
+                    val downPause = KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PAUSE)
+                    val upPause = KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PAUSE)
+                    audioManager.dispatchMediaKeyEvent(downPause)
+                    audioManager.dispatchMediaKeyEvent(upPause)
+
+                    mainHandler.postDelayed({
+                        try {
+                            if (isRunning && isPeerConnected()) {
+                                AppLogger.i(TAG, "🎵 [BT-AUDIO-AUTO-RECOVER] Step 2: Dispatching MEDIA_PLAY to reclaim Tesla Bluetooth focus")
+                                val downPlay = KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PLAY)
+                                val upPlay = KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PLAY)
+                                audioManager.dispatchMediaKeyEvent(downPlay)
+                                audioManager.dispatchMediaKeyEvent(upPlay)
+                                AppLogger.i(TAG, "✓ [BT-AUDIO-AUTO-RECOVER] Bluetooth AVRCP reclaim pulse dispatched successfully!")
+                            }
+                        } catch (e: Throwable) {
+                            AppLogger.w(TAG, "Failed to dispatch MEDIA_PLAY: ${e.message}")
+                        }
+                    }, 800L)
+                }
+            } catch (e: Throwable) {
+                AppLogger.w(TAG, "Failed to dispatch MEDIA_PAUSE: ${e.message}")
+            }
+        }, 2500L)
     }
 
     private fun setupDataChannel(dc: DataChannel) {
