@@ -1,4 +1,4 @@
 <resources>
     <string name="app_name">mplat Mirror</string>
-    <string name="accessibility_service_description">테슬라 차량 화면에서 스마트폰을 직접 조작(터치/스크롤/클릭)할 수 있도록 제스처를 전달하는 서비스입니다.</string>
+    <string name="accessibility_service_description">차량 화면에서 스마트폰을 직접 조작(터치/스크롤/클릭)할 수 있도록 제스처를 전달하는 서비스입니다.</string>
 </resources>

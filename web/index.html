@@ -15,7 +15,7 @@
             <div class="status-indicator">
                 <span id="statusDot" class="dot disconnected"></span>
                 <span id="statusText">연결 대기 중...</span>
-                <span class="app-version-badge">v1.4.1</span>
+                <span class="app-version-badge">v1.4.2</span>
                 <span id="versionMismatchBadge" class="badge-mismatch" style="display:none;" title="스마트폰 앱 버전 불일치">⚠️ 앱 v<span id="mismatchAppVer"></span> 업데이트 필요</span>
                 <button id="btnConsoleLog" class="btn-console-log" title="실시간 콘솔 로그 열기">📋 로그</button>
             </div>
@@ -116,26 +116,95 @@
                         </div>
                     </div>
 
-                    <!-- 위젯 3: 공식 스폰서 / 광고 배너 영역 -->
-                    <a href="https://mdm.mplat.store" target="_blank" rel="noopener" class="side-card side-ad-card" id="sideAdBanner" title="MDM Platform 바로가기">
-                        <div class="side-ad-header">
-                            <span class="side-ad-badge">SPONSORED · AD</span>
-                            <span class="side-ad-domain">mdm.mplat.store ↗</span>
-                        </div>
-                        <div class="side-ad-body">
-                            <div class="side-ad-icon-box">
-                                <span class="side-ad-icon">🌐</span>
+                    <!-- 위젯 3: 공식 스폰서 / 다중 슬라이드 광고 배너 영역 -->
+                    <div class="side-ad-carousel-container" id="sideAdCarousel">
+                        <div class="side-ad-track-wrap">
+                            <div class="side-ad-track" id="sideAdTrack">
+                                <!-- 슬라이드 1: MDM Platform -->
+                                <a href="https://mdm.mplat.store" target="_blank" rel="noopener" class="side-card side-ad-slide slide-blue" title="MDM Platform 바로가기">
+                                    <div class="side-ad-header">
+                                        <div class="side-ad-badge-group">
+                                            <span class="side-ad-badge">AD</span>
+                                            <span class="side-ad-category">엔터프라이즈 솔루션</span>
+                                        </div>
+                                        <span class="side-ad-domain">mdm.mplat.store ↗</span>
+                                    </div>
+                                    <div class="side-ad-body">
+                                        <div class="side-ad-icon-box blue-grad">
+                                            <span class="side-ad-icon">🌐</span>
+                                        </div>
+                                        <div class="side-ad-text-wrap">
+                                            <h4 class="side-ad-title">MDM Platform</h4>
+                                            <p class="side-ad-desc">차세대 엔터프라이즈 마스터데이터 관리 &amp; 데이터 거버넌스 솔루션</p>
+                                        </div>
+                                    </div>
+                                    <div class="side-ad-footer">
+                                        <span class="side-ad-tag">⚡ 실시간 데이터 동기화 &amp; 거버넌스</span>
+                                        <span class="side-ad-cta">자세히 보기 ➔</span>
+                                    </div>
+                                </a>
+
+                                <!-- 슬라이드 2: 테슬라 전용 스마트 드라이빙 스토어 -->
+                                <a href="https://mdm.mplat.store" target="_blank" rel="noopener" class="side-card side-ad-slide slide-purple" title="mplat 스마트 마켓 바로가기">
+                                    <div class="side-ad-header">
+                                        <div class="side-ad-badge-group">
+                                            <span class="side-ad-badge">AD</span>
+                                            <span class="side-ad-category">테슬라 라이프</span>
+                                        </div>
+                                        <span class="side-ad-domain">mdm.mplat.store ↗</span>
+                                    </div>
+                                    <div class="side-ad-body">
+                                        <div class="side-ad-icon-box purple-grad">
+                                            <span class="side-ad-icon">🚗</span>
+                                        </div>
+                                        <div class="side-ad-text-wrap">
+                                            <h4 class="side-ad-title">mplat 스마트 드라이빙 마켓</h4>
+                                            <p class="side-ad-desc">테슬라 오너를 위한 차량용 무선 충전 거치대 &amp; 인카 커스텀 디바이스</p>
+                                        </div>
+                                    </div>
+                                    <div class="side-ad-footer">
+                                        <span class="side-ad-tag">🔥 모델 3/Y/X/S 완벽 호환 액세서리</span>
+                                        <span class="side-ad-cta">스토어 가기 ➔</span>
+                                    </div>
+                                </a>
+
+                                <!-- 슬라이드 3: 초저지연 AI & 클라우드 인프라 -->
+                                <a href="https://mdm.mplat.store" target="_blank" rel="noopener" class="side-card side-ad-slide slide-emerald" title="mplat Cloud & AI 바로가기">
+                                    <div class="side-ad-header">
+                                        <div class="side-ad-badge-group">
+                                            <span class="side-ad-badge">AD</span>
+                                            <span class="side-ad-category">클라우드 &amp; AI</span>
+                                        </div>
+                                        <span class="side-ad-domain">mdm.mplat.store ↗</span>
+                                    </div>
+                                    <div class="side-ad-body">
+                                        <div class="side-ad-icon-box emerald-grad">
+                                            <span class="side-ad-icon">⚡</span>
+                                        </div>
+                                        <div class="side-ad-text-wrap">
+                                            <h4 class="side-ad-title">mplat Cloud &amp; AI Engine</h4>
+                                            <p class="side-ad-desc">WebRTC 초저지연 미디어 스트리밍 &amp; AI 자동화 비즈니스 엔진</p>
+                                        </div>
+                                    </div>
+                                    <div class="side-ad-footer">
+                                        <span class="side-ad-tag">🚀 60 FPS 무손실 P2P 스트리밍</span>
+                                        <span class="side-ad-cta">플랫폼 보기 ➔</span>
+                                    </div>
+                                </a>
                             </div>
-                            <div class="side-ad-text-wrap">
-                                <h4 class="side-ad-title">MDM Platform</h4>
-                                <p class="side-ad-desc">차세대 엔터프라이즈 마스터데이터 관리 &amp; 데이터 거버넌스 솔루션</p>
+                        </div>
+
+                        <!-- 캐러셀 하단 컨트롤러 (이전/다음 화살표 & 인디케이터 도트) -->
+                        <div class="side-ad-nav-bar">
+                            <button id="btnPrevAd" class="side-ad-nav-btn" title="이전 광고">‹</button>
+                            <div class="side-ad-dots" id="sideAdDots">
+                                <span class="ad-dot active" data-index="0"></span>
+                                <span class="ad-dot" data-index="1"></span>
+                                <span class="ad-dot" data-index="2"></span>
                             </div>
+                            <button id="btnNextAd" class="side-ad-nav-btn" title="다음 광고">›</button>
                         </div>
-                        <div class="side-ad-footer">
-                            <span class="side-ad-tag">⚡ 실시간 데이터 동기화 &amp; 거버넌스</span>
-                            <span class="side-ad-cta">자세히 보기 ➔</span>
-                        </div>
-                    </a>
+                    </div>
                 </div>
             </aside>
 
@@ -240,7 +309,7 @@
                     <div class="guide-header">
                         <img src="logo.png" alt="mplat Mirror Logo" class="guide-logo">
                         <div class="guide-title-box">
-                            <h2 id="overlayTitle"><span id="overlayTitleText">mplat Mirror 테슬라 연결 가이드</span> <span class="badge-version">v1.4.1</span></h2>
+                            <h2 id="overlayTitle"><span id="overlayTitleText">mplat Mirror 테슬라 연결 가이드</span> <span class="badge-version">v1.4.2</span></h2>
                             <p class="guide-sub">컴퓨터 연결이나 개발자 모드 없이 3초 만에 시작하세요</p>
                         </div>
                     </div>
@@ -273,7 +342,7 @@
                         <span>💡 <strong>운전자 꿀팁</strong>: 현재 주소를 테슬라 브라우저 <strong>★ 즐겨찾기(북마크)</strong>에 등록해두시면 다음부터 원클릭 접속됩니다!</span>
                         <span style="display:block; margin-top:6px; color:#60a5fa;">🔊 <strong>차량 사운드 안내</strong>: 차량 화면 하단 미디어 소스를 <strong>[블루투스]</strong>로 선택하시면 스마트폰 티맵 내비 음성과 음악이 차 스피커로 즉시 출력됩니다.</span>
                         <div id="overlayVersionWarning" class="guide-version-warning" style="display: none; margin-top: 8px; background: rgba(245, 158, 11, 0.15); border: 1px solid #f59e0b; border-radius: 8px; padding: 10px; font-size: 12px; color: #fbbf24;">
-                            ⚠️ <strong>스마트폰 앱 업데이트 안내</strong>: 연결된 스마트폰의 앱 버전(v<span id="overlayMismatchVer"></span>)이 최신 버전(v1.4.1)과 일치하지 않습니다. 안정적인 60FPS 전송을 위해 <a href="https://play.google.com/store/apps/details?id=io.mmirror" target="_blank" style="color:#60a5fa; text-decoration:underline; font-weight:bold;">Google Play 스토어</a> 또는 <a href="https://github.com/Profavor/mplatMirror/releases/latest/download/mplatMirror.apk" style="color:#38bdf8; text-decoration:underline; font-weight:bold;">직접 APK 다운로드</a>로 최신 앱으로 업데이트해 주세요.
+                            ⚠️ <strong>스마트폰 앱 업데이트 안내</strong>: 연결된 스마트폰의 앱 버전(v<span id="overlayMismatchVer"></span>)이 최신 버전(v1.4.2)과 일치하지 않습니다. 안정적인 60FPS 전송을 위해 <a href="https://play.google.com/store/apps/details?id=io.mmirror" target="_blank" style="color:#60a5fa; text-decoration:underline; font-weight:bold;">Google Play 스토어</a> 또는 <a href="https://github.com/Profavor/mplatMirror/releases/latest/download/mplatMirror.apk" style="color:#38bdf8; text-decoration:underline; font-weight:bold;">직접 APK 다운로드</a>로 최신 앱으로 업데이트해 주세요.
                         </div>
                     </div>
 
@@ -288,7 +357,7 @@
                             <span style="display:block; margin-top:2px;">🏷️ 'Tesla', 'Apple CarPlay', 'TMAP'은 각 권리자의 등록상표이며 본 서비스와 공식 제휴 관계가 없습니다.</span>
                             <span style="display:block; margin-top:2px;">🔒 이용자 데이터/위치 서버 미수집 (0MB 모바일 데이터 순수 로컬 P2P 직결)</span>
                         </div>
-                        <span>mplat Mirror v1.4.1 · 0MB 초저지연 WebRTC 로컬 P2P 직결 · Copyright © 2026 mplat</span>
+                        <span>mplat Mirror v1.4.2 · 0MB 초저지연 WebRTC 로컬 P2P 직결 · Copyright © 2026 mplat</span>
                     </div>
                 </div>
             </div>
@@ -565,10 +634,10 @@
 
     <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-database-compat.js"></script>
-    <script src="firebase-config.js?v=1.4.1"></script>
+    <script src="firebase-config.js?v=1.4.2"></script>
     <script src="leaflet.js"></script>
-    <script src="player.js?v=1.4.1"></script>
-    <script src="touch.js?v=1.4.1"></script>
-    <script src="triplog.js?v=1.4.1"></script>
+    <script src="player.js?v=1.4.2"></script>
+    <script src="touch.js?v=1.4.2"></script>
+    <script src="triplog.js?v=1.4.2"></script>
 </body>
 </html>

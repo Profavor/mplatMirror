@@ -438,7 +438,7 @@ class MediaProjectionService : Service() {
                 "mMirror Streaming Service",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "테슬라 차량으로 0MB 화면을 스트리밍 중입니다 (오디오는 차량 블루투스 직결)."
+                description = "차량 브라우저로 0MB 화면을 스트리밍 중입니다 (오디오는 차량 블루투스 직결)."
             }
             val manager = getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(channel)
@@ -446,8 +446,8 @@ class MediaProjectionService : Service() {
     }
 
     private fun startForegroundServiceWithNotification() {
-        val title = "mplat Mirror 테슬라 미러링 중 (0MB P2P)"
-        val desc = "⚠️ 폰 전원(화면 끄기) 버튼 금지 · 테슬라의 [절전] 버튼을 이용하세요"
+        val title = "mplat Mirror 미러링 중 (0MB P2P)"
+        val desc = "⚠️ 폰 전원(화면 끄기) 버튼 금지 · 차량 화면의 [절전] 버튼을 이용하세요"
 
         val stopIntent = Intent(this, MediaProjectionService::class.java).apply {
             action = ACTION_STOP
@@ -468,7 +468,7 @@ class MediaProjectionService : Service() {
         val notification: Notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setContentTitle(title)
             .setContentText(desc)
-            .setStyle(NotificationCompat.BigTextStyle().bigText("테슬라 브라우저로 0MB 로컬 P2P 화면 송출 중입니다.\n⚠️ 스마트폰의 물리 전원(화면 끄기) 버튼을 누르면 안드로이드 보안 정책으로 미러링이 즉시 종료됩니다. 화면을 어둡게 하려면 테슬라 화면의 [절전] 버튼이나 아래 [암전] 버튼을 이용하세요."))
+            .setStyle(NotificationCompat.BigTextStyle().bigText("차량 브라우저로 0MB 로컬 P2P 화면 송출 중입니다.\n⚠️ 스마트폰의 물리 전원(화면 끄기) 버튼을 누르면 안드로이드 보안 정책으로 미러링이 즉시 종료됩니다. 화면을 어둡게 하려면 차량 화면의 [절전] 버튼이나 아래 [암전] 버튼을 이용하세요."))
             .setSmallIcon(android.R.drawable.ic_menu_slideshow)
             .setOngoing(true)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "🛑 미러링 종료", stopPendingIntent)
@@ -535,7 +535,7 @@ class MediaProjectionService : Service() {
                             android.os.Handler(android.os.Looper.getMainLooper()).post {
                                 android.widget.Toast.makeText(
                                     applicationContext,
-                                    "⚠️ 화면 송출이 중단되었습니다.\n(물리 전원 버튼을 누르면 안드로이드 보안 정책으로 중단됩니다. 절전 시 테슬라 화면의 [절전] 버튼을 이용하세요)",
+                                    "⚠️ 화면 송출이 중단되었습니다.\n(물리 전원 버튼을 누르면 안드로이드 보안 정책으로 중단됩니다. 절전 시 차량 화면의 [절전] 버튼을 이용하세요)",
                                     android.widget.Toast.LENGTH_LONG
                                 ).show()
                             }

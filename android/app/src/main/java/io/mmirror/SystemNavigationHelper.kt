@@ -75,7 +75,7 @@ object SystemNavigationHelper {
 
     fun openAccessibilitySettings(activity: Activity) {
         val disclosure = """
-            mplat Mirror는 차량(테슬라) 디스플레이에서 스마트폰을 원격으로 터치·조작할 수 있도록 안드로이드 '접근성 서비스(AccessibilityService) API'를 사용합니다.
+            mplat Mirror는 차량 디스플레이에서 스마트폰을 원격으로 터치·조작할 수 있도록 안드로이드 '접근성 서비스(AccessibilityService) API'를 사용합니다.
 
             [사용 목적]
             • 차량 브라우저에서 발생한 터치, 스와이프, 스크롤 제스처를 스마트폰 화면에 실시간 주입

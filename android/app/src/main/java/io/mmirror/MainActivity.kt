@@ -248,27 +248,10 @@ class MainActivity : AppCompatActivity() {
             }
             try {
                 val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                val textToCopy = binding.tvTeslaAddress.text.toString()
-                val clip = ClipData.newPlainText("Tesla Address", textToCopy)
+                val textToCopy = binding.tvBrowserAddress.text.toString()
+                val clip = ClipData.newPlainText("Browser Address", textToCopy)
                 clipboard.setPrimaryClip(clip)
                 Toast.makeText(this, "📋 주소($textToCopy)가 복사되었습니다.", Toast.LENGTH_SHORT).show()
-            } catch (e: Exception) {
-                Toast.makeText(this, "복사 실패: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
-
-        binding.tvSecondaryAddress.setOnClickListener {
-            if (!isWifiApEnabled()) {
-                showHotspotRequiredDialog()
-                return@setOnClickListener
-            }
-            try {
-                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                val hotspotIp = getHotspotIp()
-                val textToCopy = "http://$hotspotIp:8282"
-                val clip = ClipData.newPlainText("Tablet Address", textToCopy)
-                clipboard.setPrimaryClip(clip)
-                Toast.makeText(this, "📋 태블릿/PC 주소($textToCopy)가 복사되었습니다.", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 Toast.makeText(this, "복사 실패: ${e.message}", Toast.LENGTH_SHORT).show()
             }
@@ -372,7 +355,7 @@ class MainActivity : AppCompatActivity() {
         binding.switchAudioStreaming.isChecked = audioStreamSaved
         fun updateAudioStreamingDesc(isWeb: Boolean) {
             if (isWeb) {
-                binding.tvAudioStreamingDesc.text = "🌐 웹 브라우저 송출 중 (폰 스피커 음소거 0, 테슬라 스피커 출력)"
+                binding.tvAudioStreamingDesc.text = "🌐 웹 브라우저 송출 중 (폰 스피커 음소거 0, 차량 스피커 출력)"
                 binding.tvAudioStreamingDesc.setTextColor(0xFF3498DB.toInt())
             } else {
                 binding.tvAudioStreamingDesc.text = "🔊 차량 블루투스 직결 모드 (권장: 0딜레이 무손실, 차량 미디어 = BT)"
@@ -388,7 +371,7 @@ class MainActivity : AppCompatActivity() {
             }
             Toast.makeText(
                 this,
-                if (isChecked) "🌐 웹 브라우저 사운드 송출 켜짐 (폰 음량 0, 테슬라 스피커 출력)" else "🚗 차량 블루투스 직결 모드 (0ms 무손실 전송)",
+                if (isChecked) "🌐 웹 브라우저 사운드 송출 켜짐 (폰 음량 0, 차량 스피커 출력)" else "🚗 차량 블루투스 직결 모드 (0ms 무손실 전송)",
                 Toast.LENGTH_SHORT
             ).show()
         }
@@ -623,7 +606,7 @@ class MainActivity : AppCompatActivity() {
         if (MediaProjectionService.isRunning) {
             binding.btnToggleMirroring.text = "🛑 미러링 중지"
             binding.btnToggleMirroring.setBackgroundColor(0xFFE74C3C.toInt())
-            binding.tvStreamStatus.text = "🟢 테슬라 브라우저로 실시간 60FPS 전송 중"
+            binding.tvStreamStatus.text = "🟢 차량 브라우저로 실시간 60FPS 전송 중"
             binding.tvStreamStatus.setTextColor(0xFF2ECC71.toInt())
             binding.btnDimScreen.visibility = View.VISIBLE
             binding.btnDimScreen.text = if (ScreenDimmerManager.isDimmed) "☀️ 스마트폰 화면 켜기 (밝기 복원)" else "🌙 스마트폰 화면 끄기 (초절전 암전)"
@@ -633,9 +616,9 @@ class MainActivity : AppCompatActivity() {
             if (ScreenDimmerManager.isDimmed) {
                 ScreenDimmerManager.setDimmed(false)
             }
-            binding.btnToggleMirroring.text = "🚗 테슬라 미러링 시작"
+            binding.btnToggleMirroring.text = "🚗 차량 미러링 시작"
             binding.btnToggleMirroring.setBackgroundColor(0xFF27AE60.toInt())
-            binding.tvStreamStatus.text = "✓ 원클릭 준비 완료 · 테슬라 브라우저로 60FPS 직결"
+            binding.tvStreamStatus.text = "✓ 원클릭 준비 완료 · 차량 브라우저로 60FPS 직결"
             binding.tvStreamStatus.setTextColor(0xFF2ECC71.toInt())
         }
     }
@@ -674,7 +657,7 @@ class MainActivity : AppCompatActivity() {
             binding.btnOpenBluetooth.text = "블루투스 연결"
             binding.btnOpenBluetooth.setBackgroundColor(0xFF2980B9.toInt())
 
-            binding.tvSmartLockStatus.text = "차량 BT 미연결 (테슬라 BT를 Smart Lock 기기로 등록 권장)"
+            binding.tvSmartLockStatus.text = "차량 BT 미연결 (차량 BT를 Smart Lock 기기로 등록 권장)"
             binding.tvSmartLockStatus.setTextColor(0xFFA0A5B1.toInt())
         }
     }
@@ -682,7 +665,7 @@ class MainActivity : AppCompatActivity() {
     private fun updateAccessibilityStatus() {
         val isEnabled = TouchControlService.isAccessibilityServiceEnabled(this)
         if (isEnabled) {
-            binding.tvAccessibilityStatus.text = "✓ 접근성 켜짐 (테슬라 화면 터치 100% 가능)"
+            binding.tvAccessibilityStatus.text = "✓ 접근성 켜짐 (차량 화면 터치 100% 가능)"
             binding.tvAccessibilityStatus.setTextColor(0xFF2ECC71.toInt())
             binding.btnOpenAccessibilitySettings.text = "설정 완료"
             binding.btnOpenAccessibilitySettings.setBackgroundColor(0xFF27AE60.toInt())
@@ -699,7 +682,7 @@ class MainActivity : AppCompatActivity() {
             val canWrite = Settings.System.canWrite(this)
 
             if (canWrite) {
-                binding.tvWriteSettingsStatus.text = "✓ 절전 권한 활성 (티맵 실행 중 테슬라 절전 100% 가능)"
+                binding.tvWriteSettingsStatus.text = "✓ 절전 권한 활성 (티맵 실행 중 차량 화면 절전 100% 가능)"
                 binding.tvWriteSettingsStatus.setTextColor(0xFF2ECC71.toInt())
                 binding.btnOpenWriteSettings.text = "설정 완료"
                 binding.btnOpenWriteSettings.setBackgroundColor(0xFF27AE60.toInt())
@@ -730,16 +713,14 @@ class MainActivity : AppCompatActivity() {
         val apEnabled = isWifiApEnabled()
         val hotspotIp = if (apEnabled) getHotspotIp() else NetworkUtils.DEFAULT_HOTSPOT_IP
 
-        binding.tvTeslaAddress.text = "https://mplat-mirror.web.app"
+        binding.tvBrowserAddress.text = "https://mplat-mirror.web.app"
 
         if (apEnabled) {
-            binding.tvSecondaryAddress.text = "태블릿/PC: http://$hotspotIp:8282"
-            binding.tvHotspotStatus.text = "✓ 핫스팟 켜짐 ($hotspotIp) - 태블릿/테슬라 Wi-Fi 연결 대기"
+            binding.tvHotspotStatus.text = "✓ 핫스팟 켜짐 ($hotspotIp) - 차량 Wi-Fi 연결 대기"
             binding.tvHotspotStatus.setTextColor(0xFF2ECC71.toInt())
             binding.btnOpenHotspot.text = "✓ 핫스팟 켜짐"
             binding.btnOpenHotspot.setBackgroundColor(0xFF2D303A.toInt())
         } else {
-            binding.tvSecondaryAddress.text = "태블릿/PC: 핫스팟을 켜면 로컬 IP(8282)가 표시됩니다"
             binding.tvHotspotStatus.text = "⚠️ 모바일 핫스팟 꺼짐 - 미러링을 위해 켜주세요"
             binding.tvHotspotStatus.setTextColor(0xFFE67E22.toInt())
             binding.btnOpenHotspot.text = "핫스팟 켜기"

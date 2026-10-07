@@ -2666,10 +2666,35 @@ html, body {
     color: #64748b;
 }
 
-/* 공식 스폰서 / 광고 배너 영역 */
-.side-ad-card {
-    background: linear-gradient(135deg, rgba(20, 30, 56, 0.92) 0%, rgba(12, 18, 34, 0.95) 100%);
-    border: 1px solid rgba(59, 130, 246, 0.28);
+/* 공식 스폰서 / 다중 슬라이드 광고 배너 영역 */
+.side-ad-carousel-container {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+}
+
+.side-ad-track-wrap {
+    overflow: hidden;
+    border-radius: 18px;
+    width: 100%;
+    position: relative;
+}
+
+.side-ad-track {
+    display: flex;
+    width: 100%;
+    transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    will-change: transform;
+}
+
+.side-ad-slide {
+    flex: 0 0 100%;
+    min-width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    border-radius: 18px;
+    padding: 18px 20px;
     text-decoration: none;
     cursor: pointer;
     transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
@@ -2677,11 +2702,31 @@ html, body {
     flex-direction: column;
 }
 
-.side-ad-card:hover, .side-ad-card:active {
+.side-ad-slide.slide-blue {
+    background: linear-gradient(135deg, rgba(20, 30, 56, 0.92) 0%, rgba(12, 18, 34, 0.95) 100%);
+    border: 1px solid rgba(59, 130, 246, 0.28);
+}
+.side-ad-slide.slide-blue:hover {
     background: linear-gradient(135deg, rgba(28, 44, 80, 0.96) 0%, rgba(16, 24, 46, 0.98) 100%);
     border-color: rgba(96, 165, 250, 0.55);
-    transform: translateY(-2px);
-    box-shadow: 0 8px 26px rgba(37, 99, 235, 0.25);
+}
+
+.side-ad-slide.slide-purple {
+    background: linear-gradient(135deg, rgba(38, 22, 60, 0.92) 0%, rgba(18, 12, 34, 0.95) 100%);
+    border: 1px solid rgba(168, 85, 247, 0.28);
+}
+.side-ad-slide.slide-purple:hover {
+    background: linear-gradient(135deg, rgba(54, 28, 84, 0.96) 0%, rgba(24, 14, 46, 0.98) 100%);
+    border-color: rgba(192, 132, 252, 0.55);
+}
+
+.side-ad-slide.slide-emerald {
+    background: linear-gradient(135deg, rgba(16, 38, 36, 0.92) 0%, rgba(10, 24, 22, 0.95) 100%);
+    border: 1px solid rgba(16, 185, 129, 0.28);
+}
+.side-ad-slide.slide-emerald:hover {
+    background: linear-gradient(135deg, rgba(22, 54, 50, 0.96) 0%, rgba(12, 32, 28, 0.98) 100%);
+    border-color: rgba(52, 211, 153, 0.55);
 }
 
 .side-ad-header {
@@ -2691,15 +2736,27 @@ html, body {
     margin-bottom: 12px;
 }
 
+.side-ad-badge-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
 .side-ad-badge {
     font-size: 10px;
     font-weight: 800;
     color: #f59e0b;
     background: rgba(245, 158, 11, 0.15);
     border: 1px solid rgba(245, 158, 11, 0.35);
-    padding: 2px 7px;
+    padding: 2px 6px;
     border-radius: 4px;
     letter-spacing: 0.6px;
+}
+
+.side-ad-category {
+    font-size: 11px;
+    font-weight: 600;
+    color: #94a3b8;
 }
 
 .side-ad-domain {
@@ -2721,13 +2778,23 @@ html, body {
     width: 44px;
     height: 44px;
     border-radius: 12px;
-    background: linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%);
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 22px;
-    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
     flex-shrink: 0;
+}
+.side-ad-icon-box.blue-grad {
+    background: linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%);
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
+}
+.side-ad-icon-box.purple-grad {
+    background: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
+    box-shadow: 0 4px 12px rgba(147, 51, 234, 0.35);
+}
+.side-ad-icon-box.emerald-grad {
+    background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35);
 }
 
 .side-ad-text-wrap {
@@ -2737,7 +2804,7 @@ html, body {
 
 .side-ad-title {
     margin: 0 0 4px 0;
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 700;
     color: #ffffff;
     letter-spacing: -0.2px;
@@ -2770,9 +2837,64 @@ html, body {
     transition: transform 0.15s ease;
 }
 
-.side-ad-card:hover .side-ad-cta {
+.side-ad-slide:hover .side-ad-cta {
     transform: translateX(3px);
     color: #93c5fd;
+}
+
+/* 캐러셀 하단 컨트롤러 */
+.side-ad-nav-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 6px;
+    padding: 2px 0;
+}
+
+.side-ad-nav-btn {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #cbd5e1;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    user-select: none;
+    -webkit-user-select: none;
+    line-height: 1;
+    padding: 0;
+}
+.side-ad-nav-btn:hover, .side-ad-nav-btn:active {
+    background: rgba(59, 130, 246, 0.25);
+    border-color: #3b82f6;
+    color: #ffffff;
+    transform: scale(1.1);
+}
+
+.side-ad-dots {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.ad-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.22);
+    cursor: pointer;
+    transition: all 0.25s ease;
+}
+.ad-dot.active {
+    width: 18px;
+    background: #60a5fa;
+    box-shadow: 0 0 10px rgba(96, 165, 250, 0.6);
 }
 
 /* 위젯 숨겼을 때 우측 하단 복원 버튼 */

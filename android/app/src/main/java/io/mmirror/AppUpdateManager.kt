@@ -68,7 +68,7 @@ object AppUpdateManager {
                 "• 최신 배포 버전: v$serverVersion\n\n" +
                 "⚠️ [플레이스토어 설치 기기 필독]\n" +
                 "구글 플레이 스토어로 설치하신 경우, 앱 간 보안 서명 차이로 인해 직접 APK 설치 시 업데이트가 거부될 수 있습니다. 이 경우 기존 앱을 스마트폰에서 '삭제'하신 후 아래 [📥 최신 APK 다운로드]를 받아 설치해 주세요.\n\n" +
-                "최신 버전(v$serverVersion)에는 테슬라 오디오 간섭 원천 차단 및 P2P 무중단 연결 패치가 적용되어 있습니다."
+                "최신 버전(v$serverVersion)에는 차량 오디오 간섭 원천 차단 및 P2P 무중단 연결 패치가 적용되어 있습니다."
             )
             .setPositiveButton("📥 최신 APK 다운로드 (추천)") { _, _ ->
                 downloadDirectApk(activity, serverVersion)

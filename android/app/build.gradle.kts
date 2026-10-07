@@ -13,8 +13,8 @@ android {
         applicationId = "io.mmirror"
         minSdk = 29 // Android 10 (MediaProjection + AudioPlaybackCapture 지원)
         targetSdk = 36
-        versionCode = 142
-        versionName = "1.4.1"
+        versionCode = 143
+        versionName = "1.4.2"
 
         ndk {
             abiFilters.addAll(listOf("arm64-v8a", "x86_64"))

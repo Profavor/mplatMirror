@@ -66,7 +66,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
-                    android:text="테슬라 브라우저 초저지연 미러링 &amp; 터치 제어"
+                    android:text="차량 브라우저 초저지연 미러링 &amp; 터치 제어"
                     android:textColor="#888e9b"
                     android:textSize="12sp" />
             </LinearLayout>
@@ -159,7 +159,7 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- 🚗 테슬라 접속 주소 메인 히어로 카드 -->
+        <!-- 🚗 차량 접속 주소 메인 히어로 카드 -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -185,7 +185,7 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="🚗 테슬라 브라우저 접속 주소"
+                        android:text="🚗 차량 브라우저 접속 주소"
                         android:textColor="#2ecc71"
                         android:textSize="14sp"
                         android:textStyle="bold" />
@@ -206,7 +206,7 @@
                 </LinearLayout>
 
                 <TextView
-                    android:id="@+id/tvTeslaAddress"
+                    android:id="@+id/tvBrowserAddress"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="10dp"
@@ -215,22 +215,13 @@
                     android:textSize="20sp"
                     android:textStyle="bold" />
 
-                <TextView
-                    android:id="@+id/tvSecondaryAddress"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
-                    android:text="태블릿/PC: http://192.168.43.1:8282"
-                    android:textColor="#3498db"
-                    android:textSize="12sp" />
-
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnCopyAddress"
                     android:layout_width="match_parent"
                     android:layout_height="46dp"
                     android:layout_marginTop="16dp"
                     android:backgroundTint="#1f3a52"
-                    android:text="📋 테슬라 접속 주소 복사"
+                    android:text="📋 접속 주소 복사"
                     android:textColor="#3498db"
                     android:textSize="14sp"
                     android:textStyle="bold"
@@ -394,7 +385,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="2dp"
-                            android:text="OFF: 블루투스 직결 (권장) / ON: 테슬라 브라우저 송출 (폰 음량 0)"
+                            android:text="OFF: 블루투스 직결 (권장) / ON: 웹 브라우저 송출 (폰 음량 0)"
                             android:textColor="#8e9aa8"
                             android:textSize="11sp" />
                     </LinearLayout>
@@ -589,7 +580,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
-                    android:text="💡 권한 허용 시 티맵 등 다른 앱 실행 중에도 테슬라 [절전] 버튼으로 스마트폰 화면 밝기를 최저(1)로 암전하여 배터리·발열을 방지합니다."
+                    android:text="💡 권한 허용 시 티맵 등 다른 앱 실행 중에도 차량 화면 [절전] 버튼으로 스마트폰 화면 밝기를 최저(1)로 암전하여 배터리·발열을 방지합니다."
                     android:textColor="#9b59b6"
                     android:textSize="11sp" />
 
@@ -626,7 +617,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="2dp"
-                            android:text="테슬라 BT 연결 시 자동 잠금 해제"
+                            android:text="차량 BT 연결 시 자동 잠금 해제"
                             android:textColor="#a0a5b1"
                             android:textSize="12sp" />
                     </LinearLayout>
@@ -739,7 +730,7 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- 테슬라 연결 가이드 카드 -->
+        <!-- 차량 연결 가이드 카드 -->
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/cardConnectionGuide"
             android:layout_width="match_parent"
@@ -769,7 +760,7 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="💡 테슬라 연결 가이드 (초간단 3단계)"
+                        android:text="💡 차량 연결 가이드 (초간단 3단계)"
                         android:textColor="#ffffff"
                         android:textSize="14sp"
                         android:textStyle="bold" />
@@ -793,7 +784,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
                     android:lineSpacingExtra="4dp"
-                    android:text="1️⃣ 스마트폰 모바일 핫스팟 켜기 &amp; 테슬라 Wi-Fi 연결\n     ⚠️ 필수: 테슬라 Wi-Fi 설정에서 [D 기어 시 연결 유지] 체크!\n2️⃣ 아래 파란색 [미러링 시작] 터치 (화면 캡처 허용)\n3️⃣ 테슬라 브라우저에서 https://mplat-mirror.web.app 접속\n     (0MB 데이터 WebRTC 로컬 P2P로 1초 만에 즉시 연결!)"
+                    android:text="1️⃣ 스마트폰 모바일 핫스팟 켜기 &amp; 차량 Wi-Fi 연결\n     ⚠️ 필수: 차량 Wi-Fi 설정에서 [D 기어 시 연결 유지] 체크!\n2️⃣ 아래 파란색 [미러링 시작] 터치 (화면 캡처 허용)\n3️⃣ 차량 브라우저에서 https://mplat-mirror.web.app 접속\n     (0MB 데이터 WebRTC 로컬 P2P로 1초 만에 즉시 연결!)"
                     android:textColor="#cbd5e1"
                     android:textSize="12sp" />
 
@@ -930,7 +921,7 @@
                         android:id="@+id/tvVirtualDisplayTitle"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="🖥️ 테슬라 전용 가상화면 (CarPlay 스타일)"
+                        android:text="🖥️ 차량 전용 가상화면 (CarPlay 스타일)"
                         android:textColor="#ffffff"
                         android:textSize="14sp"
                         android:textStyle="bold" />

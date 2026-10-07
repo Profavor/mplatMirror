@@ -92,9 +92,9 @@ object DiagnosticReportManager {
         val isA11y = TouchControlService.isAccessibilityServiceEnabled(context)
         sb.append("접근성 터치 서비스 활성: ").append(if (isA11y) "YES (TouchControlService 가동 중)" else "NO (접근성 설정 필요)").append("\n")
         val canWriteSettings = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) Settings.System.canWrite(context) else true
-        sb.append("시스템 설정 변경(화면 절전) 권한: ").append(if (canWriteSettings) "YES (티맵 실행 중 테슬라 절전 가능)" else "NO (권한 필요)").append("\n")
+        sb.append("시스템 설정 변경(화면 절전) 권한: ").append(if (canWriteSettings) "YES (티맵 실행 중 차량 화면 절전 가능)" else "NO (권한 필요)").append("\n")
         val canOverlay = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) Settings.canDrawOverlays(context) else true
-        sb.append("다른 앱 위에 표시(절전 오버레이) 권한: ").append(if (canOverlay) "YES (티맵 실행 중 테슬라 절전 100% 가능)" else "NO (권한 필요)").append("\n")
+        sb.append("다른 앱 위에 표시(절전 오버레이) 권한: ").append(if (canOverlay) "YES (티맵 실행 중 차량 화면 절전 100% 가능)" else "NO (권한 필요)").append("\n")
 
         sb.append("\n--- [3] Rust 코어 & HTTP/WebSocket 유입 로그 ---\n")
         val nativeLogs = try {

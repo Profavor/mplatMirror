@@ -137,6 +137,6 @@ object FoldableDeviceHelper {
                 return
             } catch (_: Exception) {}
         }
-        Toast.makeText(context, "설정 > 잠금화면 및 AOD > 잠금 해제 유지에서 테슬라 BT를 등록할 수 있습니다.", Toast.LENGTH_LONG).show()
+        Toast.makeText(context, "설정 > 잠금화면 및 AOD > 잠금 해제 유지에서 차량 BT를 등록할 수 있습니다.", Toast.LENGTH_LONG).show()
     }
 }
