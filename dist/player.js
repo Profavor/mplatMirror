@@ -2,6 +2,166 @@
 (function() {
     'use strict';
 
+    // --- 테슬라 차량 내 실시간 콘솔 로거 (In-Car Console Logger) ---
+    const MAX_CAPTURED_LOGS = 600;
+    const capturedLogs = [];
+    let isConsoleModalOpen = false;
+    let autoScrollConsole = true;
+    let activeConsoleFilter = 'all'; // 'all', 'sdp', 'wrtc', 'err'
+    let consoleSearchQuery = '';
+    let lastReportedAppVersion = '';
+    let lastOfferMlines = [];
+    let ontrackEventCount = 0;
+
+    const origConsole = {
+        log: console.log.bind(console),
+        info: (console.info || console.log).bind(console),
+        warn: (console.warn || console.log).bind(console),
+        error: (console.error || console.log).bind(console)
+    };
+
+    function formatLogArg(arg) {
+        if (arg === null) return 'null';
+        if (arg === undefined) return 'undefined';
+        if (typeof arg === 'string') return arg;
+        if (arg instanceof Error) return arg.stack || arg.message;
+        try {
+            return JSON.stringify(arg);
+        } catch (_) {
+            return String(arg);
+        }
+    }
+
+    function recordConsoleLog(level, args) {
+        try {
+            const now = new Date();
+            const timeStr = String(now.getHours()).padStart(2, '0') + ':' +
+                            String(now.getMinutes()).padStart(2, '0') + ':' +
+                            String(now.getSeconds()).padStart(2, '0') + '.' +
+                            String(now.getMilliseconds()).padStart(3, '0');
+            const message = Array.from(args).map(formatLogArg).join(' ');
+            const entry = { time: timeStr, level: level, text: message };
+
+            capturedLogs.push(entry);
+            if (capturedLogs.length > MAX_CAPTURED_LOGS) {
+                capturedLogs.shift();
+            }
+
+            const countBadge = document.getElementById('consoleLogCount');
+            if (countBadge) {
+                countBadge.textContent = `${capturedLogs.length}건`;
+            }
+
+            if (isConsoleModalOpen) {
+                appendLogEntryToUI(entry);
+            }
+        } catch (_) {}
+    }
+
+    console.log = function(...args) {
+        origConsole.log(...args);
+        recordConsoleLog('log', args);
+    };
+    console.info = function(...args) {
+        origConsole.info(...args);
+        recordConsoleLog('info', args);
+    };
+    console.warn = function(...args) {
+        origConsole.warn(...args);
+        recordConsoleLog('warn', args);
+    };
+    console.error = function(...args) {
+        origConsole.error(...args);
+        recordConsoleLog('error', args);
+    };
+
+    window.addEventListener('error', (event) => {
+        console.error('💥 [UNCAUGHT]', event.message, 'at', (event.filename || '') + ':' + (event.lineno || ''));
+    });
+    window.addEventListener('unhandledrejection', (event) => {
+        console.error('💥 [UNHANDLED-PROMISE]', event.reason);
+    });
+
+    function logMatchesFilter(entry) {
+        if (activeConsoleFilter === 'sdp') {
+            const txt = entry.text.toLowerCase();
+            if (!txt.includes('sdp') && !txt.includes('m=') && !txt.includes('audio') && !txt.includes('track') && !txt.includes('transceiver')) {
+                return false;
+            }
+        } else if (activeConsoleFilter === 'wrtc') {
+            const txt = entry.text.toLowerCase();
+            if (!txt.includes('webrtc') && !txt.includes('ice') && !txt.includes('datachannel') && !txt.includes('peer') && !txt.includes('candidate')) {
+                return false;
+            }
+        } else if (activeConsoleFilter === 'err') {
+            if (entry.level !== 'warn' && entry.level !== 'error') {
+                return false;
+            }
+        }
+        if (consoleSearchQuery) {
+            if (!entry.text.toLowerCase().includes(consoleSearchQuery)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    function createLogDomElement(entry) {
+        const row = document.createElement('div');
+        row.className = 'log-entry';
+
+        const timeSpan = document.createElement('span');
+        timeSpan.className = 'log-time';
+        timeSpan.textContent = entry.time;
+
+        const levelSpan = document.createElement('span');
+        levelSpan.className = `log-level log-level-${entry.level}`;
+        levelSpan.textContent = entry.level.toUpperCase();
+
+        const msgSpan = document.createElement('span');
+        msgSpan.className = 'log-msg';
+        if (entry.text.includes('[SDP-') || entry.text.includes('m=')) {
+            msgSpan.classList.add('highlight-sdp');
+        } else if (entry.text.includes('[WEBRTC-ONTRACK]') || entry.text.includes('ontrack')) {
+            msgSpan.classList.add('highlight-ontrack');
+        }
+        msgSpan.textContent = entry.text;
+
+        row.appendChild(timeSpan);
+        row.appendChild(levelSpan);
+        row.appendChild(msgSpan);
+        return row;
+    }
+
+    function appendLogEntryToUI(entry) {
+        const container = document.getElementById('consoleLogContent');
+        if (!container) return;
+        if (!logMatchesFilter(entry)) return;
+
+        const el = createLogDomElement(entry);
+        container.appendChild(el);
+
+        if (autoScrollConsole) {
+            container.scrollTop = container.scrollHeight;
+        }
+    }
+
+    function renderAllLogsToUI() {
+        const container = document.getElementById('consoleLogContent');
+        if (!container) return;
+        container.innerHTML = '';
+        const fragment = document.createDocumentFragment();
+        for (let i = 0; i < capturedLogs.length; i++) {
+            if (logMatchesFilter(capturedLogs[i])) {
+                fragment.appendChild(createLogDomElement(capturedLogs[i]));
+            }
+        }
+        container.appendChild(fragment);
+        if (autoScrollConsole) {
+            container.scrollTop = container.scrollHeight;
+        }
+    }
+
     const canvas = document.getElementById('videoCanvas');
     const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
     if (ctx) {
@@ -41,6 +201,10 @@
 
     function checkAppVersionMismatch(appVersion) {
         if (!appVersion) return;
+        lastReportedAppVersion = appVersion;
+        const diagApp = document.getElementById('diagAppVer');
+        if (diagApp) diagApp.textContent = `v${appVersion}`;
+
         if (appVersion !== CURRENT_WEB_VERSION) {
             console.warn(`⚠️ [VERSION] Phone app version (v${appVersion}) does not match web player (v${CURRENT_WEB_VERSION})`);
             const badge = document.getElementById('versionMismatchBadge');
@@ -57,38 +221,6 @@
             }
         }
     }
-
-    // --- 화면 꺼짐 방지 (Screen Wake Lock) ---
-    let wakeLockSentinel = null;
-
-    async function requestWakeLock() {
-        try {
-            if ('wakeLock' in navigator) {
-                wakeLockSentinel = await navigator.wakeLock.request('screen');
-                wakeLockSentinel.addEventListener('release', () => {
-                    console.log('Screen Wake Lock was released');
-                    wakeLockSentinel = null;
-                });
-                console.log('💡 Screen Wake Lock 획득 (화면 꺼짐 방지)');
-            }
-        } catch (err) {
-            console.warn('Wake Lock 요청 실패:', err);
-        }
-    }
-
-    document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') {
-            requestWakeLock();
-        }
-    });
-
-    function activateAntiSleep() {
-        requestWakeLock();
-    }
-
-    ['click', 'touchstart', 'pointerdown'].forEach(evt => {
-        document.addEventListener(evt, activateAntiSleep, { passive: true });
-    });
 
     // 전체화면 토글
     if (btnFullscreen) {
@@ -1213,6 +1345,8 @@
         peerConnection.onconnectionstatechange = () => {
             const state = peerConnection.connectionState;
             console.log('⚡ [WEBRTC] Connection state:', state);
+            const diagRtc = document.getElementById('diagRtcState');
+            if (diagRtc) diagRtc.textContent = state;
             try {
                 if (state === 'connected') {
                     console.log('🎉 [WEBRTC] Direct P2P Connected to Phone! 0MB Local Stream Active!');
@@ -1257,6 +1391,10 @@
         peerConnection.oniceconnectionstatechange = () => {
             const iceState = peerConnection.iceConnectionState;
             console.log('⚡ [WEBRTC] ICE connection state:', iceState);
+            const diagRtc = document.getElementById('diagRtcState');
+            if (diagRtc && peerConnection.connectionState !== 'connected') {
+                diagRtc.textContent = `${iceState} (ICE)`;
+            }
             try {
                 if (iceState === 'connected' || iceState === 'completed') {
                     isWebRtcConnected = true;
@@ -1276,7 +1414,13 @@
         };
 
         peerConnection.ontrack = (event) => {
+            ontrackEventCount++;
             console.warn(`🚨 [WEBRTC-ONTRACK] ontrack triggered! kind=${event.track ? event.track.kind : 'unknown'}, id=${event.track ? event.track.id : 'unknown'}`);
+            const diagOntrack = document.getElementById('diagOntrackCount');
+            if (diagOntrack) {
+                diagOntrack.textContent = `${ontrackEventCount}회 (미디어 수신됨!)`;
+                diagOntrack.style.color = '#f87171';
+            }
             // 비디오 화면은 DataChannel을 통해 WebCodecs -> <canvas>로만 렌더링됩니다.
             // 미디어 트랙을 즉시 정지시켜 테슬라 미디어 소스 전환 원천 방지.
             try {
@@ -1302,6 +1446,11 @@
         const sdpLines = sdp.split(/\r\n|\n/);
         const mLines = sdpLines.filter(l => l.startsWith('m='));
         const dirLines = sdpLines.filter(l => /^(a=sendrecv|a=sendonly|a=recvonly|a=inactive)/.test(l));
+        lastOfferMlines = mLines;
+        const diagMlinesSummary = document.getElementById('diagMlinesSummary');
+        if (diagMlinesSummary) {
+            diagMlinesSummary.textContent = mLines.length > 0 ? mLines.join(' | ') : '없음 (순수 데이터)';
+        }
         console.log('📡 [SDP-OFFER-AUDIT] m= lines from phone:', mLines);
         console.log('📡 [SDP-OFFER-AUDIT] direction lines from phone:', dirLines);
 
@@ -2871,13 +3020,186 @@
         });
     }
 
+    // --- 차량 실시간 콘솔 로그 & 진단 모달 연동 ---
+    const consoleLogModal = document.getElementById('consoleLogModal');
+    const btnConsoleLog = document.getElementById('btnConsoleLog');
+    const dockBtnConsoleLog = document.getElementById('dockBtnConsoleLog');
+    const btnCloseConsoleModal = document.getElementById('btnCloseConsoleModal');
+    const btnConsoleClear = document.getElementById('btnConsoleClear');
+    const btnConsoleCopy = document.getElementById('btnConsoleCopy');
+    const btnScrollToBottom = document.getElementById('btnScrollToBottom');
+    const chkAutoScroll = document.getElementById('chkAutoScroll');
+    const consoleSearchInput = document.getElementById('consoleSearchInput');
+
+    const filterBtns = {
+        all: document.getElementById('btnConsoleFilterAll'),
+        sdp: document.getElementById('btnConsoleFilterSdp'),
+        wrtc: document.getElementById('btnConsoleFilterWrtc'),
+        err: document.getElementById('btnConsoleFilterErr')
+    };
+
+    function updateDiagSummary() {
+        const diagApp = document.getElementById('diagAppVer');
+        if (diagApp && lastReportedAppVersion) {
+            diagApp.textContent = `v${lastReportedAppVersion}`;
+        }
+        const diagRtc = document.getElementById('diagRtcState');
+        if (diagRtc && peerConnection) {
+            diagRtc.textContent = `${peerConnection.connectionState || 'unknown'} (ICE: ${peerConnection.iceConnectionState || 'unknown'})`;
+        }
+        const diagMlines = document.getElementById('diagMlinesSummary');
+        if (diagMlines && lastOfferMlines && lastOfferMlines.length > 0) {
+            diagMlines.textContent = lastOfferMlines.join(' | ');
+        }
+        const diagOntrack = document.getElementById('diagOntrackCount');
+        if (diagOntrack) {
+            if (ontrackEventCount > 0) {
+                diagOntrack.textContent = `${ontrackEventCount}회 (미디어 수신됨!)`;
+                diagOntrack.style.color = '#f87171';
+            } else {
+                diagOntrack.textContent = '0회 (정상)';
+                diagOntrack.style.color = '#10b981';
+            }
+        }
+    }
+
+    function openConsoleModal() {
+        if (!consoleLogModal) return;
+        isConsoleModalOpen = true;
+        consoleLogModal.classList.remove('hidden');
+        consoleLogModal.style.setProperty('display', 'flex', 'important');
+        updateDiagSummary();
+        renderAllLogsToUI();
+    }
+
+    function closeConsoleModal() {
+        if (!consoleLogModal) return;
+        isConsoleModalOpen = false;
+        consoleLogModal.classList.add('hidden');
+        consoleLogModal.style.setProperty('display', 'none', 'important');
+    }
+
+    if (btnConsoleLog) {
+        btnConsoleLog.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openConsoleModal();
+        });
+    }
+
+    if (dockBtnConsoleLog) {
+        dockBtnConsoleLog.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openConsoleModal();
+        });
+    }
+
+    if (btnCloseConsoleModal) {
+        btnCloseConsoleModal.addEventListener('click', (e) => {
+            e.stopPropagation();
+            closeConsoleModal();
+        });
+    }
+
+    if (btnConsoleClear) {
+        btnConsoleClear.addEventListener('click', (e) => {
+            e.stopPropagation();
+            capturedLogs.length = 0;
+            renderAllLogsToUI();
+            const countBadge = document.getElementById('consoleLogCount');
+            if (countBadge) countBadge.textContent = '0건';
+            showTeslaToast('✓ 콘솔 로그가 초기화되었습니다');
+        });
+    }
+
+    function fallbackCopyText(text) {
+        try {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.focus();
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            showTeslaToast('✓ 콘솔 로그 복사 완료');
+        } catch (_) {
+            showTeslaToast('클립보드 복사 실패');
+        }
+    }
+
+    if (btnConsoleCopy) {
+        btnConsoleCopy.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const textToCopy = capturedLogs
+                .filter(logMatchesFilter)
+                .map(l => `[${l.time}] [${l.level.toUpperCase()}] ${l.text}`)
+                .join('\n');
+            if (!textToCopy) {
+                showTeslaToast('복사할 로그가 없습니다');
+                return;
+            }
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(textToCopy).then(() => {
+                    showTeslaToast('✓ 콘솔 로그 전체 복사 완료');
+                }).catch(() => {
+                    fallbackCopyText(textToCopy);
+                });
+            } else {
+                fallbackCopyText(textToCopy);
+            }
+        });
+    }
+
+    if (chkAutoScroll) {
+        chkAutoScroll.addEventListener('change', () => {
+            autoScrollConsole = chkAutoScroll.checked;
+        });
+    }
+
+    if (btnScrollToBottom) {
+        btnScrollToBottom.addEventListener('click', () => {
+            const container = document.getElementById('consoleLogContent');
+            if (container) {
+                container.scrollTop = container.scrollHeight;
+            }
+        });
+    }
+
+    if (consoleSearchInput) {
+        consoleSearchInput.addEventListener('input', () => {
+            consoleSearchQuery = consoleSearchInput.value.trim().toLowerCase();
+            renderAllLogsToUI();
+        });
+    }
+
+    Object.keys(filterBtns).forEach(key => {
+        const btn = filterBtns[key];
+        if (btn) {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                activeConsoleFilter = key;
+                Object.values(filterBtns).forEach(b => b && b.classList.remove('active'));
+                btn.classList.add('active');
+                renderAllLogsToUI();
+            });
+        }
+    });
+
+    if (consoleLogModal) {
+        consoleLogModal.addEventListener('click', (e) => {
+            if (e.target === consoleLogModal) {
+                closeConsoleModal();
+            }
+        });
+    }
+
     // [작업 지시서 4] 가설 3 검증용 실험 지원 (URL 쿼리 기반)
     // ?test=ws : WebRTC 미사용, 순수 WebSocket(/ws) 모드만 사용
     // ?test=touch : 사용자 첫 터치/클릭 이후에만 connectWebRtc() 호출
     const testModeParams = new URLSearchParams(window.location.search);
     const testMode = (testModeParams.get('test') || testModeParams.get('mode') || '').toLowerCase();
 
-    requestWakeLock();
     startWatchdog();
 
     if (testMode === 'ws') {

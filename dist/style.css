@@ -1862,4 +1862,292 @@ html, body {
     max-width: 110px;
 }
 
+/* --- 차량 실시간 콘솔 로그 & 진단 모달 스타일 --- */
+.btn-console-log {
+    cursor: pointer;
+    background: rgba(59, 130, 246, 0.25);
+    border: 1px solid #3b82f6;
+    color: #93c5fd;
+    padding: 2px 7px;
+    border-radius: 5px;
+    font-size: 11px;
+    font-weight: 700;
+    margin-left: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    transition: all 0.15s ease;
+}
+
+.btn-console-log:hover, .btn-console-log:active {
+    background: rgba(59, 130, 246, 0.5);
+    color: #ffffff;
+}
+
+.console-modal-card {
+    background: #0f131a;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 14px;
+    width: 95vw;
+    max-width: 920px;
+    height: 85vh;
+    max-height: 800px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.85);
+}
+
+.console-modal-header {
+    background: #161b26;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.console-header-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.console-title-icon {
+    font-size: 16px;
+}
+
+.console-title {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 700;
+    color: #60a5fa;
+}
+
+.console-badge {
+    background: rgba(59, 130, 246, 0.2);
+    border: 1px solid rgba(59, 130, 246, 0.4);
+    color: #93c5fd;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 10px;
+}
+
+.console-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.btn-log-filter {
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #94a3b8;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.btn-log-filter.active {
+    background: #2563eb;
+    border-color: #3b82f6;
+    color: #ffffff;
+}
+
+.btn-log-action {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #e2e8f0;
+    padding: 4px 9px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.btn-log-action:hover, .btn-log-action:active {
+    background: rgba(255, 255, 255, 0.16);
+    color: #fff;
+}
+
+.console-diag-summary {
+    background: #111622;
+    padding: 8px 14px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    font-size: 12px;
+}
+
+.diag-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.diag-label {
+    color: #94a3b8;
+    font-weight: 600;
+}
+
+.diag-val {
+    color: #38bdf8;
+    font-weight: 700;
+}
+
+.test-modes-row {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.btn-test-link {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    color: #cbd5e1;
+    padding: 2px 7px;
+    border-radius: 5px;
+    text-decoration: none;
+    font-size: 11px;
+    font-weight: 600;
+    transition: all 0.15s ease;
+}
+
+.btn-test-link:hover, .btn-test-link:active {
+    background: #3b82f6;
+    color: #ffffff;
+    border-color: #60a5fa;
+}
+
+.console-log-content {
+    flex: 1;
+    min-height: 0;
+    background: #080a0f;
+    padding: 10px 14px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    font-family: ui-monospace, SFMono-Regular, "Roboto Mono", Menlo, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #cbd5e1;
+    -webkit-overflow-scrolling: touch;
+    word-break: break-all;
+    user-select: text;
+    -webkit-user-select: text;
+}
+
+.log-entry {
+    margin-bottom: 3px;
+    display: flex;
+    gap: 8px;
+    user-select: text;
+    -webkit-user-select: text;
+}
+
+.log-time {
+    color: #64748b;
+    flex-shrink: 0;
+    font-size: 11px;
+}
+
+.log-level {
+    flex-shrink: 0;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 0 4px;
+    border-radius: 3px;
+    line-height: 16px;
+    height: 16px;
+}
+
+.log-level-log {
+    background: rgba(148, 163, 184, 0.15);
+    color: #94a3b8;
+}
+
+.log-level-info {
+    background: rgba(56, 189, 248, 0.15);
+    color: #38bdf8;
+}
+
+.log-level-warn {
+    background: rgba(250, 204, 21, 0.15);
+    color: #facc15;
+}
+
+.log-level-error {
+    background: rgba(248, 113, 113, 0.2);
+    color: #f87171;
+}
+
+.log-msg {
+    flex: 1;
+    white-space: pre-wrap;
+    user-select: text;
+    -webkit-user-select: text;
+}
+
+.log-msg.highlight-sdp {
+    color: #38bdf8;
+    font-weight: 600;
+}
+
+.log-msg.highlight-ontrack {
+    color: #f87171;
+    font-weight: 700;
+}
+
+.console-modal-footer {
+    background: #161b26;
+    padding: 8px 14px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.console-footer-search {
+    flex: 1;
+    max-width: 320px;
+}
+
+.console-footer-search input {
+    width: 100%;
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #fff;
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+}
+
+.console-footer-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.console-autoscroll-label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    color: #94a3b8;
+    cursor: pointer;
+    user-select: none;
+}
+
+
 

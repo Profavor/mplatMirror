@@ -17,6 +17,7 @@
                 <span class="app-version-badge">v1.3.2</span>
                 <span id="versionMismatchBadge" class="badge-mismatch" style="display:none;" title="스마트폰 앱 버전 불일치">⚠️ 앱 v<span id="mismatchAppVer"></span> 업데이트 필요</span>
                 <span id="modeBadge" class="badge-mode" style="display:none;"></span>
+                <button id="btnConsoleLog" class="btn-console-log" title="실시간 콘솔 로그 열기">📋 콘솔 로그</button>
             </div>
 
             <div class="metrics">
@@ -53,6 +54,10 @@
             </div>
             <div class="dock-divider"></div>
             <div class="dock-bottom-section">
+                <button class="dock-item-btn" id="dockBtnConsoleLog" title="차량 실시간 콘솔 로그 보기">
+                    <span class="dock-emoji">📋</span>
+                    <span class="dock-text">로그</span>
+                </button>
                 <button class="dock-item-btn" id="dockBtnTextInput" title="테슬라 키보드로 스마트폰에 텍스트/목적지 입력">
                     <span class="dock-emoji">⌨️</span>
                     <span class="dock-text">입력</span>
@@ -332,6 +337,70 @@
                         <input type="text" id="phoneTextInput" class="custom-input" placeholder="목적지 또는 검색어 입력..." style="flex: 1; font-size: 15px; padding: 10px 14px; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: #fff;">
                         <button type="submit" id="btnSubmitTextInput" class="btn-primary" style="padding: 10px 18px; font-weight: 700; font-size: 14px; border-radius: 8px; cursor: pointer;">전송</button>
                     </form>
+                </div>
+            </div>
+        </div>
+        <!-- 차량 실시간 콘솔 로그 & 진단 모달 (테슬라 터치스크린 전용) -->
+        <div id="consoleLogModal" class="modal-overlay hidden" style="display: none;">
+            <div class="console-modal-card">
+                <div class="console-modal-header">
+                    <div class="console-header-left">
+                        <span class="console-title-icon">💻</span>
+                        <h3 class="console-title">테슬라 실시간 콘솔 로그</h3>
+                        <span id="consoleLogCount" class="console-badge">0건</span>
+                    </div>
+                    <div class="console-header-actions">
+                        <button id="btnConsoleFilterAll" class="btn-log-filter active">전체</button>
+                        <button id="btnConsoleFilterSdp" class="btn-log-filter">📡 SDP/오디오</button>
+                        <button id="btnConsoleFilterWrtc" class="btn-log-filter">🌐 WebRTC</button>
+                        <button id="btnConsoleFilterErr" class="btn-log-filter">⚠️ 에러/경고</button>
+                        <button id="btnConsoleCopy" class="btn-log-action" title="로그 전체 복사">📋 복사</button>
+                        <button id="btnConsoleClear" class="btn-log-action" title="로그 화면 비우기">🗑️ 비우기</button>
+                        <button id="btnCloseConsoleModal" class="btn-close-modal" style="padding: 4px 10px; font-size: 16px; margin: 0;">&times;</button>
+                    </div>
+                </div>
+
+                <!-- 실시간 핵심 진단 요약 배너 -->
+                <div class="console-diag-summary">
+                    <div class="diag-item">
+                        <span class="diag-label">📱 앱 버전:</span>
+                        <span id="diagAppVer" class="diag-val">확인 중...</span>
+                    </div>
+                    <div class="diag-item">
+                        <span class="diag-label">📡 WebRTC:</span>
+                        <span id="diagRtcState" class="diag-val">대기 중</span>
+                    </div>
+                    <div class="diag-item">
+                        <span class="diag-label">🔊 SDP m-lines:</span>
+                        <span id="diagMlinesSummary" class="diag-val" style="font-family: monospace;">수신 대기 중...</span>
+                    </div>
+                    <div class="diag-item">
+                        <span class="diag-label">🚨 ontrack:</span>
+                        <span id="diagOntrackCount" class="diag-val" style="color: #10b981;">0회 (정상)</span>
+                    </div>
+                    <div class="diag-item test-modes-row">
+                        <span class="diag-label">🧪 원클릭 테스트:</span>
+                        <a href="/" class="btn-test-link">기본(WebRTC)</a>
+                        <a href="?test=ws" class="btn-test-link" title="WebRTC 끄고 웹소켓만 사용">실험A: 순수 WS</a>
+                        <a href="?test=touch" class="btn-test-link" title="화면 터치 전까지 WebRTC 안 켬">실험B: 터치 후 WebRTC</a>
+                    </div>
+                </div>
+
+                <!-- 실시간 로그 출력 터미널 창 -->
+                <div id="consoleLogContent" class="console-log-content"></div>
+
+                <!-- 하단 바 (자동 스크롤, 검색어 필터) -->
+                <div class="console-modal-footer">
+                    <div class="console-footer-search">
+                        <input type="text" id="consoleSearchInput" placeholder="검색 필터 (예: sdp, audio, candidate, offer)..." />
+                    </div>
+                    <div class="console-footer-controls">
+                        <label class="console-autoscroll-label">
+                            <input type="checkbox" id="chkAutoScroll" checked />
+                            <span>자동 스크롤</span>
+                        </label>
+                        <button id="btnScrollToBottom" class="btn-log-action">⬇️ 맨 아래</button>
+                    </div>
                 </div>
             </div>
         </div>
