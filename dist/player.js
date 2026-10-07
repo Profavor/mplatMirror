@@ -1403,6 +1403,10 @@
         enforceSilentMediaSession();
 
         peerConnection.onicecandidate = (event) => {
+            if (location.search.includes('noice')) {
+                console.log('🧪 [TEST] ?noice: ICE candidate 전송 차단 (폰과 UDP 패킷 교환 안 함)');
+                return;
+            }
             if (event.candidate) {
                 console.log('📡 [WEBRTC] Sending local ICE candidate to phone:', event.candidate.candidate);
                 const candData = typeof event.candidate.toJSON === 'function' ? event.candidate.toJSON() : {
@@ -1561,7 +1565,18 @@
         }).join('\r\n');
 
         // SDP 오퍼를 표준 규격 그대로 원본 적용 (BUNDLE mid 및 ICE candidate 페어링 100% 보장)
-        await peerConnection.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: sanitizedSdp }));
+        const isNowms = location.search.includes('nowms');
+        const isCleanSdp = location.search.includes('cleansdp');
+        let sdpForRemote = sanitizedSdp;
+        if (isNowms || isCleanSdp) {
+            sdpForRemote = sdpForRemote.replace(/a=msid-semantic:[^\r\n]+\r?\n/g, '').replace(/a=msid:[^\r\n]+\r?\n/g, '');
+            console.log('🧪 [TEST] Offer에서 a=msid-semantic / a=msid 제거');
+        }
+        if (isCleanSdp) {
+            sdpForRemote = sdpForRemote.replace(/a=group:BUNDLE[^\r\n]+\r?\n/g, '');
+            console.log('🧪 [TEST] ?cleansdp: Offer에서 a=group:BUNDLE 제거');
+        }
+        await peerConnection.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: sdpForRemote }));
 
         if (location.search.includes('stopat=srd')) {
             console.log('🧪 [TEST] ?stopat=srd: setRemoteDescription 완료 후 중단 (Answer 미생성)');
@@ -1645,12 +1660,23 @@
             return;
         }
 
-        await peerConnection.setLocalDescription(answer);
+        let sdpForLocal = answer.sdp;
+        if (isNowms || isCleanSdp) {
+            sdpForLocal = sdpForLocal.replace(/a=msid-semantic:[^\r\n]+\r?\n/g, '').replace(/a=msid:[^\r\n]+\r?\n/g, '');
+            console.log('🧪 [TEST] Answer에서 a=msid-semantic / a=msid 제거');
+        }
+        if (isCleanSdp) {
+            sdpForLocal = sdpForLocal.replace(/a=group:BUNDLE[^\r\n]+\r?\n/g, '');
+            console.log('🧪 [TEST] ?cleansdp: Answer에서 a=group:BUNDLE 제거');
+        }
+        await peerConnection.setLocalDescription(new RTCSessionDescription({ type: 'answer', sdp: sdpForLocal }));
         enforceSilentMediaSession();
 
         if (location.search.includes('stopat=ans') || location.search.includes('stopat=sld')) {
-            console.log('🧪 [TEST] ?stopat=ans: setLocalDescription 완료 후 중단 (Answer 미전송, P2P 미성립)');
-            if (statusText) statusText.textContent = '🧪 [테스트] Answer 생성 완료 (폰에 전송 안 함)';
+            const isNoice = location.search.includes('noice');
+            const tag = (isCleanSdp ? 'cleansdp' : isNowms ? 'nowms' : '기본') + (isNoice ? '+noice' : '');
+            console.log(`🧪 [TEST] ?stopat=sld: setLocalDescription 완료 후 중단 (${tag})`);
+            if (statusText) statusText.textContent = `🧪 [테스트] setLocalDescription 완료 (${tag})`;
             return;
         }
 
