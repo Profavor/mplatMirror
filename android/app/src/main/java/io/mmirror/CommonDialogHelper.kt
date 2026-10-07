@@ -127,7 +127,7 @@ object CommonDialogHelper {
         """.trimIndent()
 
         MaterialAlertDialogBuilder(activity)
-            .setTitle("법적 고지 · 안전 운전 · 오픈소스")
+            .setTitle("법적 고지 · 안전 운전 · 라이선스")
             .setMessage(licenseMessage)
             .setPositiveButton("확인", null)
             .setNeutralButton("🌐 개인정보처리방침") { _, _ -> onOpenPrivacy() }

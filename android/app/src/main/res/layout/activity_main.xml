@@ -1109,7 +1109,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:padding="6dp"
-                    android:text="📜 오픈소스 라이선스"
+                    android:text="⚖️ 법적 고지 · 안전 운전 · 라이선스"
                     android:textColor="#3498db"
                     android:textSize="12sp" />
             </LinearLayout>
