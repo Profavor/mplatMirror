@@ -368,6 +368,20 @@ class MainActivity : AppCompatActivity() {
             ).show()
         }
 
+        val audioStreamSaved = prefs.getBoolean("pref_audio_stream_enabled", false)
+        binding.switchAudioStreaming.isChecked = audioStreamSaved
+        binding.switchAudioStreaming.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean("pref_audio_stream_enabled", isChecked).apply()
+            if (MediaProjectionService.isRunning) {
+                MediaProjectionService.instance?.setAudioStreamingEnabled(isChecked)
+            }
+            Toast.makeText(
+                this,
+                if (isChecked) "🌐 웹 브라우저 사운드 송출 켜짐 (테슬라 브라우저로 소리 전송)" else "🚗 차량 블루투스 직결 모드 (0ms 무손실 전송)",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+
         if (isGalaxyZDevice()) {
             binding.layoutFoldContinuity.visibility = View.VISIBLE
             binding.btnOpenFoldContinuity.setOnClickListener {

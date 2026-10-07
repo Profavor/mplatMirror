@@ -676,6 +676,7 @@ class WebRtcStreamer(
                     sendConfig()
                     sendTouchStatus()
                     sendAppList()
+                    sendAudioModeStatus()
                     MediaProjectionService.instance?.requestKeyFrame()
                 }
             }
@@ -918,6 +919,14 @@ class WebRtcStreamer(
                 "set_abr" -> {
                     val enable = json.optBoolean("enabled", true)
                     setAdaptiveBitrateEnabled(enable)
+                }
+                "set_audio_mode" -> {
+                    val enabled = json.optBoolean("enabled", false)
+                    AppLogger.i(TAG, "🔊 Received set_audio_mode: enabled=$enabled")
+                    io.mmirror.MediaProjectionService.instance?.setAudioStreamingEnabled(enabled)
+                }
+                "get_audio_mode" -> {
+                    sendAudioModeStatus()
                 }
             }
         } catch (e: Exception) {
@@ -1275,8 +1284,35 @@ class WebRtcStreamer(
         }
     }
 
-    fun sendAudio(@Suppress("UNUSED_PARAMETER") data: ByteArray, @Suppress("UNUSED_PARAMETER") length: Int) {
-        // 차량 블루투스(A2DP) 직결 우선권 보장을 위해 브라우저 오디오 전송 비활성화
+    fun sendAudio(data: ByteArray, length: Int) {
+        val dc = dataChannel ?: return
+        if (dc.state() != DataChannel.State.OPEN) return
+        if (dc.bufferedAmount() > 64 * 1024L) return // DataChannel 큐 과적체 시 프레임 드롭하여 버퍼 팽창 방지
+        try {
+            val packet = ByteArray(1 + length)
+            packet[0] = 0x02 // PKT_TYPE_AUDIO
+            System.arraycopy(data, 0, packet, 1, length)
+            val buffer = DataChannel.Buffer(java.nio.ByteBuffer.wrap(packet), true)
+            dc.send(buffer)
+        } catch (e: Exception) {
+            AppLogger.w(TAG, "⚠️ sendAudio 실패: ${e.message}")
+        }
+    }
+
+    fun sendAudioModeStatus() {
+        val dc = dataChannel ?: return
+        if (dc.state() != DataChannel.State.OPEN) return
+        try {
+            val enabled = io.mmirror.MediaProjectionService.instance?.isAudioStreamingEnabled() ?: false
+            val resp = JSONObject().apply {
+                put("type", "audio_mode_status")
+                put("enabled", enabled)
+            }
+            val payload = resp.toString().toByteArray(Charsets.UTF_8)
+            val buffer = DataChannel.Buffer(java.nio.ByteBuffer.wrap(payload), false)
+            dc.send(buffer)
+            AppLogger.i(TAG, "🔊 Sent audio mode status: enabled=$enabled")
+        } catch (_: Exception) {}
     }
 
     fun sendGps(json: String) {

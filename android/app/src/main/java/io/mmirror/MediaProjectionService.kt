@@ -65,6 +65,61 @@ class MediaProjectionService : Service() {
     private var carExitRunnable: Runnable? = null
     private val mainHandler = Handler(Looper.getMainLooper())
 
+    private var audioCaptureService: AudioCaptureService? = null
+    @Volatile
+    private var isAudioStreamingEnabled = false
+
+    fun setAudioStreamingEnabled(enabled: Boolean) {
+        if (isAudioStreamingEnabled == enabled) return
+        isAudioStreamingEnabled = enabled
+        val prefs = getSharedPreferences("mmirror_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putBoolean("pref_audio_stream_enabled", enabled).apply()
+        AppLogger.i(TAG, "🔊 Audio streaming mode changed: enabled=$enabled")
+        if (enabled) {
+            startAudioCapture()
+        } else {
+            stopAudioCapture()
+        }
+        webRtcStreamer?.sendAudioModeStatus()
+    }
+
+    fun isAudioStreamingEnabled(): Boolean = isAudioStreamingEnabled
+
+    fun sendWebRtcAudio(data: ByteArray, length: Int) {
+        if (!isAudioStreamingEnabled) return
+        webRtcStreamer?.sendAudio(data, length)
+    }
+
+    private fun startAudioCapture() {
+        val mp = mediaProjection ?: run {
+            AppLogger.w(TAG, "⚠️ Cannot start audio capture: mediaProjection is null")
+            return
+        }
+        if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            AppLogger.w(TAG, "⚠️ RECORD_AUDIO 권한이 없어 오디오 스트리밍을 시작할 수 없습니다.")
+            return
+        }
+        try {
+            if (audioCaptureService == null) {
+                audioCaptureService = AudioCaptureService(mp)
+            }
+            audioCaptureService?.start()
+            AppLogger.i(TAG, "🔊 Audio capture started successfully")
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "❌ Failed to start audio capture: ${e.message}", e)
+        }
+    }
+
+    private fun stopAudioCapture() {
+        try {
+            audioCaptureService?.stop()
+            audioCaptureService = null
+            AppLogger.i(TAG, "🔊 Audio capture stopped")
+        } catch (e: Exception) {
+            AppLogger.w(TAG, "⚠️ Error stopping audio capture: ${e.message}")
+        }
+    }
+
     private fun handleBluetoothDisconnectedOnExit() {
         carExitRunnable?.let { mainHandler.removeCallbacks(it) }
         val r = Runnable {
@@ -534,9 +589,15 @@ class MediaProjectionService : Service() {
                 }
             }
 
-            // 테슬라 브라우저가 소리를 가로채지(잡지) 않도록 브라우저 오디오 캡처/전송을 비활성화하고,
-            // 모든 사운드(티맵 안내, 음악 등)는 100% 스마트폰에서 차량 블루투스(A2DP)로만 직접 출력
-            Log.i(TAG, "✓ Vehicle Bluetooth audio priority: all audio routes via phone Bluetooth A2DP directly")
+            // 3. 오디오 전송 모드 확인 및 오디오 캡처 서비스 초기화
+            val prefs = getSharedPreferences("mmirror_prefs", Context.MODE_PRIVATE)
+            isAudioStreamingEnabled = prefs.getBoolean("pref_audio_stream_enabled", false)
+            if (isAudioStreamingEnabled) {
+                AppLogger.i(TAG, "🔊 웹 브라우저 직접 사운드 송출 모드 활성화됨 -> AudioCaptureService 기동")
+                startAudioCapture()
+            } else {
+                AppLogger.i(TAG, "✓ Vehicle Bluetooth audio priority: all audio routes via phone Bluetooth A2DP directly (Audio capture disabled)")
+            }
 
             // 4. GPS 주행일지 추적 시작
             val hasFine = androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
@@ -992,6 +1053,8 @@ class MediaProjectionService : Service() {
 
         webRtcStreamer?.stop()
         webRtcStreamer = null
+
+        stopAudioCapture()
 
         encodingThread?.interrupt()
         encodingThread = null

@@ -196,8 +196,19 @@
 
     // 패킷 타입 식별자
     const PKT_TYPE_VIDEO = 0x01; // H.264 NAL Frame
+    const PKT_TYPE_AUDIO = 0x02; // Raw PCM Audio (48000Hz, 16bit Stereo)
     const PKT_TYPE_CONFIG = 0x03; // Metadata (Width, Height, FPS, etc.)
-    const CURRENT_WEB_VERSION = '1.3.5';
+    const PKT_TYPE_GPS = 0x04;    // Realtime GPS
+    const CURRENT_WEB_VERSION = '1.3.6';
+
+    // 오디오 및 A/V 싱크 제어 상태 변수
+    let audioCtx = null;
+    let audioGainNode = null;
+    let audioGainLevel = 1.0;
+    let audioNextPlayTime = 0;
+    let isAudioStreamingActive = false; // 기본값: false (차량 블루투스 직결 모드)
+    let videoDelayMs = parseInt(localStorage.getItem('mmirror_video_delay') || '0', 10);
+    let videoDelayQueue = []; // A/V 싱크 지연 버퍼 큐 [{ bytes, isKeyFrame, arrivalTime }]
 
     // [미디어 세션 및 오디오 격리 방어 엔진]
     // 테슬라 브라우저가 화면 미러링 시작 시 미디어 소스를 '웹'으로 전환하여
@@ -506,6 +517,7 @@
         const now = performance.now();
         if (now - lastKeyframeRequestTime < 4500) return; // 4.5초 쿨타임 (Rule #4: 키프레임 폭주 및 대역폭 포화 원천 차단)
         lastKeyframeRequestTime = now;
+        videoDelayQueue = []; // 키프레임 재요청 시 지연 큐 즉각 초기화하여 프레임 오염 방지
         console.log('🔑 [KEYFRAME-REQ] 스마트폰에 키프레임(IDR) 동기화 요청 전송');
         if (webrtcDataChannel && webrtcDataChannel.readyState === 'open') {
             try { webrtcDataChannel.send(JSON.stringify({ type: 'request_keyframe' })); } catch (_) {}
@@ -1769,6 +1781,7 @@
                 webrtcDataChannel.send(JSON.stringify({ type: 'request_keyframe' }));
                 webrtcDataChannel.send(JSON.stringify({ type: 'get_touch_status' }));
                 webrtcDataChannel.send(JSON.stringify({ type: 'get_apps' }));
+                webrtcDataChannel.send(JSON.stringify({ type: 'get_audio_mode' }));
             } catch (_) {}
         };
         webrtcDataChannel.onopen = handleChannelOpen;
@@ -1794,6 +1807,8 @@
                 const payload = event.data.slice(1);
                 if (packetType === PKT_TYPE_VIDEO) {
                     handleVideoPacket(payload);
+                } else if (packetType === PKT_TYPE_AUDIO) {
+                    playPcmAudio(payload);
                 } else if (packetType === PKT_TYPE_CONFIG) {
                     handleConfigPacket(payload);
                 } else if (packetType === PKT_TYPE_GPS) {
@@ -1802,6 +1817,10 @@
             } else if (typeof event.data === 'string') {
                 try {
                     const data = JSON.parse(event.data);
+                    if (data.type === 'audio_mode_status' && typeof data.enabled === 'boolean') {
+                        updateAudioModeUI(data.enabled);
+                        return;
+                    }
                     if (data.type === 'stream_stopped') {
                         console.log('💬 [WEBRTC] Received stream_stopped via DataChannel');
                         resetToInitialScreen('스마트폰 미러링이 종료되었습니다.');
@@ -1959,6 +1978,8 @@
 
             if (packetType === PKT_TYPE_VIDEO) {
                 handleVideoPacket(payload);
+            } else if (packetType === PKT_TYPE_AUDIO) {
+                playPcmAudio(payload);
             } else if (packetType === PKT_TYPE_CONFIG) {
                 handleConfigPacket(payload);
             } else if (packetType === PKT_TYPE_GPS) {
@@ -2000,7 +2021,120 @@
     let dcVideoBytes = 0;
     let lastDcBitrateTime = performance.now();
 
-    // NAL 패킷 처리 (초저지연 워치독 연동)
+    // H.264 NAL 패킷 실제 WebCodecs 하드웨어 디코더 전달
+    function feedVideoDecoder(bytes, isKeyFrame) {
+        if (!videoDecoder) {
+            initVideoDecoder();
+            if (!videoDecoder) return;
+        }
+
+        if (!videoConfigured) {
+            // 초기 H.264 디코더 구성 (Baseline / Main Profile 호환)
+            try {
+                videoDecoder.configure({
+                    codec: 'avc1.42002A', // Baseline Profile Level 4.2
+                    optimizeForLatency: true
+                });
+                videoConfigured = true;
+                console.log('VideoDecoder 설정 완료 (avc1.42002A)');
+            } catch (e) {
+                console.error('VideoDecoder configure 실패:', e);
+                return;
+            }
+        }
+
+        // WebCodecs 규격: configure 후 첫 번째 프레임은 반드시 키프레임(key)이어야 함
+        if (!hasReceivedFirstKeyFrame) {
+            if (!isKeyFrame) {
+                skippedDeltaFramesBeforeKey++;
+                if (skippedDeltaFramesBeforeKey % 15 === 0) {
+                    console.warn(`⏳ [DECODER] 첫 키프레임 대기 중 (${skippedDeltaFramesBeforeKey} 프레임 스킵됨) -> 키프레임 재요청`);
+                    requestKeyframe();
+                }
+                return; // 다음 키프레임 도착 시까지 대기
+            }
+            hasReceivedFirstKeyFrame = true;
+            skippedDeltaFramesBeforeKey = 0;
+            console.log('🎉 [DECODER] 첫 키프레임(IDR) 수신 완료 -> 디코딩 시작');
+        }
+
+        // WebCodecs H.264 참조 프레임 연속성 보장:
+        // 중간 P-프레임 단독 드롭 절대 금지 (화면 지직거림/깨짐 원천 차단)
+        if (videoDecoder.decodeQueueSize > 60) {
+            console.warn('⚠️ [DECODER] 디코더 큐 극단적 과적체(>60) 감지 -> 디코더 초기화 및 새 키프레임 대기');
+            hasReceivedFirstKeyFrame = false;
+            videoConfigured = false;
+            try { videoDecoder.reset(); } catch (_) {}
+            initVideoDecoder();
+            requestKeyframe();
+            return;
+        } else if (videoDecoder.decodeQueueSize > 20) {
+            requestKeyframe();
+        }
+
+        if (videoDecoder.state === 'configured') {
+            try {
+                const chunk = new EncodedVideoChunk({
+                    type: isKeyFrame ? 'key' : 'delta',
+                    timestamp: performance.now() * 1000,
+                    data: bytes
+                });
+                videoDecoder.decode(chunk);
+            } catch (err) {
+                console.warn('디코딩 청크 전송 실패:', err);
+                hasReceivedFirstKeyFrame = false;
+                requestKeyframe();
+                if (videoDecoder.state === 'closed') {
+                    videoConfigured = false;
+                    initVideoDecoder();
+                }
+            }
+        } else if (videoDecoder.state === 'closed') {
+            videoConfigured = false;
+            hasReceivedFirstKeyFrame = false;
+            initVideoDecoder();
+            requestKeyframe();
+        }
+    }
+
+    // A/V 싱크 비디오 지연 버퍼 드레인 엔진 (웹 브라우저 오디오 시스템 버퍼 지연 보정)
+    function drainVideoDelayQueue() {
+        const now = performance.now();
+        // 큐 과적체(>80 프레임, 약 1.3초) 발생 시 오래된 프레임 정리 (지연 누적 방지)
+        if (videoDelayQueue.length > 80) {
+            while (videoDelayQueue.length > 40) {
+                videoDelayQueue.shift();
+            }
+        }
+        while (videoDelayQueue.length > 0) {
+            const item = videoDelayQueue[0];
+            if (now - item.arrivalTime >= videoDelayMs) {
+                videoDelayQueue.shift();
+                feedVideoDecoder(item.bytes, item.isKeyFrame);
+            } else {
+                break;
+            }
+        }
+    }
+
+    // A/V 싱크 버퍼 즉각 플러시 (0ms 또는 모드 변경 시)
+    function flushVideoDelayQueue() {
+        while (videoDelayQueue.length > 0) {
+            const item = videoDelayQueue.shift();
+            feedVideoDecoder(item.bytes, item.isKeyFrame);
+        }
+    }
+
+    // 60FPS 애니메이션 루프를 통한 부드러운 딜레이 큐 드레인 보장
+    function animateVideoDelayDrain() {
+        if (videoDelayMs > 0 && videoDelayQueue.length > 0 && isAudioStreamingActive) {
+            drainVideoDelayQueue();
+        }
+        requestAnimationFrame(animateVideoDelayDrain);
+    }
+    requestAnimationFrame(animateVideoDelayDrain);
+
+    // NAL 패킷 처리 (초저지연 워치독 및 A/V 싱크 연동)
     function handleVideoPacket(payload) {
         // [원인 분리 테스트 스위치 1: 가설 B(WebCodecs 디코더) 격리 검증]
         // ?nodec 접속 시 WebRTC 연결 및 DataChannel 수신은 정상 유지하되 WebCodecs 비디오 디코딩만 건너뜀
@@ -2014,12 +2148,7 @@
             return;
         }
 
-        if (!videoDecoder) {
-            initVideoDecoder();
-            if (!videoDecoder) return;
-        }
-
-        // 워치독: 비디오 패킷 수신 시각 갱신 (마지막 렌더링 시각인 lastWebRtcFrameTime은 renderVideoFrame에서만 갱신)
+        // 워치독: 비디오 패킷 수신 시각 갱신
         lastVideoPacketTime = performance.now();
         hasEverReceivedVideo = true;
         hasEverReceivedWebRtcVideo = true;
@@ -2068,74 +2197,19 @@
             }
         }
 
-        if (!videoConfigured) {
-            // 초기 H.264 디코더 구성 (Baseline / Main Profile 호환)
-            try {
-                videoDecoder.configure({
-                    codec: 'avc1.42002A', // Baseline Profile Level 4.2
-                    optimizeForLatency: true
-                });
-                videoConfigured = true;
-                console.log('VideoDecoder 설정 완료 (avc1.42002A)');
-            } catch (e) {
-                console.error('VideoDecoder configure 실패:', e);
-                return;
+        // A/V 싱크 비디오 지연 보정: 웹 브라우저 사운드 스트리밍 중이고 지연시간이 지정되어 있을 때
+        if (videoDelayMs > 0 && isAudioStreamingActive) {
+            videoDelayQueue.push({
+                bytes: bytes,
+                isKeyFrame: isKeyFrame,
+                arrivalTime: performance.now()
+            });
+            drainVideoDelayQueue();
+        } else {
+            if (videoDelayQueue.length > 0) {
+                flushVideoDelayQueue();
             }
-        }
-
-        // WebCodecs 규격: configure 후 첫 번째 프레임은 반드시 키프레임(key)이어야 함
-        if (!hasReceivedFirstKeyFrame) {
-            if (!isKeyFrame) {
-                skippedDeltaFramesBeforeKey++;
-                if (skippedDeltaFramesBeforeKey % 15 === 0) {
-                    console.warn(`⏳ [DECODER] 첫 키프레임 대기 중 (${skippedDeltaFramesBeforeKey} 프레임 스킵됨) -> 키프레임 재요청`);
-                    requestKeyframe();
-                }
-                return; // 다음 키프레임 도착 시까지 대기
-            }
-            hasReceivedFirstKeyFrame = true;
-            skippedDeltaFramesBeforeKey = 0;
-            console.log('🎉 [DECODER] 첫 키프레임(IDR) 수신 완료 -> 디코딩 시작');
-        }
-
-        // WebCodecs H.264 참조 프레임 연속성 보장:
-        // 중간 P-프레임 단독 드롭 절대 금지 (화면 지직거림/깨짐 원천 차단)
-        // 디코더 큐가 비정상적으로 밀릴 때(16프레임 이상)는 키프레임을 요청하고,
-        // 극단적 지연(25프레임 이상) 시에만 디코더를 안전하게 리셋 후 다음 키프레임부터 재동기화
-        if (videoDecoder.decodeQueueSize > 60) {
-            console.warn('⚠️ [DECODER] 디코더 큐 극단적 과적체(>60) 감지 -> 디코더 초기화 및 새 키프레임 대기');
-            hasReceivedFirstKeyFrame = false;
-            videoConfigured = false;
-            try { videoDecoder.reset(); } catch (_) {}
-            initVideoDecoder();
-            requestKeyframe();
-            return;
-        } else if (videoDecoder.decodeQueueSize > 20) {
-            requestKeyframe();
-        }
-
-        if (videoDecoder.state === 'configured') {
-            try {
-                const chunk = new EncodedVideoChunk({
-                    type: isKeyFrame ? 'key' : 'delta',
-                    timestamp: performance.now() * 1000,
-                    data: bytes
-                });
-                videoDecoder.decode(chunk);
-            } catch (err) {
-                console.warn('디코딩 청크 전송 실패:', err);
-                hasReceivedFirstKeyFrame = false;
-                requestKeyframe();
-                if (videoDecoder.state === 'closed') {
-                    videoConfigured = false;
-                    initVideoDecoder();
-                }
-            }
-        } else if (videoDecoder.state === 'closed') {
-            videoConfigured = false;
-            hasReceivedFirstKeyFrame = false;
-            initVideoDecoder();
-            requestKeyframe();
+            feedVideoDecoder(bytes, isKeyFrame);
         }
     }
 
@@ -3427,6 +3501,268 @@
             }
         });
     }
+
+    // --- Web Audio 시스템 & PCM 48kHz 스테레오 재생 엔진 ---
+    function initAudioContext() {
+        if (!audioCtx) {
+            const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+            if (AudioContextClass) {
+                audioCtx = new AudioContextClass({ sampleRate: 48000 });
+                audioGainNode = audioCtx.createGain();
+                audioGainNode.gain.value = audioGainLevel;
+                audioGainNode.connect(audioCtx.destination);
+                console.log('🔊 [AUDIO] Web Audio Context 및 GainNode 초기화 완료 (sampleRate=48000)');
+            }
+        }
+        if (audioCtx && audioCtx.state === 'suspended') {
+            audioCtx.resume().then(() => {
+                console.log('🔊 [AUDIO] AudioContext resume 성공 (state: running)');
+            }).catch(() => {});
+        }
+    }
+
+    function playPcmAudio(arrayBuffer) {
+        if (!isAudioStreamingActive) return;
+        if (!audioCtx) {
+            initAudioContext();
+            if (!audioCtx) return;
+        }
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume().catch(() => {});
+        }
+        if (audioCtx.state !== 'running') return;
+
+        // 16-bit PCM Stereo (Interleaved L/R)
+        const pcm16 = new Int16Array(arrayBuffer);
+        const numChannels = 2;
+        const numSamples = Math.floor(pcm16.length / numChannels);
+        if (numSamples <= 0) return;
+
+        const audioBuffer = audioCtx.createBuffer(numChannels, numSamples, 48000);
+        const channelLeft = audioBuffer.getChannelData(0);
+        const channelRight = audioBuffer.getChannelData(1);
+
+        for (let i = 0; i < numSamples; i++) {
+            channelLeft[i] = pcm16[i * 2] / 32768.0;
+            channelRight[i] = pcm16[i * 2 + 1] / 32768.0;
+        }
+
+        const source = audioCtx.createBufferSource();
+        source.buffer = audioBuffer;
+        if (audioGainNode) {
+            source.connect(audioGainNode);
+        } else {
+            source.connect(audioCtx.destination);
+        }
+
+        const currentTime = audioCtx.currentTime;
+        // 지터 버퍼 제어 (최소 30ms 버퍼 유지, 250ms 이상 누적 시 리셋)
+        if (audioNextPlayTime < currentTime || audioNextPlayTime > currentTime + 0.25) {
+            audioNextPlayTime = currentTime + 0.04;
+        }
+
+        source.start(audioNextPlayTime);
+        audioNextPlayTime += audioBuffer.duration;
+    }
+
+    // 사용자 제스처 이벤트 리스너를 통한 AudioContext 자동 언락 (Autoplay 정책 대응)
+    ['click', 'touchstart', 'pointerdown', 'keydown'].forEach(evt => {
+        document.addEventListener(evt, () => {
+            if (audioCtx && audioCtx.state === 'suspended') {
+                audioCtx.resume().catch(() => {});
+            }
+        }, { passive: true });
+    });
+
+    function updateAudioModeUI(enabled) {
+        isAudioStreamingActive = enabled;
+        const btnBt = document.getElementById('btnAudioModeBt');
+        const btnWeb = document.getElementById('btnAudioModeWeb');
+        const secDelay = document.getElementById('sectionVideoDelay');
+        const secGain = document.getElementById('sectionAudioGain');
+        const topBarAudio = document.getElementById('btnTopBarAudio');
+        const dockAudioEmoji = document.getElementById('dockAudioEmoji');
+        const tipEl = document.getElementById('audioModeTip');
+
+        if (enabled) {
+            if (btnBt) btnBt.classList.remove('active');
+            if (btnWeb) btnWeb.classList.add('active');
+            if (secDelay) secDelay.style.display = 'flex';
+            if (secGain) secGain.style.display = 'flex';
+            if (topBarAudio) {
+                topBarAudio.textContent = `🌐 웹소리 +${videoDelayMs}ms`;
+                topBarAudio.classList.add('web-active');
+            }
+            if (dockAudioEmoji) dockAudioEmoji.textContent = '🌐';
+            if (tipEl) {
+                tipEl.innerHTML = '🌐 <strong>웹 브라우저 송출 중</strong>: 테슬라 브라우저로 소리가 직접 스트리밍됩니다. (A/V 싱크 지연 조절로 립싱크를 맞출 수 있습니다)';
+            }
+            initAudioContext();
+        } else {
+            if (btnBt) btnBt.classList.add('active');
+            if (btnWeb) btnWeb.classList.remove('active');
+            if (secDelay) secDelay.style.display = 'none';
+            if (secGain) secGain.style.display = 'none';
+            if (topBarAudio) {
+                topBarAudio.textContent = '🔊 BT 직결 0ms';
+                topBarAudio.classList.remove('web-active');
+            }
+            if (dockAudioEmoji) dockAudioEmoji.textContent = '🔊';
+            if (tipEl) {
+                tipEl.innerHTML = '💡 <strong>안내</strong>: 차량 화면 하단 미디어 소스를 <strong>[블루투스]</strong>로 선택하시면 스마트폰의 티맵 안내와 음악이 차량 스피커로 최고 음질로 즉시 출력됩니다.';
+            }
+            flushVideoDelayQueue();
+        }
+    }
+
+    function setAudioMode(mode) {
+        const enabled = (mode === 'web');
+        isAudioStreamingActive = enabled;
+        if (enabled) {
+            const savedDelay = parseInt(localStorage.getItem('mmirror_video_delay') || '180', 10);
+            setVideoDelay(savedDelay > 0 ? savedDelay : 180);
+        } else {
+            setVideoDelay(0);
+        }
+        updateAudioModeUI(enabled);
+
+        // 스마트폰에 DataChannel로 변경 신호 전송
+        const msg = JSON.stringify({ type: 'set_audio_mode', enabled: enabled });
+        if (webrtcDataChannel && webrtcDataChannel.readyState === 'open') {
+            try { webrtcDataChannel.send(msg); } catch (_) {}
+        }
+        console.log(`🔊 [AUDIO-MODE] Set audio mode to: ${mode} (enabled=${enabled})`);
+    }
+
+    function setVideoDelay(ms) {
+        videoDelayMs = ms;
+        localStorage.setItem('mmirror_video_delay', String(ms));
+        const badge = document.getElementById('txtCurrentDelay');
+        if (badge) badge.textContent = `${ms}ms`;
+        const slider = document.getElementById('sliderVideoDelay');
+        if (slider) slider.value = ms;
+        const topBarAudio = document.getElementById('btnTopBarAudio');
+        if (topBarAudio && isAudioStreamingActive) {
+            topBarAudio.textContent = `🌐 웹소리 +${ms}ms`;
+        }
+
+        // 프리셋 버튼 활성화 상태 갱신
+        document.querySelectorAll('.delay-preset-btn').forEach(btn => {
+            const delayVal = parseInt(btn.dataset.delay, 10);
+            if (delayVal === ms) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+
+        if (ms === 0) {
+            flushVideoDelayQueue();
+        }
+        console.log(`⏱️ [A/V SYNC] Video delay set to: ${ms}ms`);
+    }
+
+    function setAudioGain(gain) {
+        audioGainLevel = gain;
+        if (audioGainNode) {
+            audioGainNode.gain.value = gain;
+        }
+        document.querySelectorAll('.gain-btn').forEach(btn => {
+            const val = parseFloat(btn.dataset.gain);
+            if (val === gain) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+        console.log(`🔊 [AUDIO-GAIN] Digital audio gain set to: ${gain}x`);
+    }
+
+    function setupAudioModalListeners() {
+        const modal = document.getElementById('audioSettingsModal');
+        const btnOpenDock = document.getElementById('btnDockAudio');
+        const btnOpenTop = document.getElementById('btnTopBarAudio');
+        const btnClose = document.getElementById('btnCloseAudioModal');
+
+        function openModal() {
+            if (modal) {
+                modal.classList.remove('hidden');
+                modal.style.setProperty('display', 'flex', 'important');
+                initAudioContext();
+            }
+        }
+        function closeModal() {
+            if (modal) {
+                modal.classList.add('hidden');
+                modal.style.display = 'none';
+            }
+        }
+
+        if (btnOpenDock) btnOpenDock.addEventListener('click', openModal);
+        if (btnOpenTop) btnOpenTop.addEventListener('click', openModal);
+        if (btnClose) btnClose.addEventListener('click', closeModal);
+        if (modal) {
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) closeModal();
+            });
+        }
+
+        // 모드 전환 버튼
+        const btnBt = document.getElementById('btnAudioModeBt');
+        const btnWeb = document.getElementById('btnAudioModeWeb');
+        if (btnBt) btnBt.addEventListener('click', () => setAudioMode('bluetooth'));
+        if (btnWeb) btnWeb.addEventListener('click', () => setAudioMode('web'));
+
+        // 딜레이 프리셋 버튼들
+        document.querySelectorAll('.delay-preset-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const val = parseInt(btn.dataset.delay, 10);
+                setVideoDelay(val);
+            });
+        });
+
+        // 딜레이 슬라이더
+        const slider = document.getElementById('sliderVideoDelay');
+        if (slider) {
+            slider.addEventListener('input', (e) => {
+                setVideoDelay(parseInt(e.target.value, 10));
+            });
+        }
+
+        // 볼륨 게인 버튼들
+        document.querySelectorAll('.gain-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                setAudioGain(parseFloat(btn.dataset.gain));
+            });
+        });
+
+        // 수동 언락 및 테스트 비프음
+        const btnUnlock = document.getElementById('btnManualUnlockAudio');
+        if (btnUnlock) {
+            btnUnlock.addEventListener('click', () => {
+                initAudioContext();
+                if (audioCtx) {
+                    try {
+                        const osc = audioCtx.createOscillator();
+                        const g = audioCtx.createGain();
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+                        g.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                        g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+                        osc.connect(g);
+                        g.connect(audioGainNode || audioCtx.destination);
+                        osc.start();
+                        osc.stop(audioCtx.currentTime + 0.3);
+                        showTeslaToast('🔊 브라우저 사운드가 정상 작동 중입니다 (테스트 비프음 재생됨)');
+                    } catch (_) {}
+                }
+            });
+        }
+
+        // 초기 UI 상태 적용 (기본값: 블루투스 직결 모드)
+        updateAudioModeUI(false);
+    }
+    setupAudioModalListeners();
 
     // [작업 지시서 4] 가설 3 검증용 실험 지원 (URL 쿼리 기반)
     // ?test=ws : WebRTC 미사용, 순수 WebSocket(/ws) 모드만 사용
