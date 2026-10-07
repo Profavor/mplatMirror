@@ -1074,6 +1074,36 @@
             console.log('🧪 [TEST] ?idle: WebRTC 연결 시도 차단 (순수 대기 모드)');
             return;
         }
+
+        if (location.search.includes('testpc')) {
+            console.log('🧪 [TEST-PC] new RTCPeerConnection() 단독 인스턴스화 테스트');
+            if (statusText) statusText.textContent = '🧪 [테스트] new RTCPeerConnection() 생성됨 (시그널링 미연결)';
+            try {
+                window._testPc = new RTCPeerConnection({
+                    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+                });
+                console.log('🧪 [TEST-PC] RTCPeerConnection instance created successfully');
+            } catch (err) {
+                console.error('🧪 [TEST-PC] Error creating RTCPeerConnection:', err);
+            }
+            return;
+        }
+
+        if (location.search.includes('testdc')) {
+            console.log('🧪 [TEST-DC] new RTCPeerConnection() + createDataChannel() 테스트');
+            if (statusText) statusText.textContent = '🧪 [테스트] RTCPeerConnection + DataChannel 생성됨 (시그널링 미연결)';
+            try {
+                window._testPc = new RTCPeerConnection({
+                    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+                });
+                window._testDc = window._testPc.createDataChannel('test_dc');
+                console.log('🧪 [TEST-DC] RTCPeerConnection + DataChannel created successfully');
+            } catch (err) {
+                console.error('🧪 [TEST-DC] Error:', err);
+            }
+            return;
+        }
+
         if (!window.RTCPeerConnection) {
             console.warn('WebRTC not supported on this browser');
             return;
@@ -1589,10 +1619,15 @@
 
         // [미디어 트랙 수신 차단] DataChannel 전용 오퍼에 대해 오디오/비디오 트랜시버 수신 완전 차단
         enforceSilentMediaSession();
-        const answer = await peerConnection.createAnswer({
+        const isCleanAns = location.search.includes('cleanans');
+        const answerOptions = isCleanAns ? {} : {
             offerToReceiveAudio: false,
             offerToReceiveVideo: false
-        });
+        };
+        if (isCleanAns) {
+            console.log('🧪 [TEST-CLEANANS] createAnswer() without legacy offerToReceiveAudio/Video options');
+        }
+        const answer = await peerConnection.createAnswer(answerOptions);
         await peerConnection.setLocalDescription(answer);
         enforceSilentMediaSession();
 
