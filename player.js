@@ -386,6 +386,44 @@
             canvas.style.marginRight = 'auto';
         }
         updateMirrorSidePanelLayout(cw, ch, parseInt(canvas.style.width) || targetW, mode);
+        updateFloatingZoomPosition(cw, ch, parseInt(canvas.style.width) || targetW, mode);
+    }
+
+    // 플로팅 줌 컨트롤러(+/-) 위치를 미러링 화면 바로 우측에 밀착 배치
+    function updateFloatingZoomPosition(cw, ch, canvasW, mode) {
+        const zoomControls = document.getElementById('floatingZoomControls');
+        if (!zoomControls) return;
+
+        if (window.currentViewMode !== 'mirror') {
+            zoomControls.style.display = 'none';
+            return;
+        }
+
+        zoomControls.style.display = 'flex';
+
+        let canvasLeft = 0;
+        if (mode === 'center') {
+            canvasLeft = Math.max(0, Math.round((cw - canvasW) / 2));
+        } else {
+            canvasLeft = 0;
+        }
+
+        const canvasRight = canvasLeft + canvasW;
+        const zoomWidth = 46;
+        const margin = 10;
+
+        // 미러링 화면 바로 우측에 붙임:
+        // 우측에 60px 이상 여백이 있으면 화면 바로 바깥 우측(canvasRight + 10px)에 밀착
+        // 화면이 가로로 꽉 차서 우측 바깥 여백이 없으면 화면 우측 안쪽 가장자리에 밀착
+        if (canvasRight + zoomWidth + margin <= cw) {
+            zoomControls.style.left = (canvasRight + margin) + 'px';
+            zoomControls.style.right = 'auto';
+        } else {
+            zoomControls.style.left = Math.max(0, canvasRight - zoomWidth - margin) + 'px';
+            zoomControls.style.right = 'auto';
+        }
+
+        zoomControls.style.bottom = '40px';
     }
 
     // 미러링 우측 빈 공간 정보 패널 (시계, 실시간 날씨, 퀵 위젯) 레이아웃 동적 계산
@@ -3031,6 +3069,8 @@
         if (sidePanel) sidePanel.style.display = 'none';
         const restoreBtn = document.getElementById('btnSidePanelRestore');
         if (restoreBtn) restoreBtn.style.display = 'none';
+        const zoomControls = document.getElementById('floatingZoomControls');
+        if (zoomControls) zoomControls.style.display = 'none';
         updateModeBadge('dashboard');
         document.getElementById('btnDockHome')?.classList.add('active');
         document.getElementById('btnDockMirror')?.classList.remove('active');

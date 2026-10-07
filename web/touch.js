@@ -144,6 +144,9 @@
         if (restoreBtn && restoreBtn.style.display !== 'none' && e.target && e.target.closest('#btnSidePanelRestore')) {
             return true;
         }
+        if (e.target && e.target.closest('#floatingZoomControls')) {
+            return true;
+        }
         return false;
     }
 
