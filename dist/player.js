@@ -197,7 +197,7 @@
     // 패킷 타입 식별자
     const PKT_TYPE_VIDEO = 0x01; // H.264 NAL Frame
     const PKT_TYPE_CONFIG = 0x03; // Metadata (Width, Height, FPS, etc.)
-    const CURRENT_WEB_VERSION = '1.3.3';
+    const CURRENT_WEB_VERSION = '1.3.4';
 
     // [미디어 세션 및 오디오 격리 방어 엔진]
     // 테슬라 브라우저가 화면 미러링 시작 시 미디어 소스를 '웹'으로 전환하여
@@ -1070,6 +1070,10 @@
     }
 
     function connectWebRtc() {
+        if (location.search.includes('idle')) {
+            console.log('🧪 [TEST] ?idle: WebRTC 연결 시도 차단 (순수 대기 모드)');
+            return;
+        }
         if (!window.RTCPeerConnection) {
             console.warn('WebRTC not supported on this browser');
             return;
@@ -1480,6 +1484,10 @@
     }
 
     async function handleWebRtcOffer(sdp, offerId = '') {
+        if (location.search.includes('noanswer')) {
+            console.log('🧪 [TEST] ?noanswer: Answer 전송 차단 (Offer 수신 완료, P2P 미성립 상태 유지)');
+            return;
+        }
         const ufragMatch = sdp.match(/a=ice-ufrag:([^\r\n]+)/);
         currentOfferUfrag = ufragMatch ? ufragMatch[1].trim() : null;
         console.log(`🔄 WebRTC resetting PeerConnection for fresh incoming offer (offerId: ${offerId || 'none'}, ufrag: ${currentOfferUfrag})`);
@@ -1800,6 +1808,10 @@
 
     // --- WebSocket 연결 및 스트림 수신 (로컬 핫스팟 직접 접속 시에만 사용) ---
     function connectWebSocket() {
+        if (location.search.includes('idle')) {
+            console.log('🧪 [TEST] ?idle: WebSocket 연결 시도 차단');
+            return;
+        }
         // Firebase Hosting(mplat-mirror.web.app) 및 공인 중계 도메인은 WebRTC P2P 직결 표준만 사용 (/ws 제외)
         const host = location.hostname.toLowerCase();
         if (host.includes('web.app') || host.includes('firebaseapp.com') || host.includes('mplat.store')) {
@@ -2156,6 +2168,47 @@
     let appIconCache = {};
     let currentTouchStatus = null;
 
+    function loadAppIconCache() {
+        try {
+            const savedIcons = localStorage.getItem('mmirror_app_icons_v1');
+            if (savedIcons) {
+                const parsed = JSON.parse(savedIcons);
+                if (parsed && typeof parsed === 'object') {
+                    appIconCache = parsed;
+                    console.log(`🖼️ [CACHE] Loaded ${Object.keys(appIconCache).length} cached app icons from localStorage`);
+                }
+            }
+            const savedApps = localStorage.getItem('mmirror_installed_apps_v1');
+            if (savedApps) {
+                const parsedApps = JSON.parse(savedApps);
+                if (Array.isArray(parsedApps) && parsedApps.length > 0) {
+                    installedPhoneApps = parsedApps;
+                    installedPhoneApps.forEach(app => {
+                        if (appIconCache[app.package]) {
+                            app.icon = appIconCache[app.package];
+                        }
+                    });
+                    console.log(`📱 [CACHE] Loaded ${installedPhoneApps.length} installed apps from localStorage`);
+                }
+            }
+        } catch (e) {
+            console.warn('Failed to load app icon cache from localStorage:', e);
+        }
+    }
+
+    function saveAppIconCache() {
+        try {
+            if (appIconCache && Object.keys(appIconCache).length > 0) {
+                localStorage.setItem('mmirror_app_icons_v1', JSON.stringify(appIconCache));
+            }
+            if (installedPhoneApps && installedPhoneApps.length > 0) {
+                localStorage.setItem('mmirror_installed_apps_v1', JSON.stringify(installedPhoneApps));
+            }
+        } catch (e) {
+            console.warn('Failed to save app icon cache to localStorage:', e);
+        }
+    }
+
     function loadDockApps() {
         try {
             const saved = localStorage.getItem('mmirror_dock_apps');
@@ -2164,12 +2217,22 @@
                 if (Array.isArray(parsed) && parsed.length > 0) {
                     // 미동작 주행이력 앱은 독바 목록에서 필터링하여 제거
                     dockApps = parsed.filter(a => a.package !== 'builtin:triplog');
+                    dockApps.forEach(d => {
+                        if (appIconCache[d.package]) {
+                            d.icon = appIconCache[d.package];
+                        }
+                    });
                     saveDockApps();
                     return;
                 }
             }
         } catch (_) {}
         dockApps = [...DEFAULT_DOCK_APPS];
+        dockApps.forEach(d => {
+            if (appIconCache[d.package]) {
+                d.icon = appIconCache[d.package];
+            }
+        });
         saveDockApps();
     }
 
@@ -2339,6 +2402,7 @@
             }
         });
         updateAppInstallState();
+        saveAppIconCache();
         renderDock();
         if (appManagerModal && !appManagerModal.classList.contains('hidden')) {
             renderAvailableApps();
@@ -2351,6 +2415,7 @@
         for (const [pkg, icon] of Object.entries(icons)) {
             appIconCache[pkg] = icon;
         }
+        saveAppIconCache();
         // Update installedPhoneApps with icons
         installedPhoneApps.forEach(app => {
             if (icons[app.package]) {
@@ -2616,6 +2681,10 @@
     }
 
     function showMirrorView() {
+        if (location.search.includes('nomv')) {
+            console.log('🧪 [TEST] ?nomv: 미러 뷰 화면 전환 차단 (대시보드 유지)');
+            return;
+        }
         window.currentViewMode = 'mirror';
         const dash = document.getElementById('homeDashboard');
         if (dash) dash.classList.add('hidden');
@@ -2984,7 +3053,8 @@
         });
     }
 
-    // 팔레트 초기 로드 및 렌더링
+    // 팔레트 초기 로드 및 렌더링 (로컬 캐시 즉시 복원)
+    loadAppIconCache();
     loadDockApps();
     renderDock();
 

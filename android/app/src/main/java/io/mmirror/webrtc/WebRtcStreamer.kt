@@ -31,6 +31,7 @@ class WebRtcStreamer(
 ) {
     companion object {
         private const val TAG = "WebRtcStreamer"
+        val cachedAppIcons = java.util.concurrent.ConcurrentHashMap<String, String>()
         var instance: WebRtcStreamer? = null
             private set
     }
@@ -430,7 +431,6 @@ class WebRtcStreamer(
     @Volatile private var hasSynthesizedHotspotCandidate = false
     @Volatile private var hasNativeHotspotCandidate = false
     @Volatile private var lastRemoteAnswerUfrag: String? = null
-    @Volatile private var hasTriggeredBtAudioAutoRecovery = false
     private var pendingReconnectRunnable: Runnable? = null
     private var proactiveReconnectRunnable: Runnable? = null
 
@@ -452,7 +452,6 @@ class WebRtcStreamer(
         currentOfferId = java.util.UUID.randomUUID().toString()
         hasSynthesizedHotspotCandidate = false
         hasNativeHotspotCandidate = false
-        hasTriggeredBtAudioAutoRecovery = false
         lastRemoteAnswerUfrag = null
 
         val pcf = peerConnectionFactory ?: return
@@ -525,7 +524,6 @@ class WebRtcStreamer(
                     // 차량 연결됨 → GPS 주행 기록 시작
                     io.mmirror.DrivingLogManager.currentInstance?.onPeerConnected()
                     io.mmirror.MediaProjectionService.instance?.requestKeyFrame()
-                    triggerBluetoothAudioAutoRecovery()
                 } else if (newState == PeerConnection.PeerConnectionState.DISCONNECTED ||
                            newState == PeerConnection.PeerConnectionState.FAILED) {
                     AppLogger.w(TAG, "🔌 WebRTC peer disconnected/failed: $newState")
@@ -640,53 +638,6 @@ class WebRtcStreamer(
             override fun onCreateFailure(err: String?) { AppLogger.e(TAG, "❌ createOffer failure: $err") }
             override fun onSetFailure(err: String?) { AppLogger.e(TAG, "❌ createOffer setFailure: $err") }
         }, sdpConstraints)
-    }
-
-    /**
-     * [작업 지시서 3-a] 테슬라 브라우저 WebRTC 연결 직후 미디어 소스 블루투스 자동 재탈환
-     * WebRTC P2P 연결 시 테슬라 OS가 브라우저(웹)로 소스를 가로채는 현상에 대응하여,
-     * 연결 2.5초 후 폰에서 음악 재생 중일 경우 MEDIA_PAUSE -> 0.8초 후 MEDIA_PLAY 펄스를 전송합니다.
-     * 테슬라 블루투스 스택(AVRCP)이 신규 재생 상태를 감지하여 미디어 소스를 블루투스로 자동 복귀시킵니다.
-     */
-    private fun triggerBluetoothAudioAutoRecovery() {
-        if (hasTriggeredBtAudioAutoRecovery) return
-        hasTriggeredBtAudioAutoRecovery = true
-
-        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
-        if (!audioManager.isMusicActive) {
-            AppLogger.d(TAG, "🎵 [BT-AUDIO-AUTO-RECOVER] Music is not active on phone, skipping AVRCP toggle.")
-            return
-        }
-
-        AppLogger.i(TAG, "🎵 [BT-AUDIO-AUTO-RECOVER] Active music playback detected! Scheduling MEDIA_PAUSE -> MEDIA_PLAY in 2500ms to reclaim Tesla Bluetooth focus...")
-        mainHandler.postDelayed({
-            try {
-                if (isRunning && isPeerConnected() && audioManager.isMusicActive) {
-                    AppLogger.i(TAG, "🎵 [BT-AUDIO-AUTO-RECOVER] Step 1: Dispatching MEDIA_PAUSE to reset AVRCP state")
-                    val downPause = KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PAUSE)
-                    val upPause = KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PAUSE)
-                    audioManager.dispatchMediaKeyEvent(downPause)
-                    audioManager.dispatchMediaKeyEvent(upPause)
-
-                    mainHandler.postDelayed({
-                        try {
-                            if (isRunning && isPeerConnected()) {
-                                AppLogger.i(TAG, "🎵 [BT-AUDIO-AUTO-RECOVER] Step 2: Dispatching MEDIA_PLAY to reclaim Tesla Bluetooth focus")
-                                val downPlay = KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PLAY)
-                                val upPlay = KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_PLAY)
-                                audioManager.dispatchMediaKeyEvent(downPlay)
-                                audioManager.dispatchMediaKeyEvent(upPlay)
-                                AppLogger.i(TAG, "✓ [BT-AUDIO-AUTO-RECOVER] Bluetooth AVRCP reclaim pulse dispatched successfully!")
-                            }
-                        } catch (e: Throwable) {
-                            AppLogger.w(TAG, "Failed to dispatch MEDIA_PLAY: ${e.message}")
-                        }
-                    }, 800L)
-                }
-            } catch (e: Throwable) {
-                AppLogger.w(TAG, "Failed to dispatch MEDIA_PAUSE: ${e.message}")
-            }
-        }, 2500L)
     }
 
     private fun setupDataChannel(dc: DataChannel) {
@@ -812,8 +763,8 @@ class WebRtcStreamer(
             dc.send(DataChannel.Buffer(java.nio.ByteBuffer.wrap(payload), false))
             Log.i(TAG, "Sent app_list to viewer (${jsonArray.length()} apps)")
 
-            // 2차: 아이콘을 백그라운드에서 지연 추출하여 배치(batch)로 전송
-            val batchSize = 6
+            // 2차: 아이콘을 백그라운드에서 지연 추출하여 배치(batch)로 전송 (메모리 캐시 재활용)
+            val batchSize = 12
             for (i in appEntries.indices step batchSize) {
                 val dcNow = dataChannel
                 if (dcNow == null || dcNow.state() != DataChannel.State.OPEN) break
@@ -822,10 +773,12 @@ class WebRtcStreamer(
                 val batch = appEntries.subList(i, end)
                 val iconsObj = JSONObject()
                 for (entry in batch) {
-                    val iconStr = try {
-                        val icon = entry.resolveInfo.loadIcon(pm)
-                        drawableToBase64(icon)
-                    } catch (_: Throwable) { "" }
+                    val iconStr = cachedAppIcons.getOrPut(entry.pkg) {
+                        try {
+                            val icon = entry.resolveInfo.loadIcon(pm)
+                            drawableToBase64(icon)
+                        } catch (_: Throwable) { "" }
+                    }
                     if (iconStr.isNotBlank()) {
                         iconsObj.put(entry.pkg, iconStr)
                     }
@@ -837,7 +790,7 @@ class WebRtcStreamer(
                     }
                     val iconPayload = iconResp.toString().toByteArray(Charsets.UTF_8)
                     dcNow.send(DataChannel.Buffer(java.nio.ByteBuffer.wrap(iconPayload), false))
-                    Thread.sleep(60) // 배치 간 CPU 및 소켓 버퍼 안정화 간격
+                    Thread.sleep(20) // 캐시된 아이콘은 빠른 전송 허용 (20ms)
                 }
             }
 
