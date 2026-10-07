@@ -203,6 +203,28 @@
                         </div>
                     </div>
 
+                    <!-- 진단 테스트 원터치 패널 (테슬라 화면 터치 전용: URL 직접 입력 불필요) -->
+                    <div class="guide-diag-panel" style="margin: 12px 0 6px 0; padding: 12px; background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 10px;">
+                        <div style="font-size: 12.5px; font-weight: bold; color: #38bdf8; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;">
+                            <span>🧪 블루투스 오디오 정밀 진단 스위치</span>
+                            <span id="activeModeText" style="font-size: 11px; padding: 2px 8px; border-radius: 4px; background: #0284c7; color: white;">현재: 일반 미러링</span>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                            <button type="button" onclick="location.href='https://mplat-mirror.web.app'" style="padding: 10px 6px; background: #1e293b; color: #f8fafc; border: 1px solid #475569; border-radius: 8px; font-size: 12px; font-weight: bold; cursor: pointer;">
+                                🚀 일반 정식 미러링
+                            </button>
+                            <button type="button" onclick="location.href='https://mplat-mirror.web.app?stopat=sld&nowms'" style="padding: 10px 6px; background: #0369a1; color: #fff; border: 1px solid #38bdf8; border-radius: 8px; font-size: 12px; font-weight: bold; cursor: pointer;">
+                                🧪 1. sld+nowms (추천)
+                            </button>
+                            <button type="button" onclick="location.href='https://mplat-mirror.web.app?stopat=sld&cleansdp'" style="padding: 10px 6px; background: #4338ca; color: #fff; border: 1px solid #818cf8; border-radius: 8px; font-size: 12px; font-weight: bold; cursor: pointer;">
+                                🧪 2. sld+cleansdp
+                            </button>
+                            <button type="button" onclick="location.href='https://mplat-mirror.web.app?stopat=sld'" style="padding: 10px 6px; background: #334155; color: #cbd5e1; border: 1px solid #64748b; border-radius: 8px; font-size: 12px; font-weight: bold; cursor: pointer;">
+                                🧪 3. sld 기본 (대조군)
+                            </button>
+                        </div>
+                    </div>
+
 
                     <div class="guide-footer-status">
                         <div class="spinner-small"></div>
@@ -406,7 +428,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-database-compat.js"></script>
     <script src="firebase-config.js?v=1.3.4"></script>
     <script src="leaflet.js"></script>
-    <script src="player.js?v=1.3.4.5"></script>
+    <script src="player.js?v=1.3.4.6"></script>
     <script src="touch.js?v=1.3.4"></script>
     <script src="triplog.js?v=1.3.4"></script>
 </body>

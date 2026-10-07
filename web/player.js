@@ -1517,6 +1517,17 @@
         };
     }
 
+    function showTestNotification(title, desc) {
+        let el = document.getElementById('testNotificationBanner');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'testNotificationBanner';
+            el.style.cssText = 'position:fixed; bottom:30px; left:50%; transform:translateX(-50%); background:#0f172a; border:2px solid #38bdf8; color:white; padding:16px 24px; border-radius:12px; font-size:16px; font-weight:bold; z-index:999999; box-shadow:0 10px 30px rgba(0,0,0,0.8); text-align:center; max-width:90vw;';
+            document.body.appendChild(el);
+        }
+        el.innerHTML = `<div>🧪 ${title}</div><div style="font-size:13px; font-weight:normal; color:#94a3b8; margin-top:6px;">${desc}</div>`;
+    }
+
     async function handleWebRtcOffer(sdp, offerId = '') {
         if (location.search.includes('noanswer')) {
             console.log('🧪 [TEST] ?noanswer: Answer 전송 차단 (Offer 수신 완료, P2P 미성립 상태 유지)');
@@ -1581,6 +1592,10 @@
         if (location.search.includes('stopat=srd')) {
             console.log('🧪 [TEST] ?stopat=srd: setRemoteDescription 완료 후 중단 (Answer 미생성)');
             if (statusText) statusText.textContent = '🧪 [테스트] setRemoteDescription 완료 (Answer 생성 안 함)';
+            showTestNotification(
+                '[테스트 완료] setRemoteDescription 완료',
+                'Answer는 생성하지 않고 중단되었습니다.<br>블루투스 노래 상태를 확인해 주세요.'
+            );
             return;
         }
 
@@ -1657,6 +1672,10 @@
         if (location.search.includes('stopat=ca_only')) {
             console.log('🧪 [TEST] ?stopat=ca_only: createAnswer 완료 후 중단 (setLocalDescription 미호출)');
             if (statusText) statusText.textContent = '🧪 [테스트] createAnswer 완료 (setLocalDescription 미호출)';
+            showTestNotification(
+                '[테스트 완료] createAnswer 생성 완료',
+                'setLocalDescription은 호출하지 않고 중단되었습니다.<br>블루투스 노래 상태를 확인해 주세요.'
+            );
             return;
         }
 
@@ -1677,6 +1696,10 @@
             const tag = (isCleanSdp ? 'cleansdp' : isNowms ? 'nowms' : '기본') + (isNoice ? '+noice' : '');
             console.log(`🧪 [TEST] ?stopat=sld: setLocalDescription 완료 후 중단 (${tag})`);
             if (statusText) statusText.textContent = `🧪 [테스트] setLocalDescription 완료 (${tag})`;
+            showTestNotification(
+                `[테스트 완료] setLocalDescription 호출됨 (${tag})`,
+                `화면 미러링은 의도적으로 중단된 상태입니다.<br>👉 <strong>스마트폰 블루투스 노래가 계속 나오나요? 아니면 웹 소리로 바뀌었나요?</strong>`
+            );
             return;
         }
 
@@ -3414,6 +3437,18 @@
     // ?test=touch : 사용자 첫 터치/클릭 이후에만 connectWebRtc() 호출
     const testModeParams = new URLSearchParams(window.location.search);
     const testMode = (testModeParams.get('test') || testModeParams.get('mode') || '').toLowerCase();
+
+    // 활성 진단 모드 배지 갱신 (테슬라 화면 표시)
+    const activeModeEl = document.getElementById('activeModeText');
+    if (activeModeEl) {
+        if (window.location.search) {
+            activeModeEl.textContent = `현재: ${window.location.search}`;
+            activeModeEl.style.background = '#d97706';
+        } else {
+            activeModeEl.textContent = '현재: 일반 정식 미러링';
+            activeModeEl.style.background = '#0284c7';
+        }
+    }
 
     startWatchdog();
 
