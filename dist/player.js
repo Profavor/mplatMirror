@@ -277,6 +277,41 @@
         }
     }
 
+    // --- 화면 꺼짐 방지 (Screen Wake Lock) ---
+    let wakeLockSentinel = null;
+
+    async function requestWakeLock() {
+        try {
+            if ('wakeLock' in navigator) {
+                if (wakeLockSentinel && !wakeLockSentinel.released) {
+                    return;
+                }
+                wakeLockSentinel = await navigator.wakeLock.request('screen');
+                wakeLockSentinel.addEventListener('release', () => {
+                    console.log('💡 Screen Wake Lock 해제됨');
+                    wakeLockSentinel = null;
+                });
+                console.log('💡 Screen Wake Lock 획득 (화면 꺼짐 방지)');
+            }
+        } catch (err) {
+            console.warn('Wake Lock 요청 실패 또는 미지원:', err);
+        }
+    }
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            requestWakeLock();
+        }
+    });
+
+    function activateAntiSleep() {
+        requestWakeLock();
+    }
+
+    ['click', 'touchstart', 'pointerdown'].forEach(evt => {
+        document.addEventListener(evt, activateAntiSleep, { passive: true });
+    });
+
     // 전체화면 토글
     if (btnFullscreen) {
         btnFullscreen.addEventListener('click', () => {
@@ -3936,6 +3971,7 @@
         }
     }
 
+    requestWakeLock();
     startWatchdog();
 
     if (testMode === 'ws') {
