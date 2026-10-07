@@ -199,7 +199,7 @@
     const PKT_TYPE_AUDIO = 0x02; // Raw PCM Audio (48000Hz, 16bit Stereo)
     const PKT_TYPE_CONFIG = 0x03; // Metadata (Width, Height, FPS, etc.)
     const PKT_TYPE_GPS = 0x04;    // Realtime GPS
-    const CURRENT_WEB_VERSION = '1.3.7';
+    const CURRENT_WEB_VERSION = '1.3.8';
 
     // 오디오 및 A/V 싱크 제어 상태 변수 (100ms 지터 링 버퍼 엔진)
     let audioCtx = null;
@@ -473,8 +473,11 @@
         if (disconnectOverlay && !disconnectOverlay.classList.contains('hidden')) {
             disconnectOverlay.classList.add('hidden');
         }
-        if (typeof showMirrorView === 'function' && window.currentViewMode !== 'mirror') {
-            showMirrorView();
+        if (!hasEverReceivedWebRtcVideo) {
+            hasEverReceivedWebRtcVideo = true;
+            if (typeof showMirrorView === 'function') {
+                showMirrorView();
+            }
         }
 
         // 캔버스 크기 동기화
@@ -2179,13 +2182,14 @@
         }
     }
 
-    // A/V 싱크 버퍼 즉각 플러시 (0ms 또는 모드 변경 시)
+    // A/V 싱크 버퍼 즉각 플러시 (0ms 또는 모드 변경/터치 인터랙션 시)
     function flushVideoDelayQueue() {
         while (videoDelayQueue.length > 0) {
             const item = videoDelayQueue.shift();
             feedVideoDecoder(item.bytes, item.isKeyFrame);
         }
     }
+    window.flushVideoDelayQueue = flushVideoDelayQueue;
 
     // 60FPS 애니메이션 루프를 통한 부드러운 딜레이 큐 드레인 보장
     function animateVideoDelayDrain() {
@@ -2235,9 +2239,6 @@
             if (canvas && canvas.style.display !== 'block') {
                 canvas.style.display = 'block';
                 canvas.className = 'fit-' + (window.screenFitMode || 'left');
-            }
-            if (typeof showMirrorView === 'function' && window.currentViewMode !== 'mirror') {
-                showMirrorView();
             }
         }
 
@@ -3236,9 +3237,8 @@
         const handleDockHome = (e) => {
             e.stopPropagation();
             if (e.cancelable) e.preventDefault();
-            console.log('⌂ 홈 대시보드 전환 및 스마트폰 HOME 키 전송');
+            console.log('⌂ 홈 대시보드 뷰 전환');
             showDashboardView();
-            window.mMirror.sendControl({ type: 'key', key: 'HOME' });
             btnDockHome.style.transform = 'scale(0.9)';
             setTimeout(() => { btnDockHome.style.transform = ''; }, 150);
         };
@@ -3773,8 +3773,8 @@
         const enabled = (mode === 'web');
         isAudioStreamingActive = enabled;
         if (enabled) {
-            const savedDelay = parseInt(localStorage.getItem('mmirror_video_delay') || '180', 10);
-            setVideoDelay(savedDelay > 0 ? savedDelay : 180);
+            const savedDelay = parseInt(localStorage.getItem('mmirror_video_delay') || '0', 10);
+            setVideoDelay(savedDelay >= 0 ? savedDelay : 0);
         } else {
             setVideoDelay(0);
         }

@@ -141,6 +141,9 @@
     viewportContainer.addEventListener('touchstart', (e) => {
         if (isDashboardEvent(e)) return;
         e.preventDefault();
+        if (typeof window.flushVideoDelayQueue === 'function') {
+            window.flushVideoDelayQueue();
+        }
         if (window.resetUiHideTimer) window.resetUiHideTimer();
         if (e.changedTouches[0] && e.changedTouches[0].clientY < 40) {
             if (window.showUiControls) window.showUiControls();
@@ -363,6 +366,9 @@
     viewportContainer.addEventListener('mousedown', (e) => {
         if (isDashboardEvent(e)) return;
         isMouseDown = true;
+        if (typeof window.flushVideoDelayQueue === 'function') {
+            window.flushVideoDelayQueue();
+        }
         const coords = getNormalizedCoords(e.clientX, e.clientY);
         if (coords) {
             sendControl({
