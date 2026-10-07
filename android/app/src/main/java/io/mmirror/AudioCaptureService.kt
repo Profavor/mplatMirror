@@ -45,26 +45,29 @@ class AudioCaptureService(private val mediaProjection: MediaProjection) {
                 .build()
 
             val minBufferSize = AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL_CONFIG, AUDIO_FORMAT)
-            val bufferSize = (minBufferSize * 2).coerceAtLeast(4096)
+            val internalBufferSize = (minBufferSize * 4).coerceAtLeast(32768)
 
             audioRecord = AudioRecord.Builder()
                 .setAudioPlaybackCaptureConfig(config)
                 .setAudioFormat(audioFormat)
-                .setBufferSizeInBytes(bufferSize)
+                .setBufferSizeInBytes(internalBufferSize)
                 .build()
 
             audioRecord?.startRecording()
             isRecording = true
 
             recordingThread = Thread({
-                val buffer = ByteArray(bufferSize)
-                AppLogger.i(TAG, "🔊 Audio capture loop started (48kHz Stereo 16-bit PCM)")
+                // 20ms 표준 청크: 48,000Hz * 0.02s = 960 스테레오 샘플 = 3,840 바이트
+                val chunkSamples = 960
+                val chunkBytes = chunkSamples * 2 * 2 // 2채널 * 16비트(2바이트) = 3840바이트
+                val chunkBuffer = ByteArray(chunkBytes)
+                AppLogger.i(TAG, "🔊 Audio capture loop started (48kHz Stereo 16-bit PCM, 20ms/$chunkBytes bytes per packet)")
 
                 while (isRecording) {
-                    val bytesRead = audioRecord?.read(buffer, 0, buffer.size) ?: -1
+                    val bytesRead = audioRecord?.read(chunkBuffer, 0, chunkBytes, AudioRecord.READ_BLOCKING) ?: -1
                     if (bytesRead > 0) {
-                        MediaProjectionService.instance?.sendWebRtcAudio(buffer, bytesRead)
-                    } else {
+                        MediaProjectionService.instance?.sendWebRtcAudio(chunkBuffer, bytesRead)
+                    } else if (bytesRead < 0) {
                         try {
                             Thread.sleep(10)
                         } catch (_: InterruptedException) {

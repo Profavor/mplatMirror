@@ -53,6 +53,7 @@ class WebRtcStreamer(
 
     private var peerConnection: PeerConnection? = null
     private var dataChannel: DataChannel? = null
+    private var audioDataChannel: DataChannel? = null
     private val pendingRemoteCandidates = mutableListOf<IceCandidate>()
 
     private val okHttpClient = OkHttpClient.Builder()
@@ -623,6 +624,14 @@ class WebRtcStreamer(
         val dc = pc.createDataChannel("control", dcInit)
         setupDataChannel(dc)
 
+        // 오디오 전용 DataChannel (비디오 프레임과 완벽 분리된 독립 SCTP 스트림, 무지연 UDP 모드)
+        val audioDcInit = DataChannel.Init().apply {
+            ordered = false
+            maxRetransmits = 0
+        }
+        val aDc = pc.createDataChannel("audio", audioDcInit)
+        setupAudioDataChannel(aDc)
+
         // WebRTC 표준 MediaConstraints (레거시 옵션 제거)
         val sdpConstraints = MediaConstraints()
 
@@ -686,6 +695,17 @@ class WebRtcStreamer(
                 val text = String(bytes, Charsets.UTF_8)
                 handleControlMessage(text)
             }
+        })
+    }
+
+    private fun setupAudioDataChannel(dc: DataChannel) {
+        audioDataChannel = dc
+        dc.registerObserver(object : DataChannel.Observer {
+            override fun onBufferedAmountChange(previousAmount: Long) {}
+            override fun onStateChange() {
+                AppLogger.i(TAG, "🔊 Audio DataChannel State changed: ${dc.state()}")
+            }
+            override fun onMessage(buffer: DataChannel.Buffer) {}
         })
     }
 
@@ -1177,6 +1197,11 @@ class WebRtcStreamer(
         dataChannel = null
 
         try {
+            audioDataChannel?.close()
+        } catch (_: Exception) {}
+        audioDataChannel = null
+
+        try {
             peerConnection?.close()
         } catch (_: Exception) {}
         peerConnection = null
@@ -1285,9 +1310,17 @@ class WebRtcStreamer(
     }
 
     fun sendAudio(data: ByteArray, length: Int) {
-        val dc = dataChannel ?: return
+        // 1순위: 비디오 트래픽과 완전 격리된 오디오 전용 DataChannel (무지연 비차단 스트림)
+        // 2순위: 레거시 단일 control DataChannel
+        val dc = if (audioDataChannel?.state() == DataChannel.State.OPEN) {
+            audioDataChannel
+        } else {
+            dataChannel
+        } ?: return
+
         if (dc.state() != DataChannel.State.OPEN) return
-        if (dc.bufferedAmount() > 64 * 1024L) return // DataChannel 큐 과적체 시 프레임 드롭하여 버퍼 팽창 방지
+        // 20ms 청크(3.8KB)는 매우 작으므로, 비디오 순간 버스트(60KB)로 인해 오디오가 드롭되지 않도록 임계값을 512KB로 상향 보호
+        if (dc.bufferedAmount() > 512 * 1024L) return
         try {
             val packet = ByteArray(1 + length)
             packet[0] = 0x02 // PKT_TYPE_AUDIO

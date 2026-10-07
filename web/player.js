@@ -199,16 +199,27 @@
     const PKT_TYPE_AUDIO = 0x02; // Raw PCM Audio (48000Hz, 16bit Stereo)
     const PKT_TYPE_CONFIG = 0x03; // Metadata (Width, Height, FPS, etc.)
     const PKT_TYPE_GPS = 0x04;    // Realtime GPS
-    const CURRENT_WEB_VERSION = '1.3.6';
+    const CURRENT_WEB_VERSION = '1.3.7';
 
-    // 오디오 및 A/V 싱크 제어 상태 변수
+    // 오디오 및 A/V 싱크 제어 상태 변수 (100ms 지터 링 버퍼 엔진)
     let audioCtx = null;
     let audioGainNode = null;
+    let audioScriptNode = null;
+    let audioDummyOsc = null;
     let audioGainLevel = 1.0;
-    let audioNextPlayTime = 0;
     let isAudioStreamingActive = false; // 기본값: false (차량 블루투스 직결 모드)
     let videoDelayMs = parseInt(localStorage.getItem('mmirror_video_delay') || '0', 10);
     let videoDelayQueue = []; // A/V 싱크 지연 버퍼 큐 [{ bytes, isKeyFrame, arrivalTime }]
+    let webrtcAudioDataChannel = null;
+
+    // 100ms 지터 링 버퍼 (Jitter Ring Buffer) 상태
+    const PCM_RING_CAPACITY = 96000; // 48kHz 스테레오 2.0초 완충 용량
+    const pcmRingBufferL = new Float32Array(PCM_RING_CAPACITY);
+    const pcmRingBufferR = new Float32Array(PCM_RING_CAPACITY);
+    let pcmRingWritePos = 0;
+    let pcmRingReadPos = 0;
+    let pcmRingAvailable = 0;
+    let isPcmBuffering = true; // 언더런 방지 프리버퍼링 상태 플래그
 
     // [미디어 세션 및 오디오 격리 방어 엔진]
     // 테슬라 브라우저가 화면 미러링 시작 시 미디어 소스를 '웹'으로 전환하여
@@ -801,6 +812,17 @@
             webrtcDataChannel = null;
         }
 
+        if (webrtcAudioDataChannel) {
+            try {
+                webrtcAudioDataChannel.onopen = null;
+                webrtcAudioDataChannel.onclose = null;
+                webrtcAudioDataChannel.onerror = null;
+                webrtcAudioDataChannel.onmessage = null;
+                webrtcAudioDataChannel.close();
+            } catch (_) {}
+            webrtcAudioDataChannel = null;
+        }
+
         if (peerConnection) {
             try {
                 peerConnection.onconnectionstatechange = null;
@@ -1375,6 +1397,16 @@
             } catch (_) {}
             webrtcDataChannel = null;
         }
+        if (webrtcAudioDataChannel) {
+            try {
+                webrtcAudioDataChannel.onopen = null;
+                webrtcAudioDataChannel.onclose = null;
+                webrtcAudioDataChannel.onerror = null;
+                webrtcAudioDataChannel.onmessage = null;
+                webrtcAudioDataChannel.close();
+            } catch (_) {}
+            webrtcAudioDataChannel = null;
+        }
         if (activeTrackReader) {
             try { activeTrackReader.cancel(); } catch (_) {}
             activeTrackReader = null;
@@ -1522,7 +1554,11 @@
 
         peerConnection.ondatachannel = (event) => {
             console.log('💬 [WEBRTC] DataChannel received from phone:', event.channel.label);
-            setupDataChannel(event.channel);
+            if (event.channel.label === 'audio') {
+                setupAudioDataChannel(event.channel);
+            } else {
+                setupDataChannel(event.channel);
+            }
         };
     }
 
@@ -1892,6 +1928,32 @@
                         }
                     }
                 } catch (_) {}
+            }
+        };
+    }
+
+    function setupAudioDataChannel(channel) {
+        webrtcAudioDataChannel = channel;
+        webrtcAudioDataChannel.binaryType = 'arraybuffer';
+        webrtcAudioDataChannel.onopen = () => {
+            console.log('🔊 [WEBRTC] Dedicated Audio DataChannel OPEN! (Unordered, 0-retransmit UDP)');
+        };
+        webrtcAudioDataChannel.onclose = () => {
+            console.log('🔊 [WEBRTC] Dedicated Audio DataChannel CLOSED');
+            webrtcAudioDataChannel = null;
+        };
+        webrtcAudioDataChannel.onerror = (err) => {
+            console.warn('🔊 [WEBRTC] Dedicated Audio DataChannel ERROR:', err);
+        };
+        webrtcAudioDataChannel.onmessage = (event) => {
+            if (event.data instanceof ArrayBuffer) {
+                const view = new DataView(event.data);
+                const firstByte = view.getUint8(0);
+                if (firstByte === PKT_TYPE_AUDIO) {
+                    playPcmAudio(event.data.slice(1));
+                } else {
+                    playPcmAudio(event.data);
+                }
             }
         };
     }
@@ -3502,7 +3564,7 @@
         });
     }
 
-    // --- Web Audio 시스템 & PCM 48kHz 스테레오 재생 엔진 ---
+    // --- Web Audio 시스템 & PCM 48kHz 스테레오 100ms 지터 링 버퍼 엔진 ---
     function initAudioContext() {
         if (!audioCtx) {
             const AudioContextClass = window.AudioContext || window.webkitAudioContext;
@@ -3511,7 +3573,27 @@
                 audioGainNode = audioCtx.createGain();
                 audioGainNode.gain.value = audioGainLevel;
                 audioGainNode.connect(audioCtx.destination);
-                console.log('🔊 [AUDIO] Web Audio Context 및 GainNode 초기화 완료 (sampleRate=48000)');
+
+                // 2048 샘플 크기 (~42.6ms @ 48kHz) 연속 오디오 프로세서
+                // 매 패킷마다 일회용 노드를 생성/파괴하던 기존 방식을 버리고,
+                // 하드웨어 사운드카드 클록에 맞춰 링 버퍼에서 실시간 추출하는 연속 스트리밍 엔진 구축
+                try {
+                    audioScriptNode = audioCtx.createScriptProcessor(2048, 1, 2);
+                    audioScriptNode.onaudioprocess = handleAudioProcess;
+
+                    // Chromium 오디오 그래프 절전(Power save/Optimization) 방지를 위한 더미 오실레이터
+                    audioDummyOsc = audioCtx.createOscillator();
+                    const dummyGain = audioCtx.createGain();
+                    dummyGain.gain.value = 0.0;
+                    audioDummyOsc.connect(dummyGain);
+                    dummyGain.connect(audioScriptNode);
+                    audioDummyOsc.start();
+
+                    audioScriptNode.connect(audioGainNode);
+                    console.log('🔊 [AUDIO] Web Audio 100ms 지터 링 버퍼 엔진 초기화 완료 (sampleRate=' + audioCtx.sampleRate + ')');
+                } catch (e) {
+                    console.error('🔊 [AUDIO] ScriptProcessor 초기화 실패:', e);
+                }
             }
         }
         if (audioCtx && audioCtx.state === 'suspended') {
@@ -3521,48 +3603,118 @@
         }
     }
 
+    function handleAudioProcess(e) {
+        const outL = e.outputBuffer.getChannelData(0);
+        const outR = e.outputBuffer.getChannelData(1);
+        const frames = outL.length; // 2048
+
+        if (!isAudioStreamingActive) {
+            outL.fill(0);
+            outR.fill(0);
+            return;
+        }
+
+        // 100ms 프리버퍼 기준치 (48kHz 기준 4800 샘플, 44.1kHz 기준 4410 샘플)
+        const targetPrebuffer = Math.floor((audioCtx ? audioCtx.sampleRate : 48000) * 0.10);
+
+        // 초기 시작 또는 언더런 후 재버퍼링: 100ms 완충될 때까지 부드럽게 무음 출력 대기
+        if (isPcmBuffering) {
+            if (pcmRingAvailable >= targetPrebuffer) {
+                isPcmBuffering = false;
+            } else {
+                outL.fill(0);
+                outR.fill(0);
+                return;
+            }
+        }
+
+        // 버퍼 고갈(Underflow): 남은 샘플을 출력하고 무음 전환 후 100ms 재버퍼링 돌입
+        if (pcmRingAvailable < frames) {
+            for (let i = 0; i < pcmRingAvailable; i++) {
+                outL[i] = pcmRingBufferL[pcmRingReadPos];
+                outR[i] = pcmRingBufferR[pcmRingReadPos];
+                pcmRingReadPos = (pcmRingReadPos + 1) % PCM_RING_CAPACITY;
+            }
+            for (let i = pcmRingAvailable; i < frames; i++) {
+                outL[i] = 0;
+                outR[i] = 0;
+            }
+            pcmRingAvailable = 0;
+            isPcmBuffering = true;
+            return;
+        }
+
+        // 정상 연속 스트리밍: 링 버퍼에서 2048 샘플을 사운드카드 출력 버퍼로 직결 복사
+        for (let i = 0; i < frames; i++) {
+            outL[i] = pcmRingBufferL[pcmRingReadPos];
+            outR[i] = pcmRingBufferR[pcmRingReadPos];
+            pcmRingReadPos = (pcmRingReadPos + 1) % PCM_RING_CAPACITY;
+        }
+        pcmRingAvailable -= frames;
+    }
+
     function playPcmAudio(arrayBuffer) {
         if (!isAudioStreamingActive) return;
-        if (!audioCtx) {
+        if (!audioCtx || !audioScriptNode) {
             initAudioContext();
             if (!audioCtx) return;
         }
         if (audioCtx.state === 'suspended') {
             audioCtx.resume().catch(() => {});
         }
-        if (audioCtx.state !== 'running') return;
 
-        // 16-bit PCM Stereo (Interleaved L/R)
+        // 16-bit PCM Stereo (Interleaved L/R, 48000Hz)
         const pcm16 = new Int16Array(arrayBuffer);
-        const numChannels = 2;
-        const numSamples = Math.floor(pcm16.length / numChannels);
-        if (numSamples <= 0) return;
+        const inNumSamples = Math.floor(pcm16.length / 2);
+        if (inNumSamples <= 0) return;
 
-        const audioBuffer = audioCtx.createBuffer(numChannels, numSamples, 48000);
-        const channelLeft = audioBuffer.getChannelData(0);
-        const channelRight = audioBuffer.getChannelData(1);
+        const ctxSampleRate = audioCtx.sampleRate || 48000;
+        const targetPrebuffer = Math.floor(ctxSampleRate * 0.10); // 100ms
+        const maxBufferLimit = Math.floor(ctxSampleRate * 0.25);  // 250ms 한계
 
-        for (let i = 0; i < numSamples; i++) {
-            channelLeft[i] = pcm16[i * 2] / 32768.0;
-            channelRight[i] = pcm16[i * 2 + 1] / 32768.0;
-        }
-
-        const source = audioCtx.createBufferSource();
-        source.buffer = audioBuffer;
-        if (audioGainNode) {
-            source.connect(audioGainNode);
+        if (ctxSampleRate === 48000) {
+            // 48kHz 1:1 직결 입력
+            for (let i = 0; i < inNumSamples; i++) {
+                pcmRingBufferL[pcmRingWritePos] = pcm16[i * 2] / 32768.0;
+                pcmRingBufferR[pcmRingWritePos] = pcm16[i * 2 + 1] / 32768.0;
+                pcmRingWritePos = (pcmRingWritePos + 1) % PCM_RING_CAPACITY;
+            }
+            pcmRingAvailable += inNumSamples;
         } else {
-            source.connect(audioCtx.destination);
+            // 사운드카드 샘플 레이트가 44.1kHz 등 상이한 경우 선형 리샘플링 (피치/속도 왜곡 방지)
+            const ratio = 48000.0 / ctxSampleRate;
+            const outNumSamples = Math.floor(inNumSamples / ratio);
+            for (let i = 0; i < outNumSamples; i++) {
+                const srcIdx = i * ratio;
+                const idx0 = Math.floor(srcIdx);
+                const idx1 = Math.min(idx0 + 1, inNumSamples - 1);
+                const frac = srcIdx - idx0;
+
+                const l0 = pcm16[idx0 * 2] / 32768.0;
+                const l1 = pcm16[idx1 * 2] / 32768.0;
+                const r0 = pcm16[idx0 * 2 + 1] / 32768.0;
+                const r1 = pcm16[idx1 * 2 + 1] / 32768.0;
+
+                pcmRingBufferL[pcmRingWritePos] = l0 + (l1 - l0) * frac;
+                pcmRingBufferR[pcmRingWritePos] = r0 + (r1 - r0) * frac;
+                pcmRingWritePos = (pcmRingWritePos + 1) % PCM_RING_CAPACITY;
+            }
+            pcmRingAvailable += outNumSamples;
         }
 
-        const currentTime = audioCtx.currentTime;
-        // 지터 버퍼 제어 (최소 30ms 버퍼 유지, 250ms 이상 누적 시 리셋)
-        if (audioNextPlayTime < currentTime || audioNextPlayTime > currentTime + 0.25) {
-            audioNextPlayTime = currentTime + 0.04;
+        // 지연 누적(Bufferbloat) 자동 억제: 버퍼가 250ms를 초과하면 초과분을 스킵하여 100ms 타겟 유지
+        if (pcmRingAvailable > maxBufferLimit) {
+            const dropSamples = pcmRingAvailable - targetPrebuffer;
+            pcmRingReadPos = (pcmRingReadPos + dropSamples) % PCM_RING_CAPACITY;
+            pcmRingAvailable = targetPrebuffer;
         }
+    }
 
-        source.start(audioNextPlayTime);
-        audioNextPlayTime += audioBuffer.duration;
+    function flushAudioBuffer() {
+        pcmRingWritePos = 0;
+        pcmRingReadPos = 0;
+        pcmRingAvailable = 0;
+        isPcmBuffering = true;
     }
 
     // 사용자 제스처 이벤트 리스너를 통한 AudioContext 자동 언락 (Autoplay 정책 대응)
@@ -3597,6 +3749,7 @@
             if (tipEl) {
                 tipEl.innerHTML = '🌐 <strong>웹 브라우저 송출 중</strong>: 테슬라 브라우저로 소리가 직접 스트리밍됩니다. (A/V 싱크 지연 조절로 립싱크를 맞출 수 있습니다)';
             }
+            flushAudioBuffer();
             initAudioContext();
         } else {
             if (btnBt) btnBt.classList.add('active');
@@ -3611,6 +3764,7 @@
             if (tipEl) {
                 tipEl.innerHTML = '💡 <strong>안내</strong>: 차량 화면 하단 미디어 소스를 <strong>[블루투스]</strong>로 선택하시면 스마트폰의 티맵 안내와 음악이 차량 스피커로 최고 음질로 즉시 출력됩니다.';
             }
+            flushAudioBuffer();
             flushVideoDelayQueue();
         }
     }
