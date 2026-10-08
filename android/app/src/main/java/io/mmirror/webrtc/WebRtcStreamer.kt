@@ -887,9 +887,7 @@ class WebRtcStreamer(
                 }
                 "request_keyframe" -> {
                     Log.i(TAG, "🔑 Received request_keyframe from DataChannel -> triggering sync frame refresh")
-                    isDroppingGop = false
                     io.mmirror.MediaProjectionService.instance?.requestKeyFrame()
-                    io.mmirror.MediaProjectionService.instance?.scheduleDisplayChangeCheck()
                 }
                 "touch" -> {
                     val action = json.optString("action")
@@ -1195,8 +1193,15 @@ class WebRtcStreamer(
             ScreenDimmerManager.setDimmed(false)
         } catch (_: Exception) {}
 
+        // 테슬라 웹 플레이어에 미러링 종료 신호 즉각 전파 (DataChannel + Signaling)
         try {
-            sendSignaling("""{"type":"stream_stopped"}""")
+            val stopJsonStr = """{"type":"stream_stopped"}"""
+            val stopMsg = ByteBuffer.wrap(stopJsonStr.toByteArray(Charsets.UTF_8))
+            synchronized(sendLock) {
+                dataChannel?.send(DataChannel.Buffer(stopMsg, false))
+            }
+            sendSignaling(stopJsonStr)
+            Thread.sleep(60) // 패킷이 소켓 버퍼를 빠져나가도록 최소 여유 부여
         } catch (_: Exception) {}
 
         try {
@@ -1207,6 +1212,7 @@ class WebRtcStreamer(
         pendingReconnectRunnable = null
         proactiveReconnectRunnable?.let { mainHandler.removeCallbacks(it) }
         proactiveReconnectRunnable = null
+        mainHandler.removeCallbacksAndMessages(null)
         lastOfferTimestamp = 0L
         currentOfferId = ""
         lastRemoteAnswerUfrag = null
@@ -1215,11 +1221,6 @@ class WebRtcStreamer(
         synchronized(pendingRemoteCandidates) {
             pendingRemoteCandidates.clear()
         }
-
-        try {
-            val stopMsg = ByteBuffer.wrap("""{"type":"stream_stopped"}""".toByteArray(Charsets.UTF_8))
-            dataChannel?.send(DataChannel.Buffer(stopMsg, false))
-        } catch (_: Exception) {}
 
         try {
             signalingWs?.close(1000, "Normal stop")
@@ -1304,6 +1305,8 @@ class WebRtcStreamer(
     private var isDroppingGop = false
     @Volatile
     private var gopDropStartTime = 0L
+    @Volatile
+    private var lastGopKeyframeRequestTime = 0L
 
     fun sendVideoPacket(data: ByteArray, isKeyFrame: Boolean) {
         val dc = dataChannel ?: return
@@ -1311,26 +1314,44 @@ class WebRtcStreamer(
         val buffered = dc.bufferedAmount()
         val now = android.os.SystemClock.elapsedRealtime()
 
-        // 1. 소켓 버퍼가 512KB 이상 적체된 경우 네트워크 혼잡으로 판단하여 GOP 드롭 모드 진입
-        if (buffered > 512 * 1024L) {
+        // 1. 소켓 버퍼 64KB 초과 시 즉각 GOP 드롭 모드 진입 (Rule #3 표준: 지연 누적 및 PONG 기아 원천 차단)
+        val enterDropThreshold = 64 * 1024L
+        val exitDropThreshold = 32 * 1024L
+
+        if (buffered > enterDropThreshold) {
             if (!isDroppingGop) {
                 isDroppingGop = true
                 gopDropStartTime = now
-                Log.w(TAG, "⚠️ WebRTC DataChannel 버퍼 과적체 (${buffered / 1024}KB) -> GOP 드롭 모드 진입")
+                Log.w(TAG, "⚠️ WebRTC DataChannel 버퍼 과적체 (${buffered / 1024}KB > 64KB) -> 선제적 GOP 드롭 모드 가동")
             }
         }
 
         if (isDroppingGop) {
-            val dropDuration = now - gopDropStartTime
-            if (buffered < 192 * 1024L || dropDuration > 1000L) {
-                // 버퍼가 192KB 이하로 원활하게 배출되었거나 1000ms 경과 시 GOP 드롭 즉시 해제 및 신규 키프레임 요청
-                isDroppingGop = false
-                Log.i(TAG, "✓ WebRTC DataChannel 버퍼 해소 (${buffered / 1024}KB, duration=${dropDuration}ms) -> 정상 전송 재개 및 키프레임 갱신")
-                io.mmirror.MediaProjectionService.instance?.requestKeyFrame()
-            } else if (!isKeyFrame) {
-                // 버퍼 해소 전까지 델타 프레임만 드롭 (신규 키프레임은 항상 통과 허용)
+            if (!isKeyFrame) {
+                // [무결성 보장] 새 키프레임 도착 전까지 델타(P) 프레임 100% 폐기 (참조 끊긴 깨진 프레임 유입 차단)
+                val dropDuration = now - gopDropStartTime
+                if (buffered < exitDropThreshold && (now - lastGopKeyframeRequestTime > 1500L)) {
+                    // 버퍼가 32KB 이하로 안전하게 비워졌을 때만 새 키프레임 동기화 요청
+                    lastGopKeyframeRequestTime = now
+                    Log.i(TAG, "✓ WebRTC 소켓 버퍼 안전 배출 (${buffered / 1024}KB, 경과=${dropDuration}ms) -> 새 키프레임 요청")
+                    io.mmirror.MediaProjectionService.instance?.requestKeyFrame()
+                }
                 return
+            } else {
+                // 키프레임 도착: 버퍼가 여전히 96KB 이상으로 혼잡하면 키프레임도 추가 투입하지 않고 대기
+                if (buffered > 96 * 1024L) {
+                    Log.w(TAG, "⏳ 키프레임 도착했으나 버퍼 적체 (${buffered / 1024}KB) 지속 -> 다음 키프레임까지 드롭 대기")
+                    return
+                }
+                // 버퍼가 안전선 이하일 때만 GOP 드롭 해제 및 키프레임 전송 통과
+                isDroppingGop = false
+                Log.i(TAG, "🎉 정상 키프레임 도착 및 버퍼 안정화 (${buffered / 1024}KB) -> GOP 드롭 해제 및 디코더 동기화")
             }
+        }
+
+        if (data.size > 256 * 1024) {
+            Log.w(TAG, "⚠️ 단일 비디오 패킷 크기 초과 (${data.size} bytes) -> SCTP 파손 방지를 위해 폐기")
+            return
         }
 
         try {
@@ -1338,8 +1359,14 @@ class WebRtcStreamer(
             packet[0] = 0x01 // PKT_TYPE_VIDEO
             System.arraycopy(data, 0, packet, 1, data.size)
             val buffer = DataChannel.Buffer(java.nio.ByteBuffer.wrap(packet), true)
-            synchronized(sendLock) {
+            val sent = synchronized(sendLock) {
                 dc.send(buffer)
+            }
+            if (!sent) {
+                Log.w(TAG, "⚠️ dc.send() false 반환 (SCTP 전송 큐 만충) -> 즉각 GOP 드롭 진입")
+                isDroppingGop = true
+                gopDropStartTime = now
+                io.mmirror.MediaProjectionService.instance?.requestKeyFrame()
             }
         } catch (e: Exception) {
             AppLogger.w(TAG, "⚠️ sendVideoPacket 실패: ${e.message}")

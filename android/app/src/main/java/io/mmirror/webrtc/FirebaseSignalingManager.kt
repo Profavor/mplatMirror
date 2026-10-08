@@ -77,7 +77,13 @@ class FirebaseSignalingManager(
                 .url("$dbBaseUrl.json")
                 .patch(stopJson.toString().toRequestBody(jsonMediaType))
                 .build()
-            client.newCall(putPub).enqueue(EmptyCallback)
+            Thread {
+                try {
+                    client.newCall(putPub).execute().close()
+                } catch (_: Exception) {
+                    client.newCall(putPub).enqueue(EmptyCallback)
+                }
+            }.start()
         } catch (_: Exception) {}
         try {
             sseCall?.cancel()

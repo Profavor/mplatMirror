@@ -199,7 +199,7 @@
     const PKT_TYPE_AUDIO = 0x02; // Raw PCM Audio (48000Hz, 16bit Stereo)
     const PKT_TYPE_CONFIG = 0x03; // Metadata (Width, Height, FPS, etc.)
     const PKT_TYPE_GPS = 0x04;    // Realtime GPS
-    const CURRENT_WEB_VERSION = '1.4.3';
+    const CURRENT_WEB_VERSION = '1.4.4';
 
     // 오디오 및 A/V 싱크 제어 상태 변수 (100ms 지터 링 버퍼 엔진)
     let audioCtx = null;
@@ -671,12 +671,59 @@
         }
         lastWebRtcRecoveryTime = now;
         webRtcRecoveryCount++;
+
+        // Rule #4 준수: 무한 복구 루프 차단 (최대 4회 재시도 후 대기 화면으로 안전 복귀)
+        if (webRtcRecoveryCount >= 4) {
+            console.warn(`🛑 [WEBRTC-RECOVERY] 재연결 한도(4회) 초과 -> 대기 모드로 안전 전환: ${reason}`);
+            webRtcRecoveryCount = 0;
+            resetToInitialScreen('스마트폰 연결이 원활하지 않습니다. 앱에서 [미러링 시작]을 다시 눌러주세요.', true);
+            return;
+        }
+
         console.warn(`🔄 [WEBRTC-RECOVERY] (#${webRtcRecoveryCount}) Self-Healing 무중단 자동 복구 가동: ${reason}`);
 
         statusText.textContent = `🔄 스트림 자동 복구 중... (#${webRtcRecoveryCount})`;
         statusDot.className = 'dot connecting';
 
-        // 디코더는 완전히 파괴하지 않고 상태 리셋만 시도
+        // 1. 좀비 데이터채널 및 먹통된 PeerConnection 즉각 강제 종료 (SCTP 적체 소멸 & 자원 정리)
+        if (webrtcDataChannel) {
+            try {
+                webrtcDataChannel.onopen = null;
+                webrtcDataChannel.onclose = null;
+                webrtcDataChannel.onerror = null;
+                webrtcDataChannel.onmessage = null;
+                webrtcDataChannel.close();
+            } catch (_) {}
+            webrtcDataChannel = null;
+        }
+        if (webrtcAudioDataChannel) {
+            try {
+                webrtcAudioDataChannel.onopen = null;
+                webrtcAudioDataChannel.onclose = null;
+                webrtcAudioDataChannel.onerror = null;
+                webrtcAudioDataChannel.onmessage = null;
+                webrtcAudioDataChannel.close();
+            } catch (_) {}
+            webrtcAudioDataChannel = null;
+        }
+        if (peerConnection) {
+            try {
+                peerConnection.onconnectionstatechange = null;
+                peerConnection.oniceconnectionstatechange = null;
+                peerConnection.onicecandidate = null;
+                peerConnection.ontrack = null;
+                peerConnection.ondatachannel = null;
+                peerConnection.close();
+            } catch (_) {}
+            peerConnection = null;
+        }
+        stopPingPong();
+        isWebRtcConnected = false;
+
+        // 2. 신규 RTCPeerConnection 사전 초기화 (새 Offer 수신 준비)
+        setupPeerConnection();
+
+        // 3. 디코더 상태 리셋
         hasReceivedFirstKeyFrame = false;
         try {
             if (videoDecoder && videoDecoder.state !== 'closed') {
@@ -684,8 +731,16 @@
             }
         } catch (_) {}
 
-        // 통합 시그널링으로 reconnect 전달
+        // 4. 통합 시그널링으로 ready 및 reconnect 전달 -> 스마트폰이 새 세션 Offer 생성
+        sendSignalingMessage({ type: 'ready' });
         sendSignalingMessage({ type: 'reconnect', reason: reason });
+    }
+
+    function stopWatchdog() {
+        if (watchdogInterval) {
+            clearInterval(watchdogInterval);
+            watchdogInterval = null;
+        }
     }
 
     function startWatchdog() {
@@ -693,8 +748,19 @@
         watchdogInterval = setInterval(() => {
             const now = performance.now();
 
+            // 퍼블리셔가 오프라인이거나 스트리밍 세션이 완전히 비활성인 경우 대기
+            if (isFirebaseSignaling && !publisherOnline && !isWebRtcConnected && !hasEverReceivedWebRtcVideo) {
+                return;
+            }
+
             // [A] WebRTC 로컬 P2P 직결 모드 전용 Self-Healing 워치독
             if (isWebRtcConnected || hasEverReceivedWebRtcVideo) {
+                // 퍼블리셔가 이미 오프라인으로 전환된 경우 즉시 세션 리셋
+                if (isFirebaseSignaling && !publisherOnline) {
+                    console.log('⚡ [WATCHDOG-WebRTC] 퍼블리셔 오프라인 감지 -> 세션 정리 및 대기 화면 복구');
+                    resetToInitialScreen('스마트폰 미러링 종료 감지', true);
+                    return;
+                }
                 const rtcIdleMs = now - lastWebRtcFrameTime;
                 const packetIdleMs = now - lastVideoPacketTime;
                 const pongIdleMs = now - lastPongReceivedTime;
@@ -725,11 +791,20 @@
                     return;
                 }
 
-                // 상태 1: DataChannel이 정상 OPEN되어 있는 경우
+                // [최우선] 전송로(PC/ICE) 영구 실패 감지
+                // pcState === 'failed'인 경우 dcState가 아직 브라우저 내부적으로 'open'으로 남아있더라도 하부 UDP 전송로는 완전히 사망한 상태임
+                const isTransportDead = pcState === 'failed' || iceState === 'failed' || dcState === 'closed';
+                if (isTransportDead) {
+                    console.warn(`⚡ [WATCHDOG-WebRTC] 전송로 영구 단절 감지! (PC: ${pcState}, ICE: ${iceState}, DC: ${dcState}) -> 기존 채널 완전 종료 및 즉각 재협상`);
+                    triggerWebRtcAutoRecovery(`전송로 단절 감지 (PC: ${pcState}, ICE: ${iceState}, DC: ${dcState})`);
+                    return;
+                }
+
+                // [차선] DataChannel이 정상 OPEN되어 있으나 패킷/PONG이 장시간 두절된 좀비 상태
                 if (dcState === 'open') {
-                    // 패킷 수신이 장시간(12초 이상) 두절되었거나, PONG 응답이 8초 이상 없을 경우 -> 좀비 DataChannel로 판정하고 자동 복구
-                    if (packetIdleMs >= 12000 || (pongIdleMs >= 8000 && packetIdleMs >= 6000)) {
-                        console.warn(`⚡ [WATCHDOG-WebRTC] 좀비 DataChannel 감지! (패킷: ${Math.round(packetIdleMs)}ms, PONG: ${Math.round(pongIdleMs)}ms 전) -> Self-Healing 재협상 실행`);
+                    // 패킷 수신이 장시간(12초 이상) 두절되었거나, PONG 응답이 10초 이상 없을 경우 -> 좀비 DataChannel로 판정하고 채널 종료 & 신규 재연결
+                    if (packetIdleMs >= 12000 || (pongIdleMs >= 10000 && packetIdleMs >= 6000)) {
+                        console.warn(`⚡ [WATCHDOG-WebRTC] 좀비 DataChannel 감지! (패킷: ${Math.round(packetIdleMs)}ms, PONG: ${Math.round(pongIdleMs)}ms 전) -> 기존 채널 강제 종료 및 신규 재연결`);
                         triggerWebRtcAutoRecovery(`좀비 DataChannel 감지 (패킷 ${Math.round(packetIdleMs/1000)}초 지연)`);
                         return;
                     }
@@ -742,15 +817,7 @@
                         }
                         requestKeyframe();
                     }
-                    return; // DataChannel이 열려있고 지연이 12초 미만인 동안에는 세션을 유지함
-                }
-
-                // 상태 2: DataChannel이 닫혔거나, WebRTC 연결 자체가 실패(failed/closed)한 경우
-                // disconnected는 일시적 RF 지터일 수 있으므로 failed 또는 closed 상태에서만 즉각 복구 가동
-                const isTransportDead = pcState === 'failed' || iceState === 'failed' || dcState === 'closed';
-                if (isTransportDead) {
-                    console.warn(`⚡ [WATCHDOG-WebRTC] 전송로 영구 단절 감지! (DC: ${dcState}, PC: ${pcState}, ICE: ${iceState}) -> Self-Healing 재협상 실행`);
-                    triggerWebRtcAutoRecovery(`전송로 단절 감지 (DC: ${dcState}, PC: ${pcState})`);
+                    return; // DataChannel이 열려있고 지연이 허용 한도 이내인 동안에는 세션을 안정적으로 유지함
                 }
                 return;
             }
@@ -918,6 +985,7 @@
         publisherOnline = false;
         publisherOnlineTimestamp = 0;
 
+        stopWatchdog();
         stopWebRtcStats();
         stopPingPong();
 
@@ -1060,6 +1128,8 @@
                     publisherOnline = true;
                     publisherOnlineTimestamp = val.timestamp || Date.now();
                     lastHandledOfferTimestamp = 0;
+                    webRtcRecoveryCount = 0;
+                    startWatchdog();
                     statusText.textContent = '스마트폰 연결 협상 중...';
                     statusDot.className = 'dot connecting';
                     // 폰에 테슬라 뷰어 준비 완료 즉시 전송
@@ -1299,9 +1369,7 @@
                     sendSignalingMessage({ type: 'ready' });
                 } else if (msg.type === 'stream_stopped') {
                     console.log('📡 [WEBRTC] Received stream_stopped from signaling:', msg.reason);
-                    if (!isWebRtcConnected) {
-                        resetToInitialScreen('스마트폰 미러링이 종료되었습니다.');
-                    }
+                    resetToInitialScreen('스마트폰 미러링이 종료되었습니다.', true);
                 }
             } catch (e) {
                 console.warn('WebRTC signal message parse error:', e);
@@ -1995,7 +2063,7 @@
                     }
                     if (data.type === 'stream_stopped') {
                         console.log('💬 [WEBRTC] Received stream_stopped via DataChannel');
-                        resetToInitialScreen('스마트폰 미러링이 종료되었습니다.');
+                        resetToInitialScreen('스마트폰 미러링이 종료되었습니다.', true);
                         return;
                     }
                     if (data.type === 'screen_power_changed' && typeof data.on === 'boolean') {

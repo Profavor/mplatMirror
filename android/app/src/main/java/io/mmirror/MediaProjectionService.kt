@@ -699,6 +699,9 @@ class MediaProjectionService : Service() {
     private var lastSyncFrameTime = 0L
 
     @Volatile
+    private var lastEncoderRestartTime = 0L
+
+    @Volatile
     private var lastIFrameBuffer: ByteArray? = null
 
     @Volatile
@@ -706,7 +709,7 @@ class MediaProjectionService : Service() {
 
     fun requestKeyFrame(immediateCached: Boolean = false) {
         val now = android.os.SystemClock.elapsedRealtime()
-        if (now - lastSyncFrameTime < 1000L) return // 1초 쿨타임으로 폭주 방지
+        if (now - lastSyncFrameTime < 2000L) return // 2.0초 쿨타임으로 키프레임 폭주 및 버퍼 과적체 원천 방지
         if (immediateCached) {
             val lastIFrame = lastIFrameBuffer
             if (lastIFrame != null && (now - lastFrameProducedTime > 1000L)) {
@@ -719,7 +722,7 @@ class MediaProjectionService : Service() {
 
     private fun requestSyncFrame() {
         val now = android.os.SystemClock.elapsedRealtime()
-        if (now - lastSyncFrameTime < 1000L) return // 1000ms 쿨타임으로 폭주 방지
+        if (now - lastSyncFrameTime < 2000L) return // 2.0초 쿨타임으로 폭주 방지
         lastSyncFrameTime = now
         try {
             val params = Bundle().apply {
@@ -736,13 +739,13 @@ class MediaProjectionService : Service() {
         try {
             val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, screenWidth, screenHeight).apply {
                 setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-                setInteger(MediaFormat.KEY_BIT_RATE, 3_200_000) // 3.2 Mbps (720p 60 FPS 최적 화질)
+                setInteger(MediaFormat.KEY_BIT_RATE, 3_000_000) // 3.0 Mbps CBR (Rule #3 표준)
                 setInteger(MediaFormat.KEY_FRAME_RATE, 60) // 60 FPS 부드러운 초고속 송출
-                setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1) // 1초마다 I-프레임 (참조 프레임 단절 방지 및 초고속 자가치유)
+                setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 2) // 2초마다 I-프레임 (대역폭 스파이크 50% 절감 & on-demand 키프레임 결합)
                 // Baseline Profile: B-프레임 100% 제거 -> 인코더/디코더 버퍼링 0ms
                 setInteger(MediaFormat.KEY_PROFILE, MediaCodecInfo.CodecProfileLevel.AVCProfileBaseline)
                 setInteger(MediaFormat.KEY_LEVEL, MediaCodecInfo.CodecProfileLevel.AVCLevel41)
-                // CBR(고정 비트레이트) 모드 우선 적용 -> 빠른 화면 전환 시 급격한 대역폭 버스트 및 Wi-Fi 지연 누적 원천 차단
+                // CBR(고정 비트레이트) 모드 엄격 적용 -> 화면 급변 시 10~15 Mbps 대역폭 폭증 및 Wi-Fi 지연 누적 원천 차단
                 try {
                     setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)
                 } catch (_: Exception) {
@@ -750,6 +753,10 @@ class MediaProjectionService : Service() {
                         setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR)
                     } catch (_: Exception) {}
                 }
+                // 초저지연 최소 복잡도 설정
+                try {
+                    setInteger(MediaFormat.KEY_COMPLEXITY, 0)
+                } catch (_: Exception) {}
                 // 정적 화면 시 프레임 단절 방지: 100ms(10 FPS)마다 이전 프레임 자동 반복 송출
                 try {
                     setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, 100_000L)
@@ -893,9 +900,7 @@ class MediaProjectionService : Service() {
 
     fun scheduleDisplayChangeCheck() {
         displayChangeHandler.removeCallbacks(displayChangeRunnable)
-        displayChangeHandler.postDelayed(displayChangeRunnable, 200L) // 1차 빠른 반영
-        displayChangeHandler.postDelayed(displayChangeRunnable, 500L) // 2차 힌지 전환 완료 시점
-        displayChangeHandler.postDelayed(displayChangeRunnable, 900L) // 3차 안정화
+        displayChangeHandler.postDelayed(displayChangeRunnable, 350L) // 단일 350ms 정밀 디바운스로 안정화 대기
     }
 
     private fun computeScreenDimensions(): Triple<Int, Int, Int> {
@@ -938,15 +943,22 @@ class MediaProjectionService : Service() {
         val dm = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
         displayListener = object : DisplayManager.DisplayListener {
             override fun onDisplayAdded(displayId: Int) {
-                AppLogger.i(TAG, "📱 외부 디스플레이 연결됨 (displayId=$displayId)")
-                scheduleDisplayChangeCheck()
+                if (displayId == android.view.Display.DEFAULT_DISPLAY) {
+                    AppLogger.i(TAG, "📱 기본 디스플레이 연결됨 (displayId=$displayId)")
+                    scheduleDisplayChangeCheck()
+                }
             }
             override fun onDisplayRemoved(displayId: Int) {
-                AppLogger.i(TAG, "📱 디스플레이 제거됨 (displayId=$displayId)")
-                scheduleDisplayChangeCheck()
+                if (displayId == android.view.Display.DEFAULT_DISPLAY) {
+                    AppLogger.i(TAG, "📱 기본 디스플레이 제거됨 (displayId=$displayId)")
+                    scheduleDisplayChangeCheck()
+                }
             }
             override fun onDisplayChanged(displayId: Int) {
-                scheduleDisplayChangeCheck()
+                // 가상 디스플레이(virtualDisplayId)의 자체 변경 이벤트는 무시하고 오직 기본 화면 변경만 수신 (재시작 폭풍 방지)
+                if (displayId == android.view.Display.DEFAULT_DISPLAY) {
+                    scheduleDisplayChangeCheck()
+                }
             }
         }
         dm.registerDisplayListener(displayListener, android.os.Handler(android.os.Looper.getMainLooper()))
@@ -973,6 +985,13 @@ class MediaProjectionService : Service() {
     private fun checkAndApplyDisplayChanges() {
         if (!isStreaming) return
 
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (now - lastEncoderRestartTime < 1500L) {
+            // 인코더 재시작 쿨다운(1.5초) 진행 중이면 지연 재확인 예약
+            scheduleDisplayChangeCheck()
+            return
+        }
+
         val (newW, newH, newDensity) = computeScreenDimensions()
         val diffW = kotlin.math.abs(newW - screenWidth)
         val diffH = kotlin.math.abs(newH - screenHeight)
@@ -997,6 +1016,7 @@ class MediaProjectionService : Service() {
 
     private fun restartVideoEncoder() {
         try {
+            lastEncoderRestartTime = android.os.SystemClock.elapsedRealtime()
             isStreaming = false
             encodingThread?.interrupt()
             encodingThread = null
@@ -1019,16 +1039,23 @@ class MediaProjectionService : Service() {
             spsPpsBuffer = null
             lastIFrameBuffer = null
 
-            // 4. 새로운 해상도 포맷으로 H.264 하드웨어 인코더 생성
+            // 4. 새로운 해상도 포맷으로 H.264 하드웨어 인코더 생성 (엄격한 3.0 Mbps CBR 적용)
             val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, screenWidth, screenHeight).apply {
                 setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-                setInteger(MediaFormat.KEY_BIT_RATE, 3_500_000)
+                setInteger(MediaFormat.KEY_BIT_RATE, 3_000_000) // 3.0 Mbps CBR (Rule #3 표준)
                 setInteger(MediaFormat.KEY_FRAME_RATE, 60)
-                setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
+                setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 2) // 2초 주기 I-프레임
                 setInteger(MediaFormat.KEY_PROFILE, MediaCodecInfo.CodecProfileLevel.AVCProfileBaseline)
                 setInteger(MediaFormat.KEY_LEVEL, MediaCodecInfo.CodecProfileLevel.AVCLevel41)
                 try {
-                    setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR)
+                    setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)
+                } catch (_: Exception) {
+                    try {
+                        setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR)
+                    } catch (_: Exception) {}
+                }
+                try {
+                    setInteger(MediaFormat.KEY_COMPLEXITY, 0)
                 } catch (_: Exception) {}
                 try {
                     setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, 100_000L)
