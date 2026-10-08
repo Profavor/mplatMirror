@@ -179,23 +179,28 @@
 
         <h2>2. 접근성 서비스(Accessibility API) 사용 및 보호 정책</h2>
         <p>
-            mplat Mirror는 차량 대화면에서 스마트폰을 원격 제어할 수 있도록 Android <code>AccessibilityService</code> API를 사용합니다.
+            mplat Mirror는 차량 대화면에서 스마트폰을 원격 제어할 수 있도록 Android <code>AccessibilityService</code> API를 사용합니다. 본 앱은 Google Play 개발자 프로그램 정책(Accessibility API 사용 가이드라인)을 엄격히 준수합니다.
         </p>
         <ul>
-            <li><strong>사용 목적</strong>: 차량 브라우저 화면에서 전달되는 터치 및 제스처(탭, 롱프레스, 스와이프)를 스마트폰의 대응 좌표에 주입하여 원격 조작을 실행합니다.</li>
-            <li><strong>데이터 미수집 보장</strong>: 본 앱은 <code>canRetrieveWindowContent="false"</code>로 설정되어 있으며, 화면 상의 텍스트, 비밀번호, 카드번호, 메시지 내용, 키보드 입력 등 <strong>어떠한 화면 콘텐츠나 개인 입력 데이터도 읽거나 수집, 저장, 외부로 전송하지 않습니다.</strong></li>
-            <li><strong>선택 권한</strong>: 접근성 권한을 허용하지 않더라도 화면 미러링은 정상 이용 가능합니다 (단, 차량 화면에서의 터치 조작만 비활성화됨).</li>
+            <li><strong>사용 목적</strong>:
+                <ol style="margin-top: 6px; padding-left: 18px;">
+                    <li>차량 브라우저 화면에서 전달되는 터치, 스와이프, 스크롤 제스처를 스마트폰의 대응 좌표에 실시간 주입 (Dispatch Gestures)</li>
+                    <li>사용자가 웹 가상 키보드로 목적지나 검색어를 입력하여 [전송]을 누른 경우, 스마트폰의 활성화된 검색창(EditText)에 해당 텍스트를 단방향으로 주입</li>
+                </ol>
+            </li>
+            <li><strong>데이터 미수집 및 프라이버시 보장</strong>: 본 앱은 키보드 입력창 지원을 위해 <code>canRetrieveWindowContent="true"</code>로 지정되어 있으나, 오직 사용자가 지시한 텍스트 주입 대상 입력 필드를 식별하는 용도로만 동작합니다. 화면 상의 기존 텍스트, 비밀번호, 결제/금융 정보, 개인 메시지 내용 등 <strong>어떠한 화면 콘텐츠나 개인 입력 데이터도 읽거나 감시, 수집, 저장, 외부로 전송하지 않습니다.</strong></li>
+            <li><strong>선택 권한</strong>: 접근성 권한을 허용하지 않더라도 화면 미러링(보기)은 100% 정상 이용 가능합니다 (단, 차량 화면에서의 터치 조작만 비활성화됨).</li>
         </ul>
 
         <h2>3. 화면 캡처 및 내부 오디오 녹음 (MediaProjection API)</h2>
         <ul>
-            <li><strong>사용 목적</strong>: 스마트폰 화면 및 내부 미디어 오디오를 차량 브라우저로 실시간 무선 스트리밍(WebRTC)하기 위해 사용됩니다.</li>
-            <li><strong>데이터 보호</strong>: 캡처된 화면 및 사운드는 외부 인터넷망으로 업로드되지 않으며, 스마트폰 모바일 핫스팟으로 연결된 차량 브라우저 간의 <strong>순수 로컬 Wi-Fi 서브넷(P2P 직결)</strong>으로만 안전하게 전송됩니다.</li>
+            <li><strong>사용 목적</strong>: 스마트폰 화면 및 내부 미디어 재생 오디오를 차량 브라우저로 실시간 무선 스트리밍(WebRTC)하기 위해 사용됩니다. (외부 마이크 음성 도청 없음)</li>
+            <li><strong>데이터 보호</strong>: 캡처된 화면 및 사운드는 외부 인터넷망으로 업로드되지 않으며, 스마트폰 모바일 핫스팟으로 연결된 차량 브라우저 간의 <strong>순수 로컬 Wi-Fi 서브넷(UDP P2P 직결)</strong>으로만 안전하게 전송됩니다 (모바일 데이터 0MB 소모 원칙).</li>
         </ul>
 
-        <h2>4. 개인정보의 제3자 제공 및 위탁</h2>
+        <h2>4. 개인정보의 제3자 제공, 위탁 및 국외 이전</h2>
         <p>
-            운영자는 이용자의 어떠한 개인정보도 제3자에게 제공하거나 판매, 공유, 위탁하지 않습니다.
+            운영자는 이용자의 어떠한 개인정보도 제3자에게 제공하거나 판매, 공유, 위탁하지 않습니다. WebRTC 연결 수립을 위해 Firebase Realtime Database를 통해 교환되는 시그널링 데이터(SDP/ICE 후보)는 P2P 직결 연결 즉시 영구 파기되는 휘발성 기술 데이터입니다.
         </p>
 
         <h2>5. 개인정보의 보유 및 파기 절차</h2>
@@ -206,30 +211,38 @@
 
         <h2>6. 정보주체의 권리 및 행사 방법</h2>
         <ul>
-            <li>이용자는 스마트폰의 <code>[설정] &gt; [애플리케이션] &gt; [mplat Mirror] &gt; [권한]</code> 메뉴에서 언제든지 위치 권한, 알림 권한, 접근성 권한을 철회하거나 변경할 수 있습니다.</li>
+            <li>이용자는 스마트폰의 <code>[설정] &gt; [애플리케이션] &gt; [mplat Mirror] &gt; [권한]</code> 및 <code>[설정] &gt; [접근성] &gt; [설치된 앱]</code> 메뉴에서 언제든지 위치 권한, 알림 권한, 접근성 권한을 철회하거나 변경할 수 있습니다.</li>
             <li>앱 삭제 시 기기 내의 모든 설정값 및 트립 데이터가 즉시 영구 삭제됩니다.</li>
         </ul>
 
+        <h2>7. 대한민국 도로교통법 준수 및 안전 운전 고지</h2>
         <div class="warning-box">
-            ⚖️ <strong>도로교통법 준수 및 안전 운전 면책 안내</strong><br>
-            대한민국 도로교통법 제49조에 따라 운전 중 영상표시장치를 시청하거나 조작하는 행위는 엄격히 금지되어 있습니다. 본 서비스는 차량 정차(P기어) 중 미디어 감상 또는 주행 중 합법적인 내비게이션(지리안내) 목적으로만 제공되며, 안전 운전 의무 위반으로 발생하는 모든 사고의 법적 책임은 운전자 본인에게 있습니다.
+            ⚖️ <strong>도로교통법 제48조 및 제49조 준수 필수 안내</strong><br>
+            1. <strong>합법적 사용 목적</strong>: 본 소프트웨어는 대한민국 도로교통법 제49조(모든 운전자의 준수사항 등) 제1항 제11호 단서 및 동법 시행령 제29조 제1호에 따른 <strong>"지리안내(내비게이션) 또는 교통정보안내 영상"</strong> 표시 목적 및 차량 정차(P기어 또는 신호 대기 정차) 중의 합법적 미디어 감상 편의를 위해 제공됩니다.<br>
+            2. <strong>주행 중 영상 시청 및 조작 금지</strong>: 도로교통법 제49조 제1항 제11호 및 제11호의2에 따라 운전 중 운전자가 볼 수 있는 위치에 일반 영상표시장치를 표시하거나 조작하는 행위는 법률로 엄격히 금지되어 있습니다 (정차 중 또는 합법적 지리안내 조작 제외).<br>
+            3. <strong>안전운전 의무 및 운전자 과실 책임</strong>: 도로교통법 제48조 제1항에 따라 모든 운전자는 차의 장치를 안전하게 조작할 의무가 있으며, 주행 중 전방 주시 태만, 부주의한 화면 조작 또는 영상 시청으로 발생하는 모든 교통사고 및 민·형사상 법적 책임은 전적으로 운전자 본인에게 있습니다.
         </div>
 
-        <h2>7. 상표권 고지 (Trademarks Disclaimer)</h2>
+        <h2>8. 상표권 공정이용 및 비제휴 고지 (Trademarks Disclaimer)</h2>
         <p>
-            'Tesla'는 Tesla, Inc., 'Apple CarPlay'는 Apple Inc., 'TMAP'은 티맵모빌리티(주)의 등록상표입니다. 본 프로젝트(mplat Mirror)는 위 기업들과 어떠한 공식 제휴, 후원, 보증 관계도 없는 독립 서드파티 오픈소스 프로젝트입니다.
+            'Tesla'는 Tesla, Inc., 'Apple' 및 'Apple CarPlay'는 Apple Inc., 'Android' 및 'Google Play'는 Google LLC, 'TMAP'은 티맵모빌리티(주)의 등록상표입니다. 본 프로젝트(mplat Mirror)는 상표법 제90조 및 판례상의 설명적 공정이용(Nominative Fair Use) 원칙에 따라 기기 호환성 및 기능 설명을 위해서만 타사 상표를 참조하며, 위 기업들 및 자동차 제조사와 어떠한 공식 제휴, 후원, 보증 관계도 없는 독립 서드파티 오픈소스 프로젝트입니다.
         </p>
 
-        <h2>8. 개인정보 보호책임자 및 문의처</h2>
+        <h2>9. 무보증(AS-IS) 및 법적 책임의 제한</h2>
+        <p>
+            본 소프트웨어는 오픈소스 규정에 따라 "있는 그대로(AS-IS)" 제공되며, 상품성, 특정 목적 적합성, 무결성에 대한 명시적·묵시적 보증을 일체 제공하지 않습니다. 개발자 및 운영진은 법률이 허용하는 최대 범위 내에서 본 소프트웨어 이용으로 인한 직·간접적 손해, 통신 단절, 차량 고장, 배터리 소모 등에 대해 책임을 부담하지 않습니다.
+        </p>
+
+        <h2>10. 개인정보 보호책임자 및 문의처</h2>
         <p>개인정보 처리와 관련한 문의, 불만 처리, 피해 구제 등은 아래 연락처로 문의해 주시기 바랍니다.</p>
         <ul>
             <li><strong>담당 부서</strong>: mplat Privacy &amp; Security Team</li>
-            <li><strong>이메일</strong>: <a href="mailto:profavor@naver.com" style="color:var(--accent-cyan);">profavor@naver.com</a></li>
+            <li><strong>개인정보 보호책임자 이메일</strong>: <a href="mailto:profavor@naver.com" style="color:var(--accent-cyan);">profavor@naver.com</a></li>
             <li><strong>공식 웹사이트</strong>: <a href="https://mplat-mirror.web.app" style="color:var(--accent-cyan);">https://mplat-mirror.web.app</a></li>
         </ul>
 
         <div class="footer-nav">
-            <span>시행일자: 2026년 10월 2일 (v1.0.4)</span>
+            <span>시행일자: 2026년 10월 8일 (v1.4.2)</span>
             <div>
                 <a href="/">차량 웹 플레이어</a> · 
                 <a href="/download.html">다운로드 안내</a>
