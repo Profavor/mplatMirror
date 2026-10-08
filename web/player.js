@@ -199,7 +199,7 @@
     const PKT_TYPE_AUDIO = 0x02; // Raw PCM Audio (48000Hz, 16bit Stereo)
     const PKT_TYPE_CONFIG = 0x03; // Metadata (Width, Height, FPS, etc.)
     const PKT_TYPE_GPS = 0x04;    // Realtime GPS
-    const CURRENT_WEB_VERSION = '1.4.1';
+    const CURRENT_WEB_VERSION = '1.4.3';
 
     // 오디오 및 A/V 싱크 제어 상태 변수 (100ms 지터 링 버퍼 엔진)
     let audioCtx = null;
