@@ -55,9 +55,24 @@ class DrivingLogManager(private val context: Context) : LocationListener {
         var currentInstance: DrivingLogManager? = null
             private set
 
+        fun getSavedTrips(context: Context): List<JSONObject> {
+            val prefs = context.getSharedPreferences("triplog_prefs", Context.MODE_PRIVATE)
+            val jsonStr = prefs.getString("saved_trips_json", null) ?: return emptyList()
+            val list = mutableListOf<JSONObject>()
+            try {
+                val array = JSONArray(jsonStr)
+                for (i in 0 until array.length()) {
+                    list.add(array.getJSONObject(i))
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Error reading saved trips: ${e.message}")
+            }
+            return list
+        }
+
         fun getTripSummary(context: Context): TripSummary {
             val live = currentInstance
-            if (live != null && live.isTracking) {
+            if (live != null && live.isTracking && live.isPeerConnected) {
                 val distKm = live.totalDistanceMeters / 1000.0
                 val durSec = (System.currentTimeMillis() - live.startTimeMillis) / 1000L
                 val durMin = (durSec / 60).toInt().coerceAtLeast(0)
@@ -67,25 +82,36 @@ class DrivingLogManager(private val context: Context) : LocationListener {
                     durationMin = durMin,
                     avgSpeedKmh = avgSpeed,
                     maxSpeedKmh = live.maxSpeedKmh,
-                    routeDesc = "실시간 GPS 추적 중",
+                    routeDesc = "실시간 주행 중",
                     isLive = true
                 )
             }
 
             val prefs = context.getSharedPreferences("triplog_prefs", Context.MODE_PRIVATE)
-            val distKm = prefs.getFloat("last_distance_km", 18.4f).toDouble()
-            val durSec = prefs.getLong("last_duration_sec", 1620L) // 27분
-            val durMin = (durSec / 60).toInt().coerceAtLeast(1)
-            val avgSpeed = prefs.getFloat("last_avg_speed_kmh", 42.5f)
-            val maxSpeed = prefs.getFloat("last_max_speed_kmh", 88.0f)
-            val route = prefs.getString("last_route", "서울 강남 ➔ 경기 성남") ?: "서울 강남 ➔ 경기 성남"
+            if (!prefs.contains("last_distance_km")) {
+                return TripSummary(
+                    todayDistanceKm = 0.0,
+                    durationMin = 0,
+                    avgSpeedKmh = 0.0f,
+                    maxSpeedKmh = 0.0f,
+                    routeDesc = "기록 없음",
+                    isLive = false
+                )
+            }
+
+            val distKm = prefs.getFloat("last_distance_km", 0.0f).toDouble()
+            val durSec = prefs.getLong("last_duration_sec", 0L)
+            val durMin = (durSec / 60).toInt().coerceAtLeast(0)
+            val avgSpeed = prefs.getFloat("last_avg_speed_kmh", 0.0f)
+            val maxSpeed = prefs.getFloat("last_max_speed_kmh", 0.0f)
+            val startTime = prefs.getString("last_start_time", "최근 주행") ?: "최근 주행"
 
             return TripSummary(
                 todayDistanceKm = distKm,
                 durationMin = durMin,
                 avgSpeedKmh = avgSpeed,
                 maxSpeedKmh = maxSpeed,
-                routeDesc = route,
+                routeDesc = startTime,
                 isLive = false
             )
         }
@@ -323,11 +349,23 @@ class DrivingLogManager(private val context: Context) : LocationListener {
         NativeBridge.saveTripRecord(tripJson.toString())
         try {
             val prefs = context.getSharedPreferences("triplog_prefs", Context.MODE_PRIVATE)
+            val existingJson = prefs.getString("saved_trips_json", "[]") ?: "[]"
+            val array = try { JSONArray(existingJson) } catch (_: Exception) { JSONArray() }
+
+            val newArray = JSONArray()
+            newArray.put(tripJson)
+            for (i in 0 until array.length()) {
+                if (newArray.length() >= 20) break
+                newArray.put(array.getJSONObject(i))
+            }
+
             prefs.edit()
+                .putString("saved_trips_json", newArray.toString())
                 .putFloat("last_distance_km", distanceKm.toFloat())
                 .putLong("last_duration_sec", durationSec)
                 .putFloat("last_avg_speed_kmh", avgSpeedKmh)
                 .putFloat("last_max_speed_kmh", maxSpeedKmh)
+                .putString("last_start_time", dateFormat.format(Date(startTimeMillis)))
                 .apply()
         } catch (e: Exception) {
             Log.w(TAG, "Failed to persist trip prefs", e)

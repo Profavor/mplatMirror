@@ -297,6 +297,10 @@ class MainActivity : AppCompatActivity() {
             showTripLogDialog()
         }
 
+        binding.btnBluetoothRoutine.setOnClickListener {
+            CommonDialogHelper.showBluetoothAutomationDialog(this)
+        }
+
         binding.cardConnectionGuide.setOnClickListener {
             showConnectionManualDialog()
         }

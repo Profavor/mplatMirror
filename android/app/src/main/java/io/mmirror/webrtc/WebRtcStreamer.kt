@@ -701,6 +701,7 @@ class WebRtcStreamer(
                     sendAppList()
                     sendAudioModeStatus()
                     io.mmirror.DrivingLogManager.currentInstance?.sendLastKnownLocation()
+                    sendTripHistory()
                     MediaProjectionService.instance?.requestKeyFrame()
                 }
             }
@@ -748,6 +749,28 @@ class WebRtcStreamer(
             Log.i(TAG, "Sent touch status: granted=$isA11yGranted")
         } catch (e: Exception) {
             Log.w(TAG, "Failed to send touch status: ${e.message}")
+        }
+    }
+
+    fun sendTripHistory() {
+        val dc = dataChannel ?: return
+        if (dc.state() != DataChannel.State.OPEN) return
+        try {
+            val trips = io.mmirror.DrivingLogManager.getSavedTrips(context)
+            val json = JSONObject().apply {
+                put("type", "triplog_history")
+                put("trips", org.json.JSONArray().apply {
+                    trips.forEach { put(it) }
+                })
+            }
+            val payload = json.toString().toByteArray(Charsets.UTF_8)
+            val buffer = DataChannel.Buffer(java.nio.ByteBuffer.wrap(payload), false)
+            synchronized(sendLock) {
+                dc.send(buffer)
+            }
+            Log.i(TAG, "Sent trip history (${trips.size} trips) via DataChannel")
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to send trip history: ${e.message}")
         }
     }
 
@@ -889,6 +912,9 @@ class WebRtcStreamer(
             when (type) {
                 "get_touch_status", "get_shizuku_status" -> {
                     sendTouchStatus()
+                }
+                "get_trips", "get_triplog" -> {
+                    sendTripHistory()
                 }
                 "request_keyframe" -> {
                     Log.i(TAG, "🔑 Received request_keyframe from DataChannel -> triggering sync frame refresh")

@@ -177,6 +177,32 @@
         }).addTo(map);
     }
 
+    function getStoredTrips() {
+        try {
+            const raw = localStorage.getItem('mmirror_trip_history');
+            if (raw) {
+                const list = JSON.parse(raw);
+                if (Array.isArray(list) && list.length > 0) return list;
+            }
+        } catch (_) {}
+        return [];
+    }
+
+    function saveCurrentTripToStorage(trip) {
+        if (!trip || !trip.distance_km || trip.distance_km < 0.05) return;
+        try {
+            let saved = getStoredTrips();
+            const existingIdx = saved.findIndex(s => s.id === trip.id);
+            if (existingIdx >= 0) {
+                saved[existingIdx] = trip;
+            } else {
+                saved.unshift(trip);
+            }
+            if (saved.length > 20) saved = saved.slice(0, 20);
+            localStorage.setItem('mmirror_trip_history', JSON.stringify(saved));
+        } catch (_) {}
+    }
+
     // GPS 패킷 실시간 수신 처리
     window.mMirrorGps = {
         onGpsUpdate: function(data) {
@@ -211,48 +237,96 @@
                     map.panTo(newLatLng, { animate: true, duration: 0.8 });
                 }
             }
+
+            // 3. 주행 거리 50m 이상 시 브라우저 로컬 스토리지에 실시간 자동 누적 보존
+            if (data.trip_distance_meters && data.trip_distance_meters > 50) {
+                const distKm = data.trip_distance_meters / 1000.0;
+                const durSec = data.duration_seconds || 0;
+                const speedKmh = data.speed_kmh || 0;
+                const nowIso = new Date().toISOString();
+                const currentSessionId = window.__mmirror_trip_session_id || (window.__mmirror_trip_session_id = 'trip_' + Date.now());
+
+                saveCurrentTripToStorage({
+                    id: currentSessionId,
+                    start_time: window.__mmirror_trip_start_time || (window.__mmirror_trip_start_time = nowIso),
+                    end_time: nowIso,
+                    distance_km: distKm,
+                    duration_sec: durSec,
+                    avg_speed_kmh: Math.round(speedKmh),
+                    max_speed_kmh: Math.round(speedKmh * 1.2),
+                    path: livePathCoords.map(c => ({ lat: c[0], lng: c[1] }))
+                });
+            }
+        },
+
+        onTripHistoryReceived: function(trips) {
+            if (Array.isArray(trips) && trips.length > 0) {
+                try {
+                    localStorage.setItem('mmirror_trip_history', JSON.stringify(trips));
+                } catch (_) {}
+                renderTripCards(trips);
+            }
         }
     };
 
-    // 주행일지 목록 조회
+    function renderTripCards(trips) {
+        if (!tripListContainer) return;
+        if (!Array.isArray(trips) || trips.length === 0) {
+            tripListContainer.innerHTML = '<div class="empty-state">아직 저장된 주행 기록이 없습니다.<br>주행을 시작하면 자동으로 기록됩니다.</div>';
+            return;
+        }
+
+        tripListContainer.innerHTML = '';
+        trips.forEach((trip) => {
+            const card = document.createElement('div');
+            card.className = 'trip-card';
+            card.innerHTML = `
+                <div class="trip-card-header">
+                    <span class="trip-date">${formatDateTime(trip.start_time)}</span>
+                    <span class="trip-distance">${Number(trip.distance_km || 0).toFixed(1)} km</span>
+                </div>
+                <div class="trip-card-details">
+                    <span>⏱ ${formatDuration(trip.duration_sec)}</span>
+                    <span>🚀 평균 ${Math.round(trip.avg_speed_kmh || 0)} km/h</span>
+                    <span>⚡ 최고 ${Math.round(trip.max_speed_kmh || 0)} km/h</span>
+                </div>
+            `;
+            card.addEventListener('click', () => {
+                displayTripHistoryOnMap(trip);
+            });
+            tripListContainer.appendChild(card);
+        });
+    }
+
+    // 주행일지 목록 조회 (서버 API + 로컬 스토리지 + DataChannel 삼중 폴백)
     async function loadTripHistory() {
         if (!tripListContainer) return;
         tripListContainer.innerHTML = '<div class="loading-state">주행 기록 불러오는 중...</div>';
 
+        let trips = [];
+
+        // 1. 서버 API 시도 (로컬 직접 접속 시)
         try {
-            const res = await fetch('/api/trips');
-            if (!res.ok) throw new Error('Failed to fetch trips');
-            const trips = await res.json();
-
-            if (!trips || trips.length === 0) {
-                tripListContainer.innerHTML = '<div class="empty-state">아직 저장된 주행 기록이 없습니다.<br>주행을 시작하면 자동으로 기록됩니다.</div>';
-                return;
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 1200);
+            const res = await fetch('/api/trips', { signal: controller.signal });
+            clearTimeout(timeoutId);
+            if (res.ok) {
+                trips = await res.json();
             }
+        } catch (_) {}
 
-            tripListContainer.innerHTML = '';
-            trips.forEach((trip) => {
-                const card = document.createElement('div');
-                card.className = 'trip-card';
-                card.innerHTML = `
-                    <div class="trip-card-header">
-                        <span class="trip-date">${formatDateTime(trip.start_time)}</span>
-                        <span class="trip-distance">${trip.distance_km.toFixed(1)} km</span>
-                    </div>
-                    <div class="trip-card-details">
-                        <span>⏱ ${formatDuration(trip.duration_sec)}</span>
-                        <span>🚀 평균 ${Math.round(trip.avg_speed_kmh)} km/h</span>
-                        <span>⚡ 최고 ${Math.round(trip.max_speed_kmh)} km/h</span>
-                    </div>
-                `;
-                card.addEventListener('click', () => {
-                    displayTripHistoryOnMap(trip);
-                });
-                tripListContainer.appendChild(card);
-            });
-        } catch (e) {
-            tripListContainer.innerHTML = '<div class="error-state">주행일지를 불러올 수 없습니다.</div>';
-            console.error('Error loading trips:', e);
+        // 2. 서버 실패(404 등) 시 로컬 스토리지 폴백 (테슬라 브라우저 WebRTC 완벽 지원)
+        if (!Array.isArray(trips) || trips.length === 0) {
+            trips = getStoredTrips();
         }
+
+        // 3. 스마트폰에 최신 주행 이력 요청 전송
+        if (window.sendWebRtcControl) {
+            try { window.sendWebRtcControl({ type: 'get_trips' }); } catch (_) {}
+        }
+
+        renderTripCards(trips);
     }
 
     // 선택된 과거 주행일지 지도에 궤적 그리기

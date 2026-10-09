@@ -72,6 +72,16 @@
                 android:resource="@xml/accessibility_service_config" />
         </service>
 
+        <!-- 차량 블루투스 연결/해제 감지 리시버 (모바일 핫스팟 켜기 안내) -->
+        <receiver
+            android:name=".BluetoothReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.bluetooth.device.action.ACL_CONNECTED" />
+                <action android:name="android.bluetooth.device.action.ACL_DISCONNECTED" />
+            </intent-filter>
+        </receiver>
+
     </application>
 
 </manifest>

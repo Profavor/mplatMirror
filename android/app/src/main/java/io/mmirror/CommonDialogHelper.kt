@@ -3,7 +3,10 @@ package io.mmirror
 import android.app.Activity
 import android.content.Context
 import android.widget.Toast
+import android.content.Intent
+import android.provider.Settings
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import java.util.Locale
 
 /**
  * mMirror 안내 매뉴얼, 안전 운전 서약, 법적 고지, 핫스팟 경고 다이얼로그 모음
@@ -51,24 +54,96 @@ object CommonDialogHelper {
     }
 
     fun showTripLogDialog(activity: Activity) {
-        val message = """
-            ■ 스마트폰 GPS 기반 자동 주행일지
-            - 유료 커넥티비티 API 연결 없이 스마트폰의 고정밀 GPS 센서를 통해 실시간 속도 및 주행 궤적이 백그라운드로 안전하게 기록됩니다.
-            
-            ■ 최근 주행 데이터 통계
-            - 최근 주행 거리: 18.4 km
-            - 주행 소요 시간: 27분
-            - 평균 속도: 42.5 km/h (최고 88.0 km/h)
-            - 저장 상태: GPS 패킷 5개 포인트 정상 저장됨
-            
-            ■ 차량 대화면 지도 연동
-            - 차량 모니터 브라우저 상단 [🚗] 메뉴 또는 하단 [Trip Log]를 누르면 대화면 지도와 함께 실시간 주행 궤적이 모달로 시각화됩니다.
-        """.trimIndent()
+        val summary = DrivingLogManager.getTripSummary(activity)
+        val allTrips = DrivingLogManager.getSavedTrips(activity)
+
+        val sb = StringBuilder()
+        sb.append("■ 스마트폰 GPS 기반 자동 주행일지\n")
+        sb.append("- 유료 커넥티비티 API 연결 없이 스마트폰의 고정밀 GPS 센서를 통해 실시간 속도 및 주행 궤적이 로컬 저장소에 안전하게 기록됩니다.\n\n")
+
+        if (summary.isLive) {
+            sb.append("■ 🟢 현재 실시간 주행 중\n")
+            sb.append("- 주행 거리: ${String.format(Locale.getDefault(), "%.1f", summary.todayDistanceKm)} km\n")
+            sb.append("- 주행 시간: ${summary.durationMin}분\n")
+            sb.append("- 평균 속도: ${String.format(Locale.getDefault(), "%.1f", summary.avgSpeedKmh)} km/h (최고 ${String.format(Locale.getDefault(), "%.1f", summary.maxSpeedKmh)} km/h)\n\n")
+        } else if (allTrips.isNotEmpty()) {
+            val last = allTrips[0]
+            val dist = last.optDouble("distance_km", 0.0)
+            val durSec = last.optLong("duration_sec", 0L)
+            val durMin = (durSec / 60).coerceAtLeast(1)
+            val avgSpd = last.optDouble("avg_speed_kmh", 0.0)
+            val maxSpd = last.optDouble("max_speed_kmh", 0.0)
+            val startTime = last.optString("start_time", "").replace("T", " ")
+
+            sb.append("■ 🏁 최근 완료된 주행 기록\n")
+            if (startTime.isNotEmpty()) sb.append("- 운행 일시: $startTime\n")
+            sb.append("- 주행 거리: ${String.format(Locale.getDefault(), "%.1f", dist)} km\n")
+            sb.append("- 주행 시간: ${durMin}분\n")
+            sb.append("- 평균 속도: ${String.format(Locale.getDefault(), "%.1f", avgSpd)} km/h (최고 ${String.format(Locale.getDefault(), "%.1f", maxSpd)} km/h)\n\n")
+
+            // 누적 통계
+            var totalKm = 0.0
+            var totalSec = 0L
+            for (t in allTrips) {
+                totalKm += t.optDouble("distance_km", 0.0)
+                totalSec += t.optLong("duration_sec", 0L)
+            }
+            sb.append("■ 📊 누적 주행 통계 (최근 ${allTrips.size}회)\n")
+            sb.append("- 총 누적 거리: ${String.format(Locale.getDefault(), "%.1f", totalKm)} km\n")
+            sb.append("- 총 주행 시간: ${totalSec / 3600}시간 ${(totalSec % 3600) / 60}분\n\n")
+        } else {
+            sb.append("■ 📝 주행 기록 상태\n")
+            sb.append("- 아직 저장된 주행 기록이 없습니다.\n")
+            sb.append("- 차량 화면과 연결 후 50m 이상 주행하시면 자동으로 기록됩니다.\n\n")
+        }
+
+        sb.append("■ 차량 대화면 지도 연동\n")
+        sb.append("- 차량 모니터 브라우저 상단 [🚗] 메뉴 또는 독바의 [주행일지]를 누르면 대화면 지도와 함께 실시간 및 과거 주행 궤적이 시각화됩니다.")
 
         MaterialAlertDialogBuilder(activity)
             .setTitle("🚗 주행일지 & GPS 통계")
-            .setMessage(message)
+            .setMessage(sb.toString().trimEnd())
             .setPositiveButton("확인", null)
+            .show()
+    }
+
+    fun showBluetoothAutomationDialog(activity: Activity) {
+        val message = """
+            안드로이드 OS 보안 정책(Android 8~16)상 일반 앱이 모바일 핫스팟을 강제로 On/Off하는 것은 차단되어 있습니다.
+            
+            하지만 삼성 갤럭시 [모드 및 루틴]을 활용하면 시스템 순정 권한으로 '차량 탑승 시 자동 핫스팟 켜기 / 하차 시 자동 끄기'가 100% 무루팅으로 완벽하게 동작합니다!
+
+            ────────────────────
+            📋 10초 설정 방법 (삼성 갤럭시)
+            ────────────────────
+            1. 스마트폰 [설정] ➔ [모드 및 루틴] ➔ [루틴] 탭 이동
+            2. 우측 상단 [+] 버튼 터치
+            3. [언제 실행할까요] ➔ [블루투스 기기] ➔ [내 차량 블루투스(Tesla 등)] 선택
+            4. [무엇을 할까요] ➔ [모바일 핫스팟] ➔ [켜짐] 선택
+            5. [루틴이 종료될 때] ➔ [모바일 핫스팟 끄기] 확인 후 [저장]
+
+            이제 차에 타면 핫스팟이 자동으로 켜지고, 시동을 끄면 자동으로 꺼집니다!
+        """.trimIndent()
+
+        MaterialAlertDialogBuilder(activity)
+            .setTitle("🤖 차량 블루투스 핫스팟 자동화 안내")
+            .setMessage(message)
+            .setPositiveButton("모드 및 루틴 열기") { _, _ ->
+                try {
+                    val intent = Intent("android.settings.ROUTINES_SETTINGS").apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    activity.startActivity(intent)
+                } catch (_: Exception) {
+                    try {
+                        val intent = Intent(Settings.ACTION_SETTINGS).apply {
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                        }
+                        activity.startActivity(intent)
+                    } catch (_: Exception) {}
+                }
+            }
+            .setNegativeButton("닫기", null)
             .show()
     }
 

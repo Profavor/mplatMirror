@@ -75,7 +75,7 @@
                 android:id="@+id/btnOpenTripLog"
                 android:layout_width="wrap_content"
                 android:layout_height="38dp"
-                android:visibility="gone"
+                android:visibility="visible"
                 android:backgroundTint="#151b22"
                 android:paddingStart="10dp"
                 android:paddingEnd="10dp"
@@ -351,6 +351,58 @@
                         android:textSize="12sp"
                         android:textStyle="bold"
                         app:cornerRadius="8dp" />
+                </LinearLayout>
+
+                <!-- 차량 블루투스 연동 핫스팟 자동 On/Off 안내 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:background="#151921"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="12dp"
+                    android:paddingTop="8dp"
+                    android:paddingEnd="12dp"
+                    android:paddingBottom="8dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="⚡ 핫스팟 자동 On/Off 루틴"
+                            android:textColor="#ecf0f1"
+                            android:textSize="13sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="차량 탑승 시 자동 On, 하차 시 자동 Off (삼성 루틴)"
+                            android:textColor="#888e9b"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnBluetoothRoutine"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:backgroundTint="#1f2430"
+                        android:paddingStart="10dp"
+                        android:paddingEnd="10dp"
+                        android:text="루틴 설정 안내"
+                        android:textColor="#38bdf8"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        app:cornerRadius="8dp"
+                        app:strokeColor="#38bdf8"
+                        app:strokeWidth="1dp" />
                 </LinearLayout>
 
                 <!-- 웹 브라우저 직접 사운드 송출 토글 통합 -->
