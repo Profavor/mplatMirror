@@ -270,6 +270,10 @@ class WebRtcStreamer(
                 put("fps", fps)
                 put("isStandalone", false)
                 put("appVersion", io.mmirror.BuildConfig.VERSION_NAME)
+                io.mmirror.DrivingLogManager.currentInstance?.lastLocation?.let { loc ->
+                    put("lat", loc.latitude)
+                    put("lng", loc.longitude)
+                }
             }
             val str = json.toString()
             sendSignaling(str)
@@ -696,6 +700,7 @@ class WebRtcStreamer(
                     sendTouchStatus()
                     sendAppList()
                     sendAudioModeStatus()
+                    io.mmirror.DrivingLogManager.currentInstance?.sendLastKnownLocation()
                     MediaProjectionService.instance?.requestKeyFrame()
                 }
             }

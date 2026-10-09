@@ -199,7 +199,7 @@
     const PKT_TYPE_AUDIO = 0x02; // Raw PCM Audio (48000Hz, 16bit Stereo)
     const PKT_TYPE_CONFIG = 0x03; // Metadata (Width, Height, FPS, etc.)
     const PKT_TYPE_GPS = 0x04;    // Realtime GPS
-    const CURRENT_WEB_VERSION = '1.4.4';
+    const CURRENT_WEB_VERSION = '1.4.5';
 
     // 오디오 및 A/V 싱크 제어 상태 변수 (100ms 지터 링 버퍼 엔진)
     let audioCtx = null;
@@ -1090,6 +1090,12 @@
         }
         if (msg.appVersion) {
             checkAppVersionMismatch(msg.appVersion);
+        }
+        if (typeof msg.lat === 'number' && typeof msg.lng === 'number' && msg.lat > 0 && msg.lng > 0) {
+            console.log('📍 [CONFIG] 스마트폰 실시간 위치 수신 (시그널링):', msg.lat, msg.lng);
+            if (typeof updateDashboardGps === 'function') {
+                updateDashboardGps({ lat: msg.lat, lng: msg.lng });
+            }
         }
     }
 
@@ -2078,6 +2084,12 @@
                         }
                         if (data.appVersion) {
                             checkAppVersionMismatch(data.appVersion);
+                        }
+                        if (typeof data.lat === 'number' && typeof data.lng === 'number' && data.lat > 0 && data.lng > 0) {
+                            console.log('📍 [CONFIG] 스마트폰 실시간 위치 수신 (DataChannel):', data.lat, data.lng);
+                            if (typeof updateDashboardGps === 'function') {
+                                updateDashboardGps({ lat: data.lat, lng: data.lng });
+                            }
                         }
                     } else if (data.type === 'abr_status') {
                         console.log('⚡ [WEBRTC] Received abr_status:', data);
@@ -3390,28 +3402,56 @@
         } catch (_) {}
 
         // 브라우저 지오로케이션(HTML5 Geolocation) 지원 시 우선 조회
-        if (navigator.geolocation && (!lastWeatherLat || lastWeatherLat === 37.5665)) {
+        let hasResolvedInitLocation = false;
+
+        async function tryIpGeolocationFallback() {
+            if (hasResolvedInitLocation || hasReceivedRealGpsLocation) return;
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 2000);
+                const res = await fetch('https://get.geojs.io/v1/ip/geo.json', { signal: controller.signal });
+                clearTimeout(timeoutId);
+                if (res.ok) {
+                    const d = await res.json();
+                    const lat = parseFloat(d.latitude);
+                    const lng = parseFloat(d.longitude);
+                    if (!isNaN(lat) && !isNaN(lng) && lat > 0 && lng > 0 && !hasReceivedRealGpsLocation) {
+                        hasResolvedInitLocation = true;
+                        console.log('📍 [WEATHER] IP 기반 위치 감지 성공:', lat, lng, d.city);
+                        fetchWeather(lat, lng);
+                        return;
+                    }
+                }
+            } catch (_) {}
+
+            if (!lastWeatherFetchTime && !hasResolvedInitLocation && !hasReceivedRealGpsLocation) {
+                console.log('📍 [WEATHER] 기본 위치(서울) 날씨 로드');
+                fetchWeather(37.5665, 126.9780);
+            }
+        }
+
+        if (navigator.geolocation && (!lastWeatherLat || Math.abs(lastWeatherLat - 37.5665) < 0.001)) {
             try {
                 navigator.geolocation.getCurrentPosition(
                     pos => {
-                        console.log('📍 브라우저 GPS 위치 감지:', pos.coords.latitude, pos.coords.longitude);
+                        hasResolvedInitLocation = true;
+                        console.log('📍 [WEATHER] 브라우저 GPS 위치 감지:', pos.coords.latitude, pos.coords.longitude);
                         fetchWeather(pos.coords.latitude, pos.coords.longitude);
                     },
-                    _ => {},
-                    { timeout: 3000, enableHighAccuracy: true, maximumAge: 60000 }
+                    _ => {
+                        tryIpGeolocationFallback();
+                    },
+                    { timeout: 2500, enableHighAccuracy: true, maximumAge: 60000 }
                 );
-            } catch (_) {}
-        }
-
-        // 최초 기동 시 캐시/GPS가 아직 없더라도 서울 기준 기본 날씨 자동 로드
-        if (!lastWeatherFetchTime) {
-            setTimeout(() => {
-                if (!lastWeatherFetchTime) {
-                    fetchWeather(37.5665, 126.9780);
-                }
-            }, 3000);
+            } catch (_) {
+                tryIpGeolocationFallback();
+            }
+        } else if (!lastWeatherFetchTime) {
+            tryIpGeolocationFallback();
         }
     }
+
+    let hasReceivedRealGpsLocation = false;
 
     // GPS 패킷 수신 시 호출되는 대시보드 갱신 함수
     function updateDashboardGps(gpsData) {
@@ -3436,13 +3476,16 @@
             elSpeed.textContent = Math.round(gpsData.speed_kmh);
         }
 
-        // 2. 실시간 GPS 기반 날씨 갱신 (실시간 좌표 수신 시 동탄 등 실제 위치로 즉시 반영)
+        // 2. 실시간 GPS 기반 날씨 갱신 (스마트폰 실제 GPS 수신 시 현재 위치로 즉시 반영)
         if (gpsData.lat && gpsData.lng && gpsData.lat > 0 && gpsData.lng > 0) {
             const now = Date.now();
             const distMoved = Math.hypot(gpsData.lat - lastWeatherLat, gpsData.lng - lastWeatherLng);
-            const isFromDefaultSeoul = (Math.abs(lastWeatherLat - 37.5665) < 0.01 && Math.abs(gpsData.lat - 37.5665) > 0.03);
-            if (isFromDefaultSeoul || now - lastWeatherFetchTime > 20 * 60 * 1000 || distMoved > 0.02) {
-                console.log('📍 GPS 수신에 따른 날씨 위치 즉시 갱신:', gpsData.lat, gpsData.lng);
+            const isHardcodedSeoul = (Math.abs(lastWeatherLat - 37.5665) < 0.001 && Math.abs(lastWeatherLng - 126.9780) < 0.001);
+            const needsInitialRealGps = !hasReceivedRealGpsLocation;
+
+            if (needsInitialRealGps || isHardcodedSeoul || now - lastWeatherFetchTime > 15 * 60 * 1000 || distMoved > 0.015) {
+                hasReceivedRealGpsLocation = true;
+                console.log('📍 [WEATHER] 스마트폰 실제 GPS 수신에 따른 날씨 위치 즉시 갱신:', gpsData.lat, gpsData.lng);
                 fetchWeather(gpsData.lat, gpsData.lng);
             }
         }

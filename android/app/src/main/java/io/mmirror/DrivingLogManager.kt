@@ -36,7 +36,8 @@ class DrivingLogManager(private val context: Context) : LocationListener {
     private var tripId: String = ""
     var startTimeMillis: Long = 0L
         private set
-    private var lastLocation: Location? = null
+    var lastLocation: Location? = null
+        private set
     var totalDistanceMeters: Double = 0.0
         private set
     var maxSpeedKmh: Float = 0.0f
@@ -105,8 +106,58 @@ class DrivingLogManager(private val context: Context) : LocationListener {
 
         isTracking = true
         currentInstance = this
+        try {
+            lastLocation = locationManager?.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+                ?: locationManager?.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+                ?: locationManager?.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER)
+        } catch (_: Exception) {}
         Log.i(TAG, "Trip prepared (waiting for peer connection): $tripId")
         // GPS 추적은 onPeerConnected()에서 실제 시작
+    }
+
+    fun broadcastGps(lat: Double, lng: Double, speed: Float, heading: Float, dist: Double, duration: Long) {
+        // 1. 레거시 로컬 웹소켓 서버 전송
+        NativeBridge.sendGpsData(lat, lng, speed, heading, dist, duration)
+
+        // 2. 테슬라 WebRTC DataChannel (0x04 PKT_TYPE_GPS) 실시간 전송
+        try {
+            val gpsJson = JSONObject().apply {
+                put("lat", lat)
+                put("lng", lng)
+                put("speed_kmh", speed)
+                put("heading", heading)
+                put("trip_distance_meters", dist)
+                put("duration_seconds", duration)
+            }.toString()
+            io.mmirror.webrtc.WebRtcStreamer.instance?.sendGps(gpsJson)
+        } catch (_: Exception) {}
+    }
+
+    @SuppressLint("MissingPermission")
+    fun sendLastKnownLocation() {
+        try {
+            val lastKnown = locationManager?.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+                ?: locationManager?.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+                ?: locationManager?.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER)
+                ?: lastLocation
+
+            if (lastKnown != null) {
+                lastLocation = lastKnown
+                val speed = if (lastKnown.hasSpeed()) lastKnown.speed * 3.6f else 0.0f
+                val bearing = if (lastKnown.hasBearing()) lastKnown.bearing else 0.0f
+                Log.i(TAG, "📍 즉시 마지막 위치 전송 (WebRTC + WS): lat=${lastKnown.latitude}, lng=${lastKnown.longitude}")
+                broadcastGps(
+                    lastKnown.latitude,
+                    lastKnown.longitude,
+                    speed,
+                    bearing,
+                    totalDistanceMeters,
+                    0L
+                )
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "sendLastKnownLocation failed: ${e.message}")
+        }
     }
 
     /**
@@ -130,31 +181,11 @@ class DrivingLogManager(private val context: Context) : LocationListener {
         speedSumKmh = 0.0
         speedCount = 0
         pathPoints.clear()
-        lastLocation = null
 
         Log.i(TAG, "🚗 Peer connected — GPS tracking started: $tripId")
 
-        // 1. 연결 즉시 마지막 측정 위치(동탄/현재위치) 브로드캐스트 (정차/실내에서도 즉시 날씨 반영)
-        try {
-            val lastKnown = locationManager?.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-                ?: locationManager?.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
-                ?: locationManager?.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER)
-
-            if (lastKnown != null) {
-                Log.i(TAG, "📍 즉시 마지막 위치 전송: lat=${lastKnown.latitude}, lng=${lastKnown.longitude}")
-                lastLocation = lastKnown
-                NativeBridge.sendGpsData(
-                    lastKnown.latitude,
-                    lastKnown.longitude,
-                    if (lastKnown.hasSpeed()) lastKnown.speed * 3.6f else 0.0f,
-                    if (lastKnown.hasBearing()) lastKnown.bearing else 0.0f,
-                    totalDistanceMeters,
-                    0L
-                )
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Error fetching last known location", e)
-        }
+        // 1. 연결 즉시 마지막 측정 위치(현재위치) 브로드캐스트 (정차/실내에서도 즉시 실제 날씨 반영)
+        sendLastKnownLocation()
 
         // 2. 실시간 위치 추적 등록 (GPS 및 기지국/Wi-Fi 네트워크 프로바이더 동시 등록, 정차 중에도 수신)
         try {
@@ -245,8 +276,8 @@ class DrivingLogManager(private val context: Context) : LocationListener {
 
         val durationSec = (System.currentTimeMillis() - startTimeMillis) / 1000L
 
-        // 실시간 GPS 브로드캐스트
-        NativeBridge.sendGpsData(
+        // 실시간 GPS 브로드캐스트 (WebRTC DataChannel + WebSocket)
+        broadcastGps(
             location.latitude,
             location.longitude,
             speedKmh,

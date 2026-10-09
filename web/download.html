@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>mplat Mirror v1.4.4 - 차량 무선 미러링 &amp; 양방향 터치 공식 다운로드</title>
+    <title>mplat Mirror v1.4.5 - 차량 무선 미러링 &amp; 양방향 터치 공식 다운로드</title>
     <link rel="icon" href="logo.png" type="image/png">
     <meta name="description" content="모바일 데이터 소모 0MB! 스마트폰 핫스팟 로컬 Wi-Fi(UDP) 초저지연 60FPS 차량 미러링 및 1:1 정밀 접근성 터치 컨트롤.">
-    <meta property="og:title" content="mplat Mirror v1.4.4 - 차량 0MB 무선 미러링">
+    <meta property="og:title" content="mplat Mirror v1.4.5 - 차량 0MB 무선 미러링">
     <meta property="og:description" content="LTE/5G 데이터 소모 0MB! 서브 50ms 60FPS 초저지연 차량 미러링 및 양방향 정밀 터치">
     <meta property="og:image" content="logo.png">
     <style>
@@ -1036,7 +1036,7 @@
         <header class="nav-header">
             <a href="/" class="brand-box">
                 <img src="logo.png" alt="mplat Mirror Logo" class="brand-logo">
-                <span class="brand-title">mplat Mirror <span class="badge-version">v1.4.4</span></span>
+                <span class="brand-title">mplat Mirror <span class="badge-version">v1.4.5</span></span>
             </a>
             <nav class="nav-links">
                 <a href="#features" class="nav-link">핵심 기능</a>
@@ -1054,7 +1054,7 @@
         <section class="hero">
             <div class="hero-pill">
                 <span class="pulse-dot"></span>
-                <span>v1.4.4 정식 릴리즈 · 0MB 모바일 데이터 · 차량 브라우저 초저지연 직결</span>
+                <span>v1.4.5 정식 릴리즈 · 0MB 모바일 데이터 · 차량 브라우저 초저지연 직결</span>
             </div>
 
             <h1 class="hero-title">
@@ -1071,7 +1071,7 @@
                 <!-- Action Card: Google Play Install -->
                 <div class="download-action-card">
                     <div>
-                        <div class="download-card-badge">✨ Google Play 공식 출시 · v1.4.4 정식 빌드</div>
+                        <div class="download-card-badge">✨ Google Play 공식 출시 · v1.4.5 정식 빌드</div>
                         <h2 class="download-card-title">mplat Mirror Android</h2>
                         <p class="download-card-desc">
                             루팅이나 PC 연결 없이 스마트폰 모바일 데이터 0MB 소모! 1:1 정밀 접근성 터치 엔진, 60 FPS 초저지연 전송, 광고 없는 쾌적한 환경을 제공하는 공식 앱입니다.
@@ -1138,29 +1138,36 @@
                 </div>
             </div>
 
-            <!-- v1.4.4 Release Highlights Card -->
+            <!-- v1.4.5 Release Highlights Card -->
             <div class="release-notes-card">
                 <div class="release-notes-header">
                     <div class="release-notes-title">
                         <span>🚀</span>
-                        <span>v1.4.4 정식 릴리즈 핵심 변경 내역</span>
+                        <span>v1.4.5 정식 릴리즈 핵심 변경 내역</span>
                         <span class="badge-version">LATEST</span>
                     </div>
                     <span style="font-size: 13px; color: var(--accent-cyan); font-weight: 700;">2026.10 릴리즈</span>
                 </div>
                 <div class="release-grid">
                     <div class="release-item">
-                        <span class="rel-icon">🛡️</span>
+                        <span class="rel-icon">📍</span>
                         <div>
-                            <strong>화면 전환 및 급격한 화면 내용 변화 시 과부하 차단 (3.0 Mbps CBR 고정)</strong>
-                            앱 전환(홈 화면에서 티맵/유튜브 등 실행), 화면 회전, 폴드 접힘/펼침, 고속 스크롤 시 하드웨어 인코더의 급격한 대역폭 폭증(VBR 버그)을 엄격한 3.0 Mbps CBR 및 2초 주기 I-프레임으로 원천 차단했습니다.
+                            <strong>스마트폰 실시간 GPS 연동 및 현재 위치 실시간 날씨 정확 표출 (서울 고정 완벽 해결)</strong>
+                            차량 브라우저 환경에서 발생하던 날씨 위치 고정(서울 명동) 문제를 해결하기 위해, 스마트폰의 실제 GPS 좌표를 WebRTC DataChannel 및 초기 핸드셰이크 설정으로 브라우저에 실시간 동기화하여 현재 운행 위치의 날씨 및 행정동을 정확히 표출합니다.
                         </div>
                     </div>
                     <div class="release-item">
-                        <span class="rel-icon">📦</span>
+                        <span class="rel-icon">🔍</span>
                         <div>
-                            <strong>WebRTC 64KB 선제적 GOP 드롭 엔진 &amp; PONG 하트비트 보장</strong>
-                            소켓 버퍼 임계값을 64KB로 대폭 낮추고 완전한 GOP(Group of Pictures) 드롭을 적용하여 Wi-Fi 전송 버퍼 지연 누적을 원천 방지하고 PONG 응답 지연으로 인한 오판 단절을 완벽히 해결했습니다.
+                            <strong>플로팅 줌 컨트롤 컴팩트화 및 미러링 화면 내부 우측 최적 배치</strong>
+                            화면 확대/축소 플로팅 컨트롤러의 크기를 최적화(34px)하고 미러링 캔버스 내부 우측으로 마진을 재배치하여, 우측 사이드 패널의 광고 카드 및 대시보드 위젯을 전혀 가리지 않도록 사용성을 대폭 개선했습니다.
+                        </div>
+                    </div>
+                    <div class="release-item">
+                        <span class="rel-icon">🛡️</span>
+                        <div>
+                            <strong>화면 전환 및 급격한 화면 내용 변화 시 과부하 차단 (3.0 Mbps CBR 고정)</strong>
+                            앱 전환, 화면 회전, 폴드 접힘/펼침, 고속 스크롤 시 하드웨어 인코더의 급격한 대역폭 폭증을 엄격한 3.0 Mbps CBR 및 2초 주기 I-프레임으로 원천 차단했습니다.
                         </div>
                     </div>
                     <div class="release-item">
@@ -1168,13 +1175,6 @@
                         <div>
                             <strong>좀비 DataChannel 및 단절 전송로 즉각 강제 종료 &amp; 무중단 자동 복구</strong>
                             하부 UDP 전송로가 실패하거나 패킷이 장시간 두절된 좀비 상태를 감지하면 오래된 데이터채널과 PeerConnection을 즉각 완전 close()하여 자원을 소멸시키고 신규 세션으로 즉각 무중단 자동 복구합니다.
-                        </div>
-                    </div>
-                    <div class="release-item">
-                        <span class="rel-icon">⚡</span>
-                        <div>
-                            <strong>가상 디스플레이 필터링 &amp; 인코더 재시작 쿨다운 적용</strong>
-                            디스플레이 변경 리스너에서 가상 디스플레이의 자체 변경 이벤트를 차단하고 350ms 단일 정밀 디바운스 및 최소 1.5초 재시작 쿨다운을 적용하여 인코더 재시작 연쇄 폭풍을 원천 차단했습니다.
                         </div>
                     </div>
                 </div>
@@ -1356,7 +1356,7 @@
                 <details class="faq-item">
                     <summary>접근성 권한을 켰는데 터치 반응이 정확한가요?</summary>
                     <div class="faq-a">
-                        v1.4.4에서는 <strong>법적 고지 및 개인정보보호 전면 재정비</strong>, <strong>화면 전환/급변 시 CBR 비트레이트 버퍼 안정화</strong>, <strong>좀비 DataChannel 자동 감지 &amp; 복구 엔진</strong>, <strong>미러링 종료 시 완전 자원 정리</strong>, <strong>PR-SCTP 부분 신뢰도 전송</strong>과 <strong>절대 정밀 접근성 터치 엔진</strong>이 탑재되었습니다. 대화면 터치 시 운전자의 미세 손떨림으로 인한 단발 탭 씹힘 현상을 방지하도록 스마트 터치 슬롭(15~35px)을 적용했으며, 네이버 지도·티맵 드래그 시 실시간 30ms 간격으로 화면이 즉시 따라 움직이며, 스마트폰의 물리 디스플레이 해상도를 실시간 1:1로 매핑하여 네이버 지도, 티맵, 유튜브의 버튼들이 정확하게 터치됩니다.
+                        v1.4.5에서는 <strong>실시간 GPS 연동 및 날씨 위치 최적화</strong>, <strong>컴팩트 플로팅 줌 컨트롤</strong>, <strong>화면 전환/급변 시 CBR 비트레이트 버퍼 안정화</strong>, <strong>좀비 DataChannel 자동 감지 &amp; 복구 엔진</strong>, <strong>미러링 종료 시 완전 자원 정리</strong>, <strong>PR-SCTP 부분 신뢰도 전송</strong>과 <strong>절대 정밀 접근성 터치 엔진</strong>이 탑재되었습니다. 대화면 터치 시 운전자의 미세 손떨림으로 인한 단발 탭 씹힘 현상을 방지하도록 스마트 터치 슬롭(15~35px)을 적용했으며, 네이버 지도·티맵 드래그 시 실시간 30ms 간격으로 화면이 즉시 따라 움직이며, 스마트폰의 물리 디스플레이 해상도를 실시간 1:1로 매핑하여 네이버 지도, 티맵, 유튜브의 버튼들이 정확하게 터치됩니다.
                     </div>
                 </details>
 
@@ -1402,7 +1402,7 @@
 
             <div class="footer-logo">
                 <img src="logo.png" alt="Logo" width="26" height="26">
-                <span>mplat Mirror v1.4.4</span>
+                <span>mplat Mirror v1.4.5</span>
             </div>
             <p>0MB 모바일 데이터 초저지연 WebRTC 로컬 P2P 직결 인카 미러링 엔진 · Copyright &copy; 2026 mplat. All rights reserved.</p>
             <div class="footer-links">
@@ -1420,7 +1420,7 @@
     <!-- Mobile Sticky Download Bottom Bar -->
     <div class="mobile-bottom-bar">
         <a href="https://play.google.com/store/apps/details?id=io.mmirror" class="mobile-bottom-btn" target="_blank" rel="noopener">
-            <span>▶ Google Play에서 설치 (v1.4.4)</span>
+            <span>▶ Google Play에서 설치 (v1.4.5)</span>
         </a>
     </div>
     </div>
