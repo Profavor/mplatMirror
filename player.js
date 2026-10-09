@@ -389,7 +389,7 @@
         updateFloatingZoomPosition(cw, ch, parseInt(canvas.style.width) || targetW, mode);
     }
 
-    // 플로팅 줌 컨트롤러(+/-) 위치를 미러링 화면 바로 우측에 밀착 배치
+    // 플로팅 줌 컨트롤러(+/-) 위치를 미러링 화면 우측 안쪽 가장자리(좌측)에 밀착 배치 (우측 광고/위젯 가림 방지)
     function updateFloatingZoomPosition(cw, ch, canvasW, mode) {
         const zoomControls = document.getElementById('floatingZoomControls');
         if (!zoomControls) return;
@@ -409,20 +409,13 @@
         }
 
         const canvasRight = canvasLeft + canvasW;
-        const zoomWidth = 46;
+        const zoomWidth = 36; // 34px 버튼 + 테두리
         const margin = 10;
 
-        // 미러링 화면 바로 우측에 붙임:
-        // 우측에 60px 이상 여백이 있으면 화면 바로 바깥 우측(canvasRight + 10px)에 밀착
-        // 화면이 가로로 꽉 차서 우측 바깥 여백이 없으면 화면 우측 안쪽 가장자리에 밀착
-        if (canvasRight + zoomWidth + margin <= cw) {
-            zoomControls.style.left = (canvasRight + margin) + 'px';
-            zoomControls.style.right = 'auto';
-        } else {
-            zoomControls.style.left = Math.max(0, canvasRight - zoomWidth - margin) + 'px';
-            zoomControls.style.right = 'auto';
-        }
-
+        // 우측 패널(광고 캐러셀, 날씨 등)을 전혀 가리지 않도록 항상 미러링 화면(캔버스) 우측 안쪽 가장자리에 밀착 배치
+        const targetLeft = Math.max(canvasLeft + 10, canvasRight - zoomWidth - margin);
+        zoomControls.style.left = targetLeft + 'px';
+        zoomControls.style.right = 'auto';
         zoomControls.style.bottom = '40px';
     }
 

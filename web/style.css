@@ -1396,10 +1396,10 @@ html, body {
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
     border: 1px solid rgba(255, 255, 255, 0.22);
-    border-radius: 14px;
+    border-radius: 10px;
     overflow: hidden;
     z-index: 100;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.55);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.55);
     opacity: 0.9;
     transition: opacity 0.2s ease, transform 0.15s ease, left 0.15s ease;
     touch-action: none;
@@ -1412,15 +1412,15 @@ html, body {
 }
 
 .zoom-btn {
-    width: 46px;
-    height: 46px;
+    width: 34px;
+    height: 34px;
     display: flex;
     align-items: center;
     justify-content: center;
     background: transparent;
     border: none;
     color: #ffffff;
-    font-size: 24px;
+    font-size: 18px;
     font-weight: 700;
     cursor: pointer;
     user-select: none;
@@ -1434,9 +1434,9 @@ html, body {
 }
 
 .zoom-divider {
-    width: 32px;
+    width: 22px;
     height: 1px;
-    background: rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.15);
 }
 
 /* ==========================================================================
