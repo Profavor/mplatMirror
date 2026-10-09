@@ -1807,8 +1807,14 @@ html, body {
 
 .dash-apps-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 12px;
+}
+
+@media (max-width: 900px) {
+    .dash-apps-grid {
+        grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    }
 }
 
 .dash-app-tile {
@@ -1837,6 +1843,42 @@ html, body {
     transform: scale(0.93);
     background: rgba(59, 130, 246, 0.2);
     border-color: #3b82f6;
+}
+
+/* 주행이력 대시보드 전용 강조 타일 */
+.dash-app-tile.dash-tile-triplog {
+    background: linear-gradient(135deg, rgba(30, 41, 59, 0.85) 0%, rgba(15, 23, 42, 0.95) 100%);
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    position: relative;
+    overflow: hidden;
+}
+
+.dash-app-tile.dash-tile-triplog::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #38bdf8, #818cf8);
+    opacity: 0.85;
+}
+
+.dash-app-tile.dash-tile-triplog:hover {
+    background: linear-gradient(135deg, rgba(30, 58, 138, 0.45) 0%, rgba(15, 23, 42, 0.98) 100%);
+    border-color: #38bdf8;
+    box-shadow: 0 6px 20px rgba(56, 189, 248, 0.25);
+}
+
+.dash-triplog-icon-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: rgba(56, 189, 248, 0.15);
+    border: 1px solid rgba(56, 189, 248, 0.3);
 }
 
 .dash-app-icon {

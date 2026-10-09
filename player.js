@@ -199,7 +199,7 @@
     const PKT_TYPE_AUDIO = 0x02; // Raw PCM Audio (48000Hz, 16bit Stereo)
     const PKT_TYPE_CONFIG = 0x03; // Metadata (Width, Height, FPS, etc.)
     const PKT_TYPE_GPS = 0x04;    // Realtime GPS
-    const CURRENT_WEB_VERSION = '1.4.6';
+    const CURRENT_WEB_VERSION = '1.4.7';
 
     // 오디오 및 A/V 싱크 제어 상태 변수 (100ms 지터 링 버퍼 엔진)
     let audioCtx = null;
@@ -2623,9 +2623,48 @@
     ];
 
     let dockApps = [];
+    let recentApps = [];
     let installedPhoneApps = [];
     let appIconCache = {};
     let currentTouchStatus = null;
+
+    function loadRecentApps() {
+        try {
+            const saved = localStorage.getItem('mmirror_recent_apps');
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    recentApps = parsed.filter(a => a && a.package && a.package !== 'builtin:triplog');
+                    recentApps.forEach(r => {
+                        if (appIconCache[r.package]) {
+                            r.icon = appIconCache[r.package];
+                        }
+                    });
+                }
+            }
+        } catch (_) {}
+    }
+
+    function recordRecentApp(app) {
+        if (!app || !app.package || app.package === 'builtin:triplog') return;
+        const icon = app.icon || appIconCache[app.package] || null;
+        const filtered = recentApps.filter(a => a.package !== app.package);
+        recentApps = [
+            {
+                name: app.name,
+                package: app.package,
+                emoji: app.emoji || guessEmoji(app.name),
+                icon: icon
+            },
+            ...filtered
+        ].slice(0, 10);
+        try {
+            localStorage.setItem('mmirror_recent_apps', JSON.stringify(recentApps));
+        } catch (_) {}
+        if (typeof renderDashAppsGrid === 'function') {
+            renderDashAppsGrid();
+        }
+    }
 
     function loadAppIconCache() {
         try {
@@ -2797,6 +2836,8 @@
             }
             return;
         }
+
+        recordRecentApp(app);
 
         console.log(`🚀 앱 런칭 요청: ${app.name} (${app.package})`);
         showTeslaToast(`🚀 ${app.name} 실행 중...`);
@@ -3503,28 +3544,51 @@
         }
     }
 
-    // 3. 대시보드 앱 그리드 동적 렌더링
+    // 3. 대시보드 앱 그리드 동적 렌더링 (최근 앱 4개 + 주행이력 1개 = 총 5개 슬롯 구성)
     function renderDashAppsGrid() {
         const grid = document.getElementById('dashAppsGrid');
         if (!grid) return;
         grid.innerHTML = '';
 
-        dockApps.forEach(app => {
+        // 최근 앱 4개 추출: 최근 실행 순서 우선, 부족할 경우 독바 기본 앱에서 중복 없이 보충
+        const displayApps = [];
+        for (const app of recentApps) {
+            if (displayApps.length >= 4) break;
+            if (app && app.package && app.package !== 'builtin:triplog' && !displayApps.some(d => d.package === app.package)) {
+                displayApps.push({
+                    ...app,
+                    icon: app.icon || appIconCache[app.package]
+                });
+            }
+        }
+        for (const app of dockApps) {
+            if (displayApps.length >= 4) break;
+            if (app && app.package && app.package !== 'builtin:triplog' && !displayApps.some(d => d.package === app.package)) {
+                displayApps.push({
+                    ...app,
+                    icon: app.icon || appIconCache[app.package]
+                });
+            }
+        }
+
+        // 1~4번째: 최근 앱 4개 렌더링
+        displayApps.forEach(app => {
             const tile = document.createElement('div');
             tile.className = 'dash-app-tile';
             tile.setAttribute('data-pkg', app.package);
+            tile.title = `${app.name} 단독 실행`;
 
             const iconData = app.icon || appIconCache[app.package];
             let iconHtml;
             if (iconData) {
-                iconHtml = `<img src="data:image/png;base64,${iconData}" class="tile-icon" alt="${app.name}" draggable="false">`;
+                iconHtml = `<img src="data:image/png;base64,${iconData}" class="dash-app-icon" alt="${app.name}" draggable="false">`;
             } else {
-                iconHtml = `<span class="tile-emoji">${app.emoji || guessEmoji(app.name)}</span>`;
+                iconHtml = `<span class="dash-app-emoji">${app.emoji || guessEmoji(app.name)}</span>`;
             }
 
             tile.innerHTML = `
                 ${iconHtml}
-                <span class="tile-name">${app.name}</span>
+                <span class="dash-app-name">${app.name}</span>
             `;
 
             let tileTouchMoved = false;
@@ -3549,6 +3613,47 @@
 
             grid.appendChild(tile);
         });
+
+        // 5번째: 주행이력 바로가기 버튼 (5개 채우기)
+        const tripTile = document.createElement('div');
+        tripTile.className = 'dash-app-tile dash-tile-triplog';
+        tripTile.setAttribute('data-pkg', 'builtin:triplog');
+        tripTile.title = '차량 주행이력 & GPS 주행일지 대화면 지도 보기';
+
+        tripTile.innerHTML = `
+            <div class="dash-triplog-icon-wrap">
+                <span class="dash-app-emoji">🚗</span>
+            </div>
+            <span class="dash-app-name">주행이력</span>
+        `;
+
+        const openTripLog = (e) => {
+            e.stopPropagation();
+            if (e.cancelable) e.preventDefault();
+            tripTile.style.transform = 'scale(0.92)';
+            setTimeout(() => { tripTile.style.transform = ''; }, 150);
+            if (window.openTripLogModal) {
+                window.openTripLogModal();
+            } else {
+                const modal = document.getElementById('tripLogModal');
+                if (modal) {
+                    modal.classList.remove('hidden');
+                    modal.style.setProperty('display', 'flex', 'important');
+                }
+            }
+        };
+
+        let tripTouchMoved = false;
+        tripTile.addEventListener('touchstart', () => { tripTouchMoved = false; }, { passive: true });
+        tripTile.addEventListener('touchmove', () => { tripTouchMoved = true; }, { passive: true });
+        tripTile.addEventListener('touchend', (e) => {
+            if (!tripTouchMoved) {
+                openTripLog(e);
+            }
+        }, { passive: false });
+        tripTile.addEventListener('click', openTripLog);
+
+        grid.appendChild(tripTile);
     }
 
     // 4. 네비게이션 및 대시보드 인터랙션 버튼 바인딩
@@ -3614,6 +3719,7 @@
 
     // 팔레트 초기 로드 및 렌더링 (로컬 캐시 즉시 복원)
     loadAppIconCache();
+    loadRecentApps();
     loadDockApps();
     renderDock();
 

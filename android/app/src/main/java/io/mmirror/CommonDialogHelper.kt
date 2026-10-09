@@ -1,6 +1,7 @@
 package io.mmirror
 
 import android.app.Activity
+import android.content.ComponentName
 import android.content.Context
 import android.widget.Toast
 import android.content.Intent
@@ -107,41 +108,62 @@ object CommonDialogHelper {
             .show()
     }
 
+    fun openSamsungRoutinesApp(activity: Activity) {
+        // 1. 삼성 모드 및 루틴 / 빅스비 루틴 런처 인텐트로 직접 앱 실행
+        try {
+            val launchIntent = activity.packageManager.getLaunchIntentForPackage("com.samsung.android.app.routines")
+            if (launchIntent != null) {
+                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                activity.startActivity(launchIntent)
+                return
+            }
+        } catch (_: Exception) {}
+
+        // 2. 컴포넌트 직접 지정 실행 시도
+        val candidates = listOf(
+            Intent().setComponent(ComponentName("com.samsung.android.app.routines", "com.samsung.android.app.routines.ui.MainActivity")),
+            Intent("com.samsung.android.app.routines.ACTION_OPEN_ROUTINES"),
+            Intent("android.settings.ROUTINES_SETTINGS"),
+            Intent(Settings.ACTION_SETTINGS)
+        )
+        for (intent in candidates) {
+            try {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                activity.startActivity(intent)
+                return
+            } catch (_: Exception) {}
+        }
+    }
+
     fun showBluetoothAutomationDialog(activity: Activity) {
         val message = """
             안드로이드 OS 보안 정책(Android 8~16)상 일반 앱이 모바일 핫스팟을 강제로 On/Off하는 것은 차단되어 있습니다.
-            
-            하지만 삼성 갤럭시 [모드 및 루틴]을 활용하면 시스템 순정 권한으로 '차량 탑승 시 자동 핫스팟 켜기 / 하차 시 자동 끄기'가 100% 무루팅으로 완벽하게 동작합니다!
+
+            하지만 삼성 갤럭시 [모드 및 루틴] 독립 앱을 활용하시면, 시스템 순정 기능으로 '차량 탑승 시 핫스팟 자동 켜기 / 하차 시 자동 끄기'가 100% 무루팅으로 완벽하게 동작합니다!
 
             ────────────────────
-            📋 10초 설정 방법 (삼성 갤럭시)
+            📱 [모드 및 루틴] 앱 위치 안내
             ────────────────────
-            1. 스마트폰 [설정] ➔ [모드 및 루틴] ➔ [루틴] 탭 이동
-            2. 우측 상단 [+] 버튼 터치
-            3. [언제 실행할까요] ➔ [블루투스 기기] ➔ [내 차량 블루투스(Tesla 등)] 선택
-            4. [무엇을 할까요] ➔ [모바일 핫스팟] ➔ [켜짐] 선택
-            5. [루틴이 종료될 때] ➔ [모바일 핫스팟 끄기] 확인 후 [저장]
+            • 스마트폰 앱스(전체 앱 목록) 화면에서 [모드 및 루틴] (또는 [빅스비 루틴]) 앱 아이콘을 직접 찾아 실행하실 수 있습니다.
+            • 아래 [루틴 앱 실행하기] 버튼을 누르시면 스마트폰의 '모드 및 루틴' 앱이 바로 실행됩니다.
 
-            이제 차에 타면 핫스팟이 자동으로 켜지고, 시동을 끄면 자동으로 꺼집니다!
+            ────────────────────
+            📋 10초 자동화 설정 방법
+            ────────────────────
+            1. [모드 및 루틴] 앱 실행 ➔ 하단 [루틴] 탭 터치
+            2. 우측 상단 [+] 버튼 터치 (새 루틴 추가)
+            3. [언제 실행할까요?] ➔ [블루투스 기기] ➔ [내 차량 블루투스(Tesla 등)] 연결됨 선택
+            4. [무엇을 할까요?] ➔ [모바일 핫스팟] ➔ [켜짐] 선택
+            5. [루틴이 종료될 때] ➔ [모바일 핫스팟 끄기] (기본 자동 복원) 확인 후 [저장]
+
+            설정을 완료해 두시면 차량에 탑승할 때 핫스팟이 자동으로 켜지고, 시동을 끄면 자동으로 꺼져 0MB 모바일 데이터 미러링을 언제나 편리하게 이용하실 수 있습니다!
         """.trimIndent()
 
         MaterialAlertDialogBuilder(activity)
             .setTitle("🤖 차량 블루투스 핫스팟 자동화 안내")
             .setMessage(message)
-            .setPositiveButton("모드 및 루틴 열기") { _, _ ->
-                try {
-                    val intent = Intent("android.settings.ROUTINES_SETTINGS").apply {
-                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                    }
-                    activity.startActivity(intent)
-                } catch (_: Exception) {
-                    try {
-                        val intent = Intent(Settings.ACTION_SETTINGS).apply {
-                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                        }
-                        activity.startActivity(intent)
-                    } catch (_: Exception) {}
-                }
+            .setPositiveButton("🚀 루틴 앱 실행하기") { _, _ ->
+                openSamsungRoutinesApp(activity)
             }
             .setNegativeButton("닫기", null)
             .show()
