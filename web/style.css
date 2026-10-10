@@ -1383,61 +1383,6 @@ html, body {
     border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-/* ==========================================================================
-   플로팅 줌 컨트롤러 (테슬라 운전자 전용 원터치 확대/축소)
-   ========================================================================== */
-.floating-zoom-controls {
-    position: absolute;
-    bottom: 40px;
-    display: none;
-    flex-direction: column;
-    align-items: center;
-    background: rgba(18, 24, 38, 0.88);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-    border: 1px solid rgba(255, 255, 255, 0.22);
-    border-radius: 10px;
-    overflow: hidden;
-    z-index: 100;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.55);
-    opacity: 0.9;
-    transition: opacity 0.2s ease, transform 0.15s ease, left 0.15s ease;
-    touch-action: none;
-    user-select: none;
-    -webkit-user-select: none;
-}
-
-.floating-zoom-controls:hover {
-    opacity: 1.0;
-}
-
-.zoom-btn {
-    width: 34px;
-    height: 34px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: transparent;
-    border: none;
-    color: #ffffff;
-    font-size: 18px;
-    font-weight: 700;
-    cursor: pointer;
-    user-select: none;
-    -webkit-user-select: none;
-    transition: background 0.15s ease, transform 0.1s ease;
-}
-
-.zoom-btn:active {
-    background: rgba(255, 255, 255, 0.25);
-    transform: scale(0.92);
-}
-
-.zoom-divider {
-    width: 22px;
-    height: 1px;
-    background: rgba(255, 255, 255, 0.15);
-}
 
 /* ==========================================================================
    테슬라 홈 대시보드 (시계, 실시간 날씨, 주행 요약, 앱 런처)

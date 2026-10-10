@@ -144,9 +144,6 @@
         if (restoreBtn && restoreBtn.style.display !== 'none' && e.target && e.target.closest('#btnSidePanelRestore')) {
             return true;
         }
-        if (e.target && e.target.closest('#floatingZoomControls')) {
-            return true;
-        }
         return false;
     }
 
@@ -444,38 +441,4 @@
             }
         });
     });
-
-    // 플로팅 줌 컨트롤러 버튼 (+ / -) 이벤트 바인딩 (0ms 즉시 반응)
-    const btnZoomIn = document.getElementById('btnZoomIn');
-    const btnZoomOut = document.getElementById('btnZoomOut');
-
-    function triggerZoom(direction) {
-        sendControl({
-            type: 'pinch_zoom',
-            direction: direction,
-            x: 0.5,
-            y: 0.5,
-            mode: getMode()
-        });
-    }
-
-    if (btnZoomIn) {
-        ['touchstart', 'mousedown'].forEach(evName => {
-            btnZoomIn.addEventListener(evName, (e) => {
-                e.stopPropagation();
-                e.preventDefault();
-                triggerZoom('in');
-            }, { passive: false });
-        });
-    }
-
-    if (btnZoomOut) {
-        ['touchstart', 'mousedown'].forEach(evName => {
-            btnZoomOut.addEventListener(evName, (e) => {
-                e.stopPropagation();
-                e.preventDefault();
-                triggerZoom('out');
-            }, { passive: false });
-        });
-    }
 })();

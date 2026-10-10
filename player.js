@@ -386,37 +386,6 @@
             canvas.style.marginRight = 'auto';
         }
         updateMirrorSidePanelLayout(cw, ch, parseInt(canvas.style.width) || targetW, mode);
-        updateFloatingZoomPosition(cw, ch, parseInt(canvas.style.width) || targetW, mode);
-    }
-
-    // 플로팅 줌 컨트롤러(+/-) 위치를 미러링 화면 우측 안쪽 가장자리(좌측)에 밀착 배치 (우측 광고/위젯 가림 방지)
-    function updateFloatingZoomPosition(cw, ch, canvasW, mode) {
-        const zoomControls = document.getElementById('floatingZoomControls');
-        if (!zoomControls) return;
-
-        if (window.currentViewMode !== 'mirror') {
-            zoomControls.style.display = 'none';
-            return;
-        }
-
-        zoomControls.style.display = 'flex';
-
-        let canvasLeft = 0;
-        if (mode === 'center') {
-            canvasLeft = Math.max(0, Math.round((cw - canvasW) / 2));
-        } else {
-            canvasLeft = 0;
-        }
-
-        const canvasRight = canvasLeft + canvasW;
-        const zoomWidth = 36; // 34px 버튼 + 테두리
-        const margin = 10;
-
-        // 우측 패널(광고 캐러셀, 날씨 등)을 전혀 가리지 않도록 항상 미러링 화면(캔버스) 우측 안쪽 가장자리에 밀착 배치
-        const targetLeft = Math.max(canvasLeft + 10, canvasRight - zoomWidth - margin);
-        zoomControls.style.left = targetLeft + 'px';
-        zoomControls.style.right = 'auto';
-        zoomControls.style.bottom = '40px';
     }
 
     // 미러링 우측 빈 공간 정보 패널 (시계, 실시간 날씨, 퀵 위젯) 레이아웃 동적 계산
@@ -3195,8 +3164,6 @@
         if (sidePanel) sidePanel.style.display = 'none';
         const restoreBtn = document.getElementById('btnSidePanelRestore');
         if (restoreBtn) restoreBtn.style.display = 'none';
-        const zoomControls = document.getElementById('floatingZoomControls');
-        if (zoomControls) zoomControls.style.display = 'none';
         updateModeBadge('dashboard');
         document.getElementById('btnDockHome')?.classList.add('active');
         document.getElementById('btnDockMirror')?.classList.remove('active');
