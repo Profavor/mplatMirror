@@ -54,60 +54,6 @@ object CommonDialogHelper {
             .show()
     }
 
-    fun showTripLogDialog(activity: Activity) {
-        val summary = DrivingLogManager.getTripSummary(activity)
-        val allTrips = DrivingLogManager.getSavedTrips(activity)
-
-        val sb = StringBuilder()
-        sb.append("■ 스마트폰 GPS 기반 자동 주행일지\n")
-        sb.append("- 유료 커넥티비티 API 연결 없이 스마트폰의 고정밀 GPS 센서를 통해 실시간 속도 및 주행 궤적이 로컬 저장소에 안전하게 기록됩니다.\n\n")
-
-        if (summary.isLive) {
-            sb.append("■ 🟢 현재 실시간 주행 중\n")
-            sb.append("- 주행 거리: ${String.format(Locale.getDefault(), "%.1f", summary.todayDistanceKm)} km\n")
-            sb.append("- 주행 시간: ${summary.durationMin}분\n")
-            sb.append("- 평균 속도: ${String.format(Locale.getDefault(), "%.1f", summary.avgSpeedKmh)} km/h (최고 ${String.format(Locale.getDefault(), "%.1f", summary.maxSpeedKmh)} km/h)\n\n")
-        } else if (allTrips.isNotEmpty()) {
-            val last = allTrips[0]
-            val dist = last.optDouble("distance_km", 0.0)
-            val durSec = last.optLong("duration_sec", 0L)
-            val durMin = (durSec / 60).coerceAtLeast(1)
-            val avgSpd = last.optDouble("avg_speed_kmh", 0.0)
-            val maxSpd = last.optDouble("max_speed_kmh", 0.0)
-            val startTime = last.optString("start_time", "").replace("T", " ")
-
-            sb.append("■ 🏁 최근 완료된 주행 기록\n")
-            if (startTime.isNotEmpty()) sb.append("- 운행 일시: $startTime\n")
-            sb.append("- 주행 거리: ${String.format(Locale.getDefault(), "%.1f", dist)} km\n")
-            sb.append("- 주행 시간: ${durMin}분\n")
-            sb.append("- 평균 속도: ${String.format(Locale.getDefault(), "%.1f", avgSpd)} km/h (최고 ${String.format(Locale.getDefault(), "%.1f", maxSpd)} km/h)\n\n")
-
-            // 누적 통계
-            var totalKm = 0.0
-            var totalSec = 0L
-            for (t in allTrips) {
-                totalKm += t.optDouble("distance_km", 0.0)
-                totalSec += t.optLong("duration_sec", 0L)
-            }
-            sb.append("■ 📊 누적 주행 통계 (최근 ${allTrips.size}회)\n")
-            sb.append("- 총 누적 거리: ${String.format(Locale.getDefault(), "%.1f", totalKm)} km\n")
-            sb.append("- 총 주행 시간: ${totalSec / 3600}시간 ${(totalSec % 3600) / 60}분\n\n")
-        } else {
-            sb.append("■ 📝 주행 기록 상태\n")
-            sb.append("- 아직 저장된 주행 기록이 없습니다.\n")
-            sb.append("- 차량 화면과 연결 후 50m 이상 주행하시면 자동으로 기록됩니다.\n\n")
-        }
-
-        sb.append("■ 차량 대화면 지도 연동\n")
-        sb.append("- 차량 모니터 브라우저 상단 [🚗] 메뉴 또는 독바의 [주행일지]를 누르면 대화면 지도와 함께 실시간 및 과거 주행 궤적이 시각화됩니다.")
-
-        MaterialAlertDialogBuilder(activity)
-            .setTitle("🚗 주행일지 & GPS 통계")
-            .setMessage(sb.toString().trimEnd())
-            .setPositiveButton("확인", null)
-            .show()
-    }
-
     fun openSamsungRoutinesApp(activity: Activity) {
         // 1. 삼성 모드 및 루틴 / 빅스비 루틴 런처 인텐트로 직접 앱 실행
         try {
@@ -171,8 +117,9 @@ object CommonDialogHelper {
 
     fun showLicenseDialog(activity: Activity, versionName: String = BuildConfig.VERSION_NAME, onOpenPrivacy: () -> Unit) {
         val licenseMessage = """
-            ■ mplat Mirror (v$versionName)
-            Copyright (c) 2026 mplat. All rights reserved.
+            ■ inYou Mirror (v$versionName)
+            상호명: 인유소프트 | 문의: profavor@naver.com
+            Copyright (c) 2026 인유소프트. All rights reserved.
             Licensed under the Apache License, Version 2.0.
 
             ────────────────────────────
@@ -190,7 +137,7 @@ object CommonDialogHelper {
             ────────────────────────────
             1. 'Tesla'는 Tesla, Inc., 'Apple' 및 'Apple CarPlay'는 Apple Inc., 'Android' 및 'Google Play'는 Google LLC, 'TMAP'은 티맵모빌리티(주)의 등록상표입니다.
             2. 본 소프트웨어는 상표법 제90조 및 판례상의 설명적 공정이용(Nominative Fair Use) 원칙에 따라 기기 호환성 및 기능 설명을 위한 목적으로만 타사 상표를 참조합니다.
-            3. 본 프로젝트(mplat Mirror)는 위 기업들 및 자동차 제조사와 어떠한 공식 제휴, 후원, 보증 관계도 없는 독립 서드파티 오픈소스 프로젝트입니다.
+            3. 본 프로젝트(inYou Mirror)는 위 기업들 및 자동차 제조사와 어떠한 공식 제휴, 후원, 보증 관계도 없는 인유소프트의 독립 서드파티 오픈소스 프로젝트입니다.
 
             ────────────────────────────
             🔒 개인정보 보호 및 0MB 데이터 보안 (Privacy)
@@ -199,8 +146,8 @@ object CommonDialogHelper {
                모든 화면 캡처 영상, 오디오 및 터치 좌표 스트림은 스마트폰 핫스팟의 순수 로컬 Wi-Fi 서브넷(UDP P2P 직결) 내에서만 실시간 전송되며 외부 중앙 서버로 일체 수집·저장·유출되지 않습니다.
             2. [접근성 API 투명성]
                Android AccessibilityService API는 차량 브라우저의 터치 제스처 전달 및 사용자 직접 지시에 따른 목적지 검색창 포커스 시 텍스트 주입 목적으로만 사용되며, 화면 상의 개인정보, 비밀번호, 금융 정보, 텍스트 등을 일절 감시하거나 수집하지 않습니다.
-            3. [위치정보(GPS) 로컬 단독 보관]
-               주행일지(TripLog) 기록용 GPS 센서 데이터는 기기 내부 로컬 저장소(SQLite)에만 단독 보관되며 외부로 절대 전송되지 않고 사용자 삭제 또는 앱 삭제 시 즉시 영구 파기됩니다.
+            3. [개인 위치정보 미수집]
+               본 앱은 이용자의 실시간 위치(GPS) 정보를 일체 수집하거나 서버로 전송하지 않습니다.
 
             ────────────────────────────
             🛡️ 무보증(AS-IS) 및 법적 책임의 제한
@@ -282,7 +229,7 @@ object CommonDialogHelper {
         MaterialAlertDialogBuilder(activity)
             .setTitle("📡 모바일 핫스팟 연결 필요")
             .setMessage(
-                "mplat Mirror는 0MB 모바일 데이터 원칙(LTE/5G 소모 0MB)에 따라 " +
+                "inYou Mirror는 0MB 모바일 데이터 원칙(LTE/5G 소모 0MB)에 따라 " +
                 "스마트폰 핫스팟의 순수 로컬 Wi-Fi 서브넷 내부에서만 화면 및 소리를 전송합니다.\n\n" +
                 "핫스팟이 꺼진 상태에서는 미러링을 시작할 수 없습니다.\n\n" +
                 "스마트폰의 [모바일 핫스팟]을 켠 후, 차량 모니터나 태블릿 Wi-Fi를 스마트폰 핫스팟에 연결해 주세요."

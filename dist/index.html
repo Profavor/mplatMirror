@@ -3,10 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta http-equiv="Permissions-Policy" content="microphone=(), camera=(), speaker-selection=(), autoplay=()">
-    <title>mplat Mirror - 차량 무선 미러링</title>
-    <link rel="stylesheet" href="leaflet.css">
-    <link rel="stylesheet" href="style.css?v=1.4.7">
+    <title>inYou Mirror - 차량 무선 미러링</title>
+    <link rel="stylesheet" href="style.css?v=1.5.0">
 </head>
 <body>
     <div id="appContainer">
@@ -15,7 +13,7 @@
             <div class="status-indicator">
                 <span id="statusDot" class="dot disconnected"></span>
                 <span id="statusText">연결 대기 중...</span>
-                <span class="app-version-badge">v1.4.7</span>
+                <span class="app-version-badge">v1.5.0</span>
                 <span id="versionMismatchBadge" class="badge-mismatch" style="display:none;" title="스마트폰 앱 버전 불일치">⚠️ 앱 v<span id="mismatchAppVer"></span> 업데이트 필요</span>
                 <button id="btnConsoleLog" class="btn-console-log" title="실시간 콘솔 로그 열기">📋 로그</button>
             </div>
@@ -145,7 +143,7 @@
                                 </a>
 
                                 <!-- 슬라이드 2: 스마트 드라이빙 스토어 -->
-                                <a href="https://mdm.mplat.store" target="_blank" rel="noopener" class="side-card side-ad-slide slide-purple" title="mplat 스마트 마켓 바로가기">
+                                <a href="https://mdm.mplat.store" target="_blank" rel="noopener" class="side-card side-ad-slide slide-purple" title="인유소프트 스마트 마켓 바로가기">
                                     <div class="side-ad-header">
                                         <div class="side-ad-badge-group">
                                             <span class="side-ad-badge">AD</span>
@@ -158,7 +156,7 @@
                                             <span class="side-ad-icon">🚗</span>
                                         </div>
                                         <div class="side-ad-text-wrap">
-                                            <h4 class="side-ad-title">mplat 스마트 드라이빙 마켓</h4>
+                                            <h4 class="side-ad-title">인유소프트 드라이빙 마켓</h4>
                                             <p class="side-ad-desc">스마트 드라이빙을 위한 차량용 무선 충전 거치대 &amp; 인카 커스텀 디바이스</p>
                                         </div>
                                     </div>
@@ -168,27 +166,27 @@
                                     </div>
                                 </a>
 
-                                <!-- 슬라이드 3: 초저지연 AI & 클라우드 인프라 -->
-                                <a href="https://mdm.mplat.store" target="_blank" rel="noopener" class="side-card side-ad-slide slide-emerald" title="mplat Cloud & AI 바로가기">
+                                <!-- 슬라이드 3: inYou Mirror 공식 다운로드 -->
+                                <a href="https://mplat-mirror.web.app/download" target="_blank" rel="noopener" class="side-card side-ad-slide slide-emerald" title="inYou Mirror 앱 다운로드 바로가기">
                                     <div class="side-ad-header">
                                         <div class="side-ad-badge-group">
-                                            <span class="side-ad-badge">AD</span>
-                                            <span class="side-ad-category">클라우드 &amp; AI</span>
+                                            <span class="side-ad-badge">DOWNLOAD</span>
+                                            <span class="side-ad-category">공식 앱</span>
                                         </div>
-                                        <span class="side-ad-domain">mdm.mplat.store ↗</span>
+                                        <span class="side-ad-domain">mplat-mirror.web.app ↗</span>
                                     </div>
                                     <div class="side-ad-body">
                                         <div class="side-ad-icon-box emerald-grad">
-                                            <span class="side-ad-icon">⚡</span>
+                                            <span class="side-ad-icon">📱</span>
                                         </div>
                                         <div class="side-ad-text-wrap">
-                                            <h4 class="side-ad-title">mplat Cloud &amp; AI Engine</h4>
-                                            <p class="side-ad-desc">WebRTC 초저지연 미디어 스트리밍 &amp; AI 자동화 비즈니스 엔진</p>
+                                            <h4 class="side-ad-title">inYou Mirror 다운로드</h4>
+                                            <p class="side-ad-desc">0MB 모바일 데이터 초저지연 60 FPS 인카 미러링 공식 앱</p>
                                         </div>
                                     </div>
                                     <div class="side-ad-footer">
                                         <span class="side-ad-tag">🚀 60 FPS 무손실 P2P 스트리밍</span>
-                                        <span class="side-ad-cta">플랫폼 보기 ➔</span>
+                                        <span class="side-ad-cta">다운로드 가기 ➔</span>
                                     </div>
                                 </a>
                             </div>
@@ -248,51 +246,28 @@
                             </div>
                         </div>
 
-                        <!-- 위젯 3: 오늘의 주행 통계 & HUD (비활성화) -->
-                        <div class="dash-card trip-card" id="dashTripCard" style="display: none;">
-                            <div class="trip-card-header">
-                                <span class="trip-title">🚗 오늘의 주행</span>
-                                <button id="btnDashTripLog" class="btn-dash-action" title="주행일지 & 지도 보기">주행일지 ➔</button>
-                            </div>
-                            <div class="trip-stats-grid">
-                                <div class="trip-stat-item">
-                                    <span class="trip-val" id="dashTripDist">0.0</span>
-                                    <span class="trip-lbl">km 주행</span>
-                                </div>
-                                <div class="trip-stat-item">
-                                    <span class="trip-val" id="dashTripTime">00:00</span>
-                                    <span class="trip-lbl">주행 시간</span>
-                                </div>
-                                <div class="trip-stat-item">
-                                    <span class="trip-val" id="dashTripSpeed">0</span>
-                                    <span class="trip-lbl">km/h 현재</span>
+                        <!-- 1:1 스마트폰 미러링 바로가기 배너 -->
+                        <div class="dash-mirror-banner" id="btnDashEnterMirror" title="스마트폰 화면 1:1 미러링 바로보기">
+                            <div class="banner-left">
+                                <span class="banner-icon">📱</span>
+                                <div class="banner-text">
+                                    <strong>스마트폰 화면 1:1 미러링</strong>
+                                    <span>현재 스마트폰에 떠있는 화면을 차량 화면에서 직접 조작합니다</span>
                                 </div>
                             </div>
+                            <button class="btn-banner-go">화면 보기 ➔</button>
                         </div>
-                    </div>
 
-                    <!-- 1:1 스마트폰 미러링 바로가기 배너 -->
-                    <div class="dash-mirror-banner" id="btnDashEnterMirror" title="스마트폰 화면 1:1 미러링 바로보기">
-                        <div class="banner-left">
-                            <span class="banner-icon">📱</span>
-                            <div class="banner-text">
-                                <strong>스마트폰 화면 1:1 미러링</strong>
-                                <span>현재 스마트폰에 떠있는 화면을 차량 화면에서 직접 조작합니다</span>
+                        <!-- 하단 앱 런처 섹션 -->
+                        <div class="dash-apps-section">
+                            <div class="dash-apps-header">
+                                <span class="dash-section-title">최근 앱</span>
+                                <span class="dash-section-sub">터치하면 차량 화면에서 앱이 즉시 실행됩니다</span>
+                            </div>
+                            <div id="dashAppsGrid" class="dash-apps-grid">
+                                <!-- JS로 동적 렌더링 -->
                             </div>
                         </div>
-                        <button class="btn-banner-go">화면 보기 ➔</button>
-                    </div>
-
-                    <!-- 하단 앱 런처 섹션 -->
-                    <div class="dash-apps-section">
-                        <div class="dash-apps-header">
-                            <span class="dash-section-title">최근 앱 및 주행이력</span>
-                            <span class="dash-section-sub">터치하면 폰에서 실행되거나 대화면 주행일지 지도가 즉시 열립니다</span>
-                        </div>
-                        <div id="dashAppsGrid" class="dash-apps-grid">
-                            <!-- JS로 동적 렌더링 -->
-                        </div>
-                    </div>
                 </div>
             </div>
             
@@ -307,9 +282,9 @@
             <div id="disconnectOverlay" class="overlay">
                 <div class="overlay-card guide-card">
                     <div class="guide-header">
-                        <img src="logo.png" alt="mplat Mirror Logo" class="guide-logo">
+                        <img src="logo.png" alt="inYou Mirror Logo" class="guide-logo">
                         <div class="guide-title-box">
-                            <h2 id="overlayTitle"><span id="overlayTitleText">mplat Mirror 차량 연결 가이드</span> <span class="badge-version">v1.4.7</span></h2>
+                            <h2 id="overlayTitle"><span id="overlayTitleText">inYou Mirror 차량 연결 가이드</span> <span class="badge-version">v1.5.0</span></h2>
                             <p class="guide-sub">컴퓨터 연결이나 개발자 모드 없이 3초 만에 시작하세요</p>
                         </div>
                     </div>
@@ -326,7 +301,7 @@
                             <div class="step-num">2</div>
                             <div class="step-content">
                                 <strong>2단계: 스마트폰에서 [미러링 시작] 터치</strong>
-                                <span id="overlayMessage">스마트폰 mplat Mirror 앱에서 파란색 <strong>[미러링 시작]</strong> 버튼을 누르고 <strong>'지금 시작'</strong>을 선택하세요.</span>
+                                <span id="overlayMessage">스마트폰 inYou Mirror 앱에서 파란색 <strong>[미러링 시작]</strong> 버튼을 누르고 <strong>'지금 시작'</strong>을 선택하세요.</span>
                             </div>
                         </div>
                         <div class="guide-step-item">
@@ -342,7 +317,7 @@
                         <span>💡 <strong>운전자 꿀팁</strong>: 현재 주소를 차량 브라우저 <strong>★ 즐겨찾기(북마크)</strong>에 등록해두시면 다음부터 원클릭 접속됩니다!</span>
                         <span style="display:block; margin-top:6px; color:#60a5fa;">🔊 <strong>차량 사운드 안내</strong>: 차량 화면 하단 미디어 소스를 <strong>[블루투스]</strong>로 선택하시면 스마트폰 티맵 내비 음성과 음악이 차 스피커로 즉시 출력됩니다.</span>
                         <div id="overlayVersionWarning" class="guide-version-warning" style="display: none; margin-top: 8px; background: rgba(245, 158, 11, 0.15); border: 1px solid #f59e0b; border-radius: 8px; padding: 10px; font-size: 12px; color: #fbbf24;">
-                            ⚠️ <strong>스마트폰 앱 업데이트 안내</strong>: 연결된 스마트폰의 앱 버전(v<span id="overlayMismatchVer"></span>)이 최신 버전(v1.4.7)과 일치하지 않습니다. 안정적인 60FPS 전송을 위해 <a href="https://play.google.com/store/apps/details?id=io.mmirror" target="_blank" style="color:#60a5fa; text-decoration:underline; font-weight:bold;">Google Play 스토어</a> 또는 <a href="https://github.com/Profavor/mplatMirror/releases/latest/download/mplatMirror.apk" style="color:#38bdf8; text-decoration:underline; font-weight:bold;">직접 APK 다운로드</a>로 최신 앱으로 업데이트해 주세요.
+                            ⚠️ <strong>스마트폰 앱 업데이트 안내</strong>: 연결된 스마트폰의 앱 버전(v<span id="overlayMismatchVer"></span>)이 최신 버전(v1.5.0)과 일치하지 않습니다. 안정적인 60FPS 전송을 위해 <a href="https://play.google.com/store/apps/details?id=io.mmirror" target="_blank" style="color:#60a5fa; text-decoration:underline; font-weight:bold;">Google Play 스토어</a> 또는 <a href="https://github.com/Profavor/mplatMirror/releases/latest/download/mplatMirror.apk" style="color:#38bdf8; text-decoration:underline; font-weight:bold;">직접 APK 다운로드</a>로 최신 앱으로 업데이트해 주세요.
                         </div>
                     </div>
 
@@ -357,53 +332,13 @@
                             <span style="display:block; margin-top:2px;">🏷️ 'Tesla', 'Apple', 'Google', 'TMAP'은 각 사 등록상표이며 본 서비스는 상표법 제90조(공정이용)에 따른 호환성 설명용 독립 서드파티 오픈소스입니다.</span>
                             <span style="display:block; margin-top:2px;">🔒 이용자 화면/오디오/터치/위치 서버 미수집 (0MB 모바일 데이터 순수 로컬 Wi-Fi P2P 직결)</span>
                         </div>
-                        <span>mplat Mirror v1.4.7 · 0MB 초저지연 WebRTC 로컬 P2P 직결 · Copyright © 2026 mplat</span>
+                        <span>inYou Mirror v1.5.0 · 0MB 초저지연 WebRTC 로컬 P2P 직결 · Copyright © 2026 인유소프트</span>
                     </div>
                 </div>
             </div>
         </main>
 
-        <!-- 주행일지 & 지도 모달 (독립 팝업) -->
-        <div id="tripLogModal" class="modal-overlay hidden" style="display: none;">
-            <div class="modal-window">
-                <div class="modal-header">
-                    <div class="modal-title">
-                        <span class="modal-icon">🚗</span>
-                        <h2>차량 주행일지 &amp; GPS 지도</h2>
-                    </div>
-                    <button id="btnCloseTripModal" class="btn-close-modal" title="닫기">✕ 닫기</button>
-                </div>
 
-                <!-- 모달 내부 실시간 주행 HUD 바 -->
-                <div class="modal-hud-bar">
-                    <div class="hud-item speed-badge">
-                        <span id="hudSpeed">0</span>
-                        <small>km/h</small>
-                    </div>
-                    <div class="hud-item info-badge">
-                        <span class="badge-label">이번 주행거리</span>
-                        <span id="hudDistance">0.0 km</span>
-                    </div>
-                    <div class="hud-item info-badge">
-                        <span class="badge-label">주행 시간</span>
-                        <span id="hudDuration">00:00</span>
-                    </div>
-                </div>
-
-                <div class="modal-body">
-                    <div id="mapContainer"></div>
-                    <div id="tripSidebar">
-                        <div class="sidebar-header">
-                            <h3>주행 기록 목록</h3>
-                        </div>
-                        <div id="tripList" class="trip-list-scroll"></div>
-                        <div class="sidebar-footer">
-                            <button id="btnBottomCloseTripModal" class="btn-sidebar-close">✕ 닫고 미러링 복귀</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
 
         <!-- 가상화면 앱 팔레트 관리/편집 모달 (독립 팝업) -->
         <div id="appManagerModal" class="modal-overlay hidden" style="display: none;">
@@ -634,10 +569,8 @@
 
     <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-database-compat.js"></script>
-    <script src="firebase-config.js?v=1.4.7"></script>
-    <script src="leaflet.js"></script>
-    <script src="player.js?v=1.4.7"></script>
-    <script src="touch.js?v=1.4.7"></script>
-    <script src="triplog.js?v=1.4.7"></script>
+    <script src="firebase-config.js?v=1.5.0"></script>
+    <script src="player.js?v=1.5.0"></script>
+    <script src="touch.js?v=1.5.0"></script>
 </body>
 </html>

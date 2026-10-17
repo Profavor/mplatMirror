@@ -270,10 +270,6 @@ class WebRtcStreamer(
                 put("fps", fps)
                 put("isStandalone", false)
                 put("appVersion", io.mmirror.BuildConfig.VERSION_NAME)
-                io.mmirror.DrivingLogManager.currentInstance?.lastLocation?.let { loc ->
-                    put("lat", loc.latitude)
-                    put("lng", loc.longitude)
-                }
             }
             val str = json.toString()
             sendSignaling(str)
@@ -536,8 +532,6 @@ class WebRtcStreamer(
                     AppLogger.i(TAG, "🎉 [WEBRTC] Direct P2P Connected to Tesla! 0MB Local Streaming Active!")
                     proactiveReconnectRunnable?.let { mainHandler.removeCallbacks(it) }
                     pendingReconnectRunnable?.let { mainHandler.removeCallbacks(it); pendingReconnectRunnable = null }
-                    // 차량 연결됨 → GPS 주행 기록 시작
-                    io.mmirror.DrivingLogManager.currentInstance?.onPeerConnected()
                     io.mmirror.MediaProjectionService.instance?.requestKeyFrame(immediateCached = true)
                 } else if (newState == PeerConnection.PeerConnectionState.DISCONNECTED) {
                     AppLogger.w(TAG, "🔌 WebRTC peer disconnected (일시 지터 감지 - 8초 자연 복구 대기): $newState")
@@ -546,7 +540,6 @@ class WebRtcStreamer(
                         val currState = peerConnection?.connectionState()
                         if (isRunning && currState != PeerConnection.PeerConnectionState.CONNECTED) {
                             AppLogger.i(TAG, "⚡ [SELF-HEALING] Connection lost for 8s (state=$currState) -> Phone proactively generating fresh Offer!")
-                            io.mmirror.DrivingLogManager.currentInstance?.onPeerDisconnected()
                             createPeerConnectionAndOffer(force = true)
                         }
                     }
@@ -554,7 +547,6 @@ class WebRtcStreamer(
                     mainHandler.postDelayed(r, 8000L)
                 } else if (newState == PeerConnection.PeerConnectionState.FAILED) {
                     AppLogger.w(TAG, "🔌 WebRTC peer failed: $newState")
-                    io.mmirror.DrivingLogManager.currentInstance?.onPeerDisconnected()
                     proactiveReconnectRunnable?.let { mainHandler.removeCallbacks(it) }
                     val r = Runnable {
                         if (isRunning && peerConnection?.connectionState() == PeerConnection.PeerConnectionState.FAILED) {
@@ -700,8 +692,6 @@ class WebRtcStreamer(
                     sendTouchStatus()
                     sendAppList()
                     sendAudioModeStatus()
-                    io.mmirror.DrivingLogManager.currentInstance?.sendLastKnownLocation()
-                    sendTripHistory()
                     MediaProjectionService.instance?.requestKeyFrame()
                 }
             }
@@ -752,27 +742,6 @@ class WebRtcStreamer(
         }
     }
 
-    fun sendTripHistory() {
-        val dc = dataChannel ?: return
-        if (dc.state() != DataChannel.State.OPEN) return
-        try {
-            val trips = io.mmirror.DrivingLogManager.getSavedTrips(context)
-            val json = JSONObject().apply {
-                put("type", "triplog_history")
-                put("trips", org.json.JSONArray().apply {
-                    trips.forEach { put(it) }
-                })
-            }
-            val payload = json.toString().toByteArray(Charsets.UTF_8)
-            val buffer = DataChannel.Buffer(java.nio.ByteBuffer.wrap(payload), false)
-            synchronized(sendLock) {
-                dc.send(buffer)
-            }
-            Log.i(TAG, "Sent trip history (${trips.size} trips) via DataChannel")
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to send trip history: ${e.message}")
-        }
-    }
 
     private fun drawableToBase64(drawable: android.graphics.drawable.Drawable, sizePx: Int = 72): String {
         val bitmap = android.graphics.Bitmap.createBitmap(sizePx, sizePx, android.graphics.Bitmap.Config.ARGB_8888)
@@ -912,9 +881,6 @@ class WebRtcStreamer(
             when (type) {
                 "get_touch_status", "get_shizuku_status" -> {
                     sendTouchStatus()
-                }
-                "get_trips", "get_triplog" -> {
-                    sendTripHistory()
                 }
                 "request_keyframe" -> {
                     Log.i(TAG, "🔑 Received request_keyframe from DataChannel -> triggering sync frame refresh")

@@ -1,4 +1,3 @@
-use std::time::Duration;
 use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
 
@@ -58,36 +57,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = std::sync::Arc::new(server);
 
-    // 1초마다 가상 GPS 데이터 브로드캐스트 (속도 60~85km/h, 주행거리 누적)
-    let srv_clone = server.clone();
-    tokio::spawn(async move {
-        let mut ticker = tokio::time::interval(Duration::from_secs(1));
-        let mut distance = 1200.0;
-        let mut seconds = 120;
-        let mut lat = 37.5665;
-        let mut lng = 126.9780;
-
-        loop {
-            ticker.tick().await;
-            distance += 20.0;
-            seconds += 1;
-            lat += 0.0001;
-            lng += 0.0001;
-
-            srv_clone.send_gps(mmirror_core::protocol::GpsData {
-                lat,
-                lng,
-                speed_kmh: 72.5,
-                heading: 45.0,
-                trip_distance_meters: distance,
-                duration_seconds: seconds,
-                timestamp: std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs(),
-            });
-        }
-    });
 
     tokio::signal::ctrl_c().await?;
     info!("Shutting down mMirror Dev Server...");

@@ -199,7 +199,7 @@
     const PKT_TYPE_AUDIO = 0x02; // Raw PCM Audio (48000Hz, 16bit Stereo)
     const PKT_TYPE_CONFIG = 0x03; // Metadata (Width, Height, FPS, etc.)
     const PKT_TYPE_GPS = 0x04;    // Realtime GPS
-    const CURRENT_WEB_VERSION = '1.4.7';
+    const CURRENT_WEB_VERSION = '1.5.0';
 
     // 오디오 및 A/V 싱크 제어 상태 변수 (100ms 지터 링 버퍼 엔진)
     let audioCtx = null;
@@ -487,7 +487,6 @@
 
     // 상단바 컨트롤 (★ 사용자 요구사항: "설정 버튼 없애고 탑바 고정으로 하자")
     const topBar = document.getElementById('topBar');
-    const tripLogModal = document.getElementById('tripLogModal');
 
     function showUiControls() {
         if (topBar) topBar.classList.remove('ui-hidden');
@@ -1056,10 +1055,10 @@
         }
         const overlayTitleText = document.getElementById('overlayTitleText');
         if (overlayTitleText) {
-            overlayTitleText.textContent = "mplat Mirror 차량 연결 가이드";
+            overlayTitleText.textContent = "inYou Mirror 차량 연결 가이드";
         }
         if (overlayMessage) {
-            overlayMessage.innerHTML = (reason ? `<strong>${reason}</strong><br>` : '') + "스마트폰 mplat Mirror 앱에서 파란색 <strong>[미러링 시작]</strong> 버튼을 누르고 <strong>'지금 시작'</strong>을 선택하세요.";
+            overlayMessage.innerHTML = (reason ? `<strong>${reason}</strong><br>` : '') + "스마트폰 inYou Mirror 앱에서 파란색 <strong>[미러링 시작]</strong> 버튼을 누르고 <strong>'지금 시작'</strong>을 선택하세요.";
         }
         const overlayFooterText = document.getElementById('overlayFooterText');
         if (overlayFooterText) {
@@ -2136,10 +2135,6 @@
                         if (typeof updateDashboardGps === 'function') {
                             updateDashboardGps(data.payload);
                         }
-                    } else if (data.type === 'triplog_history') {
-                        if (window.mMirrorGps && window.mMirrorGps.onTripHistoryReceived) {
-                            window.mMirrorGps.onTripHistoryReceived(data.trips);
-                        }
                     }
                 } catch (_) {}
             }
@@ -2245,7 +2240,7 @@
                 statusText.textContent = '스마트폰 송출 대기 중...';
                 const overlayTitleText = document.getElementById('overlayTitleText');
                 if (overlayTitleText) overlayTitleText.textContent = "스마트폰에서 '미러링 시작'을 눌러주세요";
-                if (overlayMessage) overlayMessage.innerHTML = "차량 화면과 스마트폰이 정상 연결되었습니다.<br>스마트폰 화면의 <strong>mplat Mirror 앱</strong>에서 <strong>[미러링 시작]</strong> 버튼을 누르면 즉시 화면이 송출됩니다.";
+                if (overlayMessage) overlayMessage.innerHTML = "차량 화면과 스마트폰이 정상 연결되었습니다.<br>스마트폰 화면의 <strong>inYou Mirror 앱</strong>에서 <strong>[미러링 시작]</strong> 버튼을 누르면 즉시 화면이 송출됩니다.";
                 disconnectOverlay.classList.remove('hidden');
             }
             initVideoDecoder();
@@ -2764,9 +2759,7 @@
             const btn = document.createElement('button');
             btn.className = 'dock-item-btn';
             btn.setAttribute('data-pkg', app.package);
-            btn.title = (app.package === 'builtin:triplog' || app.isBuiltin)
-                ? `${app.name} (차량 주행일지 & GPS 지도)`
-                : `${app.name} 가상화면 단독 실행`;
+            btn.title = `${app.name} 가상화면 단독 실행`;
 
             // 실제 앱 아이콘 또는 캐시에서 가져오기
             const iconData = app.icon || appIconCache[app.package];
@@ -2822,21 +2815,6 @@
     }
 
     function launchDockApp(app) {
-        // 내장 주행이력 앱 실행
-        if (app.package === 'builtin:triplog' || app.isBuiltin) {
-            console.log('🚗 도크에서 내장 주행이력 앱 실행');
-            if (window.openTripLogModal) {
-                window.openTripLogModal();
-            } else {
-                const modal = document.getElementById('tripLogModal');
-                if (modal) {
-                    modal.classList.remove('hidden');
-                    modal.style.setProperty('display', 'flex', 'important');
-                }
-            }
-            return;
-        }
-
         recordRecentApp(app);
 
         console.log(`🚀 앱 런칭 요청: ${app.name} (${app.package})`);
@@ -2858,7 +2836,7 @@
 
         document.querySelectorAll('.dock-item-btn[data-pkg]').forEach(btn => {
             const pkg = btn.getAttribute('data-pkg');
-            if (pkg && (pkg.startsWith('builtin:') || pkg === 'builtin:triplog')) {
+            if (pkg && pkg.startsWith('builtin:')) {
                 btn.style.opacity = '1.0';
                 return;
             }
@@ -3510,24 +3488,7 @@
     function updateDashboardGps(gpsData) {
         if (!gpsData) return;
 
-        // 1. 오늘의 주행 통계 HUD
-        const elDist = document.getElementById('dashTripDist');
-        if (elDist && typeof gpsData.trip_distance_meters === 'number') {
-            elDist.textContent = (gpsData.trip_distance_meters / 1000).toFixed(1);
-        }
 
-        const elTime = document.getElementById('dashTripTime');
-        if (elTime && typeof gpsData.duration_seconds === 'number') {
-            const totalSec = gpsData.duration_seconds;
-            const m = Math.floor(totalSec / 60);
-            const s = totalSec % 60;
-            elTime.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-        }
-
-        const elSpeed = document.getElementById('dashTripSpeed');
-        if (elSpeed && typeof gpsData.speed_kmh === 'number') {
-            elSpeed.textContent = Math.round(gpsData.speed_kmh);
-        }
 
         // 2. 실시간 GPS 기반 날씨 갱신 (스마트폰 실제 GPS 수신 시 현재 위치로 즉시 반영)
         if (gpsData.lat && gpsData.lng && gpsData.lat > 0 && gpsData.lng > 0) {
@@ -3614,46 +3575,6 @@
             grid.appendChild(tile);
         });
 
-        // 5번째: 주행이력 바로가기 버튼 (5개 채우기)
-        const tripTile = document.createElement('div');
-        tripTile.className = 'dash-app-tile dash-tile-triplog';
-        tripTile.setAttribute('data-pkg', 'builtin:triplog');
-        tripTile.title = '차량 주행이력 & GPS 주행일지 대화면 지도 보기';
-
-        tripTile.innerHTML = `
-            <div class="dash-triplog-icon-wrap">
-                <span class="dash-app-emoji">🚗</span>
-            </div>
-            <span class="dash-app-name">주행이력</span>
-        `;
-
-        const openTripLog = (e) => {
-            e.stopPropagation();
-            if (e.cancelable) e.preventDefault();
-            tripTile.style.transform = 'scale(0.92)';
-            setTimeout(() => { tripTile.style.transform = ''; }, 150);
-            if (window.openTripLogModal) {
-                window.openTripLogModal();
-            } else {
-                const modal = document.getElementById('tripLogModal');
-                if (modal) {
-                    modal.classList.remove('hidden');
-                    modal.style.setProperty('display', 'flex', 'important');
-                }
-            }
-        };
-
-        let tripTouchMoved = false;
-        tripTile.addEventListener('touchstart', () => { tripTouchMoved = false; }, { passive: true });
-        tripTile.addEventListener('touchmove', () => { tripTouchMoved = true; }, { passive: true });
-        tripTile.addEventListener('touchend', (e) => {
-            if (!tripTouchMoved) {
-                openTripLog(e);
-            }
-        }, { passive: false });
-        tripTile.addEventListener('click', openTripLog);
-
-        grid.appendChild(tripTile);
     }
 
     // 4. 네비게이션 및 대시보드 인터랙션 버튼 바인딩
@@ -3701,21 +3622,6 @@
         });
     }
 
-    const btnDashTripLog = document.getElementById('btnDashTripLog');
-    if (btnDashTripLog) {
-        btnDashTripLog.addEventListener('click', (e) => {
-            e.stopPropagation();
-            if (window.openTripLogModal) {
-                window.openTripLogModal();
-            } else {
-                const modal = document.getElementById('tripLogModal');
-                if (modal) {
-                    modal.classList.remove('hidden');
-                    modal.style.setProperty('display', 'flex', 'important');
-                }
-            }
-        });
-    }
 
     // 팔레트 초기 로드 및 렌더링 (로컬 캐시 즉시 복원)
     loadAppIconCache();

@@ -229,7 +229,7 @@ class MainActivity : AppCompatActivity() {
     private fun setupListeners() {
         val ver = BuildConfig.VERSION_NAME
         binding.tvAppVersionBadge.text = "v$ver"
-        binding.tvVersionInfo.text = "mplat Mirror v$ver · Apache License 2.0"
+        binding.tvVersionInfo.text = "inYou Mirror v$ver · Apache License 2.0"
 
         binding.btnDownloadUpdate.setOnClickListener {
             openDownloadUrl()
@@ -291,10 +291,6 @@ class MainActivity : AppCompatActivity() {
 
         binding.btnViewLicenses.setOnClickListener {
             showLicenseDialog()
-        }
-
-        binding.btnOpenTripLog.setOnClickListener {
-            showTripLogDialog()
         }
 
         binding.btnBluetoothRoutine.setOnClickListener {
@@ -417,7 +413,6 @@ class MainActivity : AppCompatActivity() {
 
 
     private fun showConnectionManualDialog() = CommonDialogHelper.showConnectionManualDialog(this)
-    private fun showTripLogDialog() = CommonDialogHelper.showTripLogDialog(this)
     private fun showLicenseDialog() = CommonDialogHelper.showLicenseDialog(this) { openPrivacyPolicy() }
     private fun openPrivacyPolicy() = SystemNavigationHelper.openPrivacyPolicy(this)
 
@@ -455,12 +450,6 @@ class MainActivity : AppCompatActivity() {
         }
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             needed.add(Manifest.permission.RECORD_AUDIO)
-        }
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            needed.add(Manifest.permission.ACCESS_FINE_LOCATION)
-        }
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            needed.add(Manifest.permission.ACCESS_COARSE_LOCATION)
         }
 
         if (needed.isNotEmpty()) {

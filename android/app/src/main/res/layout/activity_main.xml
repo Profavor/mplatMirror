@@ -41,7 +41,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="mplat Mirror"
+                        android:text="inYou Mirror"
                         android:textColor="#ffffff"
                         android:textSize="22sp"
                         android:textStyle="bold" />
@@ -70,22 +70,6 @@
                     android:textColor="#888e9b"
                     android:textSize="12sp" />
             </LinearLayout>
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnOpenTripLog"
-                android:layout_width="wrap_content"
-                android:layout_height="38dp"
-                android:visibility="visible"
-                android:backgroundTint="#151b22"
-                android:paddingStart="10dp"
-                android:paddingEnd="10dp"
-                android:text="🚗 주행일지"
-                android:textColor="#3498db"
-                android:textSize="12sp"
-                android:textStyle="bold"
-                app:cornerRadius="8dp"
-                app:strokeColor="#243b53"
-                app:strokeWidth="1dp" />
         </LinearLayout>
 
         <!-- 🚀 최신 버전 업데이트 알림 배너 (버전 불일치 시 동적 표시) -->
@@ -1137,7 +1121,7 @@
                 android:id="@+id/tvVersionInfo"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="mplat Mirror v1.0.0 · 0MB 초저지연 로컬 P2P"
+                android:text="inYou Mirror v1.5.0 · 0MB 초저지연 로컬 P2P"
                 android:textColor="#888e9b"
                 android:textSize="12sp" />
 
@@ -1145,7 +1129,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
-                android:text="Copyright © 2026 mplat. All rights reserved."
+                android:text="Copyright © 2026 인유소프트. All rights reserved."
                 android:textColor="#555a66"
                 android:textSize="11sp" />
 

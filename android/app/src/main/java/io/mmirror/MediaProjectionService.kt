@@ -43,7 +43,6 @@ class MediaProjectionService : Service() {
     private var encodingThread: Thread? = null
 
     private var wakeLockManager: MirrorWakeLockManager? = null
-    private var drivingLogManager: DrivingLogManager? = null
 
     private var spsPpsBuffer: ByteArray? = null
     private var screenWidth = 1080
@@ -446,7 +445,7 @@ class MediaProjectionService : Service() {
     }
 
     private fun startForegroundServiceWithNotification() {
-        val title = "mplat Mirror 미러링 중 (0MB P2P)"
+        val title = "inYou Mirror 미러링 중 (0MB P2P)"
         val desc = "⚠️ 폰 전원(화면 끄기) 버튼 금지 · 차량 화면의 [절전] 버튼을 이용하세요"
 
         val stopIntent = Intent(this, MediaProjectionService::class.java).apply {
@@ -649,15 +648,6 @@ class MediaProjectionService : Service() {
                 }
             }
 
-            // 4. GPS 주행일지 추적 시작
-            val hasFine = androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
-            val hasCoarse = androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
-            if (hasFine || hasCoarse) {
-                drivingLogManager = DrivingLogManager(this)
-                drivingLogManager?.startTrip()
-            } else {
-                Log.i(TAG, "위치 권한이 없어 GPS 추적을 건너뜁니다.")
-            }
         } catch (e: Exception) {
             AppLogger.e(TAG, "❌ Error starting mirroring: ${e.message}", e)
             android.os.Handler(android.os.Looper.getMainLooper()).post {
@@ -1164,9 +1154,6 @@ class MediaProjectionService : Service() {
             Log.w(TAG, "Error cleaning up projection", e)
         }
 
-        // GPS 주행일지 추적 종료 및 기록 저장
-        drivingLogManager?.stopTrip()
-        drivingLogManager = null
 
         // 웹서버는 테슬라 브라우저 연결(ERR_CONNECTION_REFUSED 방지)을 위해 상시 유지
         Log.i(TAG, "mMirror screen capture stopped (Web server maintained)")

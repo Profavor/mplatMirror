@@ -11,7 +11,7 @@ use jni::{JNIEnv, JavaVM};
 use tokio::runtime::Runtime;
 use tracing::info;
 
-use crate::protocol::{ControlMessage, DeviceConfig, GpsData, TripRecord};
+use crate::protocol::{ControlMessage, DeviceConfig};
 use crate::server::MirrorServer;
 
 static RUNTIME: OnceLock<Runtime> = OnceLock::new();
@@ -268,48 +268,21 @@ pub extern "system" fn Java_io_mmirror_NativeBridge_updateConfig(
 pub extern "system" fn Java_io_mmirror_NativeBridge_sendGpsData(
     _env: JNIEnv,
     _class: JClass,
-    lat: jdouble,
-    lng: jdouble,
-    speed: jfloat,
-    heading: jfloat,
-    distance: jdouble,
-    duration: jlong,
+    _lat: jdouble,
+    _lng: jdouble,
+    _speed: jfloat,
+    _heading: jfloat,
+    _distance: jdouble,
+    _duration: jlong,
 ) {
-    let gps = GpsData {
-        lat: lat as f64,
-        lng: lng as f64,
-        speed_kmh: speed as f32,
-        heading: heading as f32,
-        trip_distance_meters: distance as f64,
-        duration_seconds: duration as u64,
-        timestamp: std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs(),
-    };
-
-    let lock = SERVER.lock().unwrap();
-    if let Some(ref server) = *lock {
-        server.send_gps(gps);
-    }
 }
 
 #[no_mangle]
 pub extern "system" fn Java_io_mmirror_NativeBridge_saveTripRecord(
-    mut env: JNIEnv,
+    _env: JNIEnv,
     _class: JClass,
-    trip_json: JString,
+    _trip_json: JString,
 ) {
-    if let Ok(json_str) = env.get_string(&trip_json) {
-        let rust_str = json_str.to_str().unwrap_or_default();
-        if let Ok(trip) = serde_json::from_str::<TripRecord>(rust_str) {
-            let lock = SERVER.lock().unwrap();
-            if let Some(ref server) = *lock {
-                server.add_trip(trip);
-                info!("New trip record saved via JNI");
-            }
-        }
-    }
 }
 
 #[no_mangle]

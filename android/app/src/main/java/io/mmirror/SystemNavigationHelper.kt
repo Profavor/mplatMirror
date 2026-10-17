@@ -75,7 +75,7 @@ object SystemNavigationHelper {
 
     fun openAccessibilitySettings(activity: Activity) {
         val disclosure = """
-            mplat Mirror는 차량 대화면에서 스마트폰을 원격으로 터치·조작할 수 있도록 안드로이드 '접근성 서비스(AccessibilityService) API'를 사용합니다.
+            inYou Mirror는 차량 대화면에서 스마트폰을 원격으로 터치·조작할 수 있도록 안드로이드 '접근성 서비스(AccessibilityService) API'를 사용합니다.
 
             [사용 목적]
             • 차량 브라우저 화면에서 발생한 터치, 스와이프, 스크롤 제스처를 스마트폰 화면에 실시간 주입
@@ -98,7 +98,7 @@ object SystemNavigationHelper {
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK
                     }
                     activity.startActivity(intent)
-                    Toast.makeText(activity, "[설치된 앱] 또는 [다운로드된 서비스]에서 'mplat Mirror'를 켜주세요.", Toast.LENGTH_LONG).show()
+                    Toast.makeText(activity, "[설치된 앱] 또는 [다운로드된 서비스]에서 'inYou Mirror'를 켜주세요.", Toast.LENGTH_LONG).show()
                 } catch (e: Exception) {
                     Toast.makeText(activity, "접근성 설정 열기 실패: ${e.message}", Toast.LENGTH_SHORT).show()
                 }

@@ -68,7 +68,7 @@ object DiagnosticReportManager {
     fun buildDiagnosticReport(context: Context): String {
         val sb = StringBuilder()
         val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-        sb.append("=== mplat Mirror 연결 진단 리포트 ===\n")
+        sb.append("=== inYou Mirror 연결 진단 리포트 ===\n")
         sb.append("기기: ${Build.MANUFACTURER} ${Build.MODEL} (Android ${Build.VERSION.RELEASE}, API ${Build.VERSION.SDK_INT})\n")
         sb.append("시간: ${dateFormat.format(Date())}\n")
         sb.append("핫스팟 활성: ${if (NetworkUtils.isWifiApEnabled(context)) "ON" else "OFF"}\n")

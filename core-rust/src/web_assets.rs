@@ -6,11 +6,8 @@ use axum::{
 // ─── 공용 정적 에셋 (server.rs + relay.rs 공유) ───
 pub const INDEX_HTML: &str = include_str!("../../web/index.html");
 pub const STYLE_CSS: &str = include_str!("../../web/style.css");
-pub const LEAFLET_CSS: &str = include_str!("../../web/leaflet.css");
 pub const PLAYER_JS: &str = include_str!("../../web/player.js");
 pub const TOUCH_JS: &str = include_str!("../../web/touch.js");
-pub const TRIPLOG_JS: &str = include_str!("../../web/triplog.js");
-pub const LEAFLET_JS: &str = include_str!("../../web/leaflet.js");
 pub const LOGO_PNG: &[u8] = include_bytes!("../../web/logo.png");
 pub const FIREBASE_CONFIG_JS: &str = include_str!("../../web/firebase-config.js");
 
@@ -54,20 +51,8 @@ pub async fn serve_touch() -> impl IntoResponse {
     serve_text(TOUCH_JS, "application/javascript; charset=utf-8", CACHE_NO_STORE)
 }
 
-pub async fn serve_triplog() -> impl IntoResponse {
-    serve_text(TRIPLOG_JS, "application/javascript; charset=utf-8", CACHE_NO_STORE)
-}
-
 pub async fn serve_firebase_config() -> impl IntoResponse {
     serve_text(FIREBASE_CONFIG_JS, "application/javascript; charset=utf-8", CACHE_NO_STORE)
-}
-
-pub async fn serve_leaflet_css() -> impl IntoResponse {
-    serve_text(LEAFLET_CSS, "text/css; charset=utf-8", CACHE_PUBLIC_1DAY)
-}
-
-pub async fn serve_leaflet_js() -> impl IntoResponse {
-    serve_text(LEAFLET_JS, "application/javascript; charset=utf-8", CACHE_PUBLIC_1DAY)
 }
 
 pub async fn serve_logo() -> impl IntoResponse {

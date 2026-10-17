@@ -16,7 +16,7 @@ use tower_http::cors::CorsLayer;
 use futures_util::{SinkExt, StreamExt};
 use tracing::{info, warn};
 
-use crate::protocol::{ControlMessage, DeviceConfig, GpsData, TripRecord, PKT_TYPE_AUDIO, PKT_TYPE_VIDEO};
+use crate::protocol::{ControlMessage, DeviceConfig, PKT_TYPE_AUDIO, PKT_TYPE_VIDEO};
 use crate::web_assets;
 
 pub type ControlCallback = Arc<dyn Fn(ControlMessage) + Send + Sync>;
@@ -26,7 +26,6 @@ pub struct AppState {
     pub broadcast_tx: broadcast::Sender<Arc<Vec<u8>>>,
     pub current_config: Arc<RwLock<Option<DeviceConfig>>>,
     pub control_callback: Arc<Mutex<Option<ControlCallback>>>,
-    pub trips: Arc<RwLock<Vec<TripRecord>>>,
 }
 
 #[cfg(target_os = "android")]
@@ -97,7 +96,6 @@ impl MirrorServer {
                 broadcast_tx,
                 current_config: Arc::new(RwLock::new(None)),
                 control_callback: Arc::new(Mutex::new(None)),
-                trips: Arc::new(RwLock::new(Vec::new())),
             },
             shutdown_tx: Mutex::new(None),
         }
@@ -148,19 +146,6 @@ impl MirrorServer {
         let _ = self.state.broadcast_tx.send(Arc::new(packet));
     }
 
-    pub fn send_gps(&self, gps: GpsData) {
-        if self.state.broadcast_tx.receiver_count() == 0 {
-            return;
-        }
-        let bytes = Arc::new(gps.to_bytes());
-        let _ = self.state.broadcast_tx.send(bytes);
-    }
-
-    pub fn add_trip(&self, trip: TripRecord) {
-        if let Ok(mut lock) = self.state.trips.write() {
-            lock.insert(0, trip);
-        }
-    }
 
     pub fn start(&self) -> Result<u16, String> {
         let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
@@ -189,14 +174,10 @@ impl MirrorServer {
             .route("/style.css", get(web_assets::serve_css))
             .route("/player.js", get(web_assets::serve_player))
             .route("/touch.js", get(web_assets::serve_touch))
-            .route("/triplog.js", get(web_assets::serve_triplog))
             .route("/firebase-config.js", get(web_assets::serve_firebase_config))
-            .route("/leaflet.css", get(web_assets::serve_leaflet_css))
-            .route("/leaflet.js", get(web_assets::serve_leaflet_js))
             .route("/logo.png", get(web_assets::serve_logo))
             .route("/api/info", get(serve_info))
             .route("/api/logs", get(serve_logs))
-            .route("/api/trips", get(get_trips).post(post_trip))
             .route("/ws", get(ws_handler))
             .layer(middleware::from_fn(log_request_middleware))
             .layer(CorsLayer::permissive())
@@ -339,22 +320,7 @@ async fn serve_logs() -> impl IntoResponse {
     (StatusCode::OK, headers, logs)
 }
 
-async fn get_trips(State(state): State<AppState>) -> impl IntoResponse {
-    let list = {
-        state.trips.read().unwrap().clone()
-    };
-    (StatusCode::OK, Json(list))
-}
 
-async fn post_trip(
-    State(state): State<AppState>,
-    Json(record): Json<TripRecord>,
-) -> impl IntoResponse {
-    if let Ok(mut lock) = state.trips.write() {
-        lock.insert(0, record);
-    }
-    StatusCode::CREATED
-}
 
 // ─── WebSocket 핸들러 ───
 

@@ -46,9 +46,6 @@ async fn serve_apk_qr() -> impl IntoResponse {
     web_assets::serve_text(web_assets::APK_QR_SVG, "image/svg+xml", web_assets::CACHE_PUBLIC_1DAY)
 }
 
-async fn get_trips() -> impl IntoResponse {
-    Json(json!([]))
-}
 
 fn serve_file_with_range(
     bytes: Vec<u8>,
@@ -232,14 +229,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/register_host", axum::routing::post(relay::discovery::register_host))
         .route("/api/discover", get(relay::discovery::discover_host))
         .route("/api/info", get(serve_info))
-        .route("/api/trips", get(get_trips))
         // 공용 정적 에셋 (web_assets 모듈)
         .route("/style.css", get(web_assets::serve_css))
         .route("/player.js", get(web_assets::serve_player))
         .route("/touch.js", get(web_assets::serve_touch))
-        .route("/triplog.js", get(web_assets::serve_triplog))
-        .route("/leaflet.css", get(web_assets::serve_leaflet_css))
-        .route("/leaflet.js", get(web_assets::serve_leaflet_js))
         .route("/firebase-config.js", get(web_assets::serve_firebase_config))
         .route("/logo.png", get(web_assets::serve_logo))
         .route("/app_logo.png", get(web_assets::serve_logo))
