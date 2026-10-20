@@ -697,14 +697,12 @@ class MediaProjectionService : Service() {
     @Volatile
     private var lastFrameProducedTime = 0L
 
-    fun requestKeyFrame(immediateCached: Boolean = false) {
-        val now = android.os.SystemClock.elapsedRealtime()
-        if (now - lastSyncFrameTime < 2000L) return // 2.0초 쿨타임으로 키프레임 폭주 및 버퍼 과적체 원천 방지
+    fun requestKeyFrame(immediateCached: Boolean = true) {
         if (immediateCached) {
             val lastIFrame = lastIFrameBuffer
-            if (lastIFrame != null && (now - lastFrameProducedTime > 1000L)) {
+            if (lastIFrame != null) {
                 webRtcStreamer?.sendVideoPacket(lastIFrame, true)
-                Log.d(TAG, "🔑 Cached I-frame sent on cold start (${lastIFrame.size} bytes)")
+                Log.d(TAG, "🔑 Cached I-frame sent immediately on request (${lastIFrame.size} bytes)")
             }
         }
         requestSyncFrame()
@@ -712,7 +710,7 @@ class MediaProjectionService : Service() {
 
     private fun requestSyncFrame() {
         val now = android.os.SystemClock.elapsedRealtime()
-        if (now - lastSyncFrameTime < 2000L) return // 2.0초 쿨타임으로 폭주 방지
+        if (now - lastSyncFrameTime < 1000L) return // 1.0초 쿨타임으로 폭주 방지
         lastSyncFrameTime = now
         try {
             val params = Bundle().apply {
@@ -862,9 +860,9 @@ class MediaProjectionService : Service() {
                         mediaCodec?.releaseOutputBuffer(outputBufferIndex, false)
                     } catch (_: Exception) {}
                 } else {
-                    // 정적 화면 동결 방지 하트비트: 2.5초 이상 화면 변화가 없을 경우 캐시된 I-프레임을 리프레시 송출하여 테슬라 캔버스 정전 차단
+                    // 정적 화면 동결 방지 하트비트: 1.0초 이상 화면 변화가 없을 경우 캐시된 I-프레임을 리프레시 송출하여 테슬라 캔버스 정전 차단
                     val now = android.os.SystemClock.elapsedRealtime()
-                    if (now - lastFrameProducedTime > 2500L) {
+                    if (now - lastFrameProducedTime > 1000L) {
                         lastFrameProducedTime = now
                         val lastIFrame = lastIFrameBuffer
                         if (lastIFrame != null && isStreaming) {

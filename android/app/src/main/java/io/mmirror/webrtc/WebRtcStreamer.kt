@@ -449,7 +449,7 @@ class WebRtcStreamer(
         if (!force && existingPc != null && (existingPc.connectionState() == PeerConnection.PeerConnectionState.CONNECTED ||
                                    existingPc.iceConnectionState() == PeerConnection.IceConnectionState.CONNECTED)) {
             AppLogger.i(TAG, "⚡ PeerConnection already connected! Skipping redundant offer creation and requesting keyframe.")
-            io.mmirror.MediaProjectionService.instance?.requestKeyFrame()
+            io.mmirror.MediaProjectionService.instance?.requestKeyFrame(immediateCached = true)
             return
         }
 
@@ -692,7 +692,7 @@ class WebRtcStreamer(
                     sendTouchStatus()
                     sendAppList()
                     sendAudioModeStatus()
-                    MediaProjectionService.instance?.requestKeyFrame()
+                    MediaProjectionService.instance?.requestKeyFrame(immediateCached = true)
                 }
             }
             override fun onMessage(buffer: DataChannel.Buffer) {
@@ -884,7 +884,7 @@ class WebRtcStreamer(
                 }
                 "request_keyframe" -> {
                     Log.i(TAG, "🔑 Received request_keyframe from DataChannel -> triggering sync frame refresh")
-                    io.mmirror.MediaProjectionService.instance?.requestKeyFrame()
+                    io.mmirror.MediaProjectionService.instance?.requestKeyFrame(immediateCached = true)
                 }
                 "touch" -> {
                     val action = json.optString("action")
@@ -1036,7 +1036,7 @@ class WebRtcStreamer(
                     )
                     if (isConnected) {
                         AppLogger.i(TAG, "⚡ 뷰어 ready 수신: 이미 P2P 연결 상태입니다. 키프레임 전송으로 화면 즉시 갱신.")
-                        MediaProjectionService.instance?.requestKeyFrame()
+                        MediaProjectionService.instance?.requestKeyFrame(immediateCached = true)
                     } else {
                         val now = System.currentTimeMillis()
                         val state = existingPc?.signalingState()
@@ -1174,7 +1174,7 @@ class WebRtcStreamer(
                 }
                 "request_keyframe" -> {
                     AppLogger.i(TAG, "🔑 시그널링 request_keyframe 수신 -> 키프레임 강제 생성")
-                    io.mmirror.MediaProjectionService.instance?.requestKeyFrame()
+                    io.mmirror.MediaProjectionService.instance?.requestKeyFrame(immediateCached = true)
                 }
             }
         } catch (e: Exception) {

@@ -199,7 +199,7 @@
     const PKT_TYPE_AUDIO = 0x02; // Raw PCM Audio (48000Hz, 16bit Stereo)
     const PKT_TYPE_CONFIG = 0x03; // Metadata (Width, Height, FPS, etc.)
     const PKT_TYPE_GPS = 0x04;    // Realtime GPS
-    const CURRENT_WEB_VERSION = '1.5.2';
+    const CURRENT_WEB_VERSION = '1.5.3';
 
     // 오디오 및 A/V 싱크 제어 상태 변수 (100ms 지터 링 버퍼 엔진)
     let audioCtx = null;
@@ -582,12 +582,6 @@
         }
         if (disconnectOverlay && !disconnectOverlay.classList.contains('hidden')) {
             disconnectOverlay.classList.add('hidden');
-        }
-        if (!hasEverReceivedWebRtcVideo) {
-            hasEverReceivedWebRtcVideo = true;
-            if (typeof showMirrorView === 'function') {
-                showMirrorView();
-            }
         }
 
         // 캔버스 크기 동기화
@@ -1664,7 +1658,6 @@
                     if (statusDot) statusDot.className = 'dot connected';
                     if (statusText) statusText.textContent = '0MB 로컬 WebRTC 스트리밍 중';
                     if (disconnectOverlay) disconnectOverlay.classList.add('hidden');
-                    if (typeof showMirrorView === 'function') showMirrorView();
                     startWebRtcStats(null);
                 } else if (state === 'disconnected') {
                     console.warn('⚡ [WEBRTC] Connection disconnected (transient), awaiting natural ICE recovery for 7.5s...');
@@ -1697,7 +1690,6 @@
                     if (statusDot) statusDot.className = 'dot connected';
                     if (statusText) statusText.textContent = '0MB 로컬 WebRTC 스트리밍 중';
                     if (disconnectOverlay) disconnectOverlay.classList.add('hidden');
-                    if (typeof showMirrorView === 'function') showMirrorView();
                 }
             }
         };
@@ -1716,7 +1708,6 @@
                     if (statusDot) statusDot.className = 'dot connected';
                     if (statusText) statusText.textContent = '0MB 로컬 WebRTC 스트리밍 중';
                     if (disconnectOverlay) disconnectOverlay.classList.add('hidden');
-                    if (typeof showMirrorView === 'function') showMirrorView();
                     webRtcRecoveryCount = 0;
                 } else if (iceState === 'failed') {
                     console.warn('⚡ [WEBRTC] ICE failed -> 즉각 Self-Healing 자동 복구 실행');
@@ -2004,8 +1995,12 @@
             }
             if (statusDot) statusDot.className = 'dot connected';
             if (disconnectOverlay) disconnectOverlay.classList.add('hidden');
-            if (typeof showMirrorView === 'function' && !location.search.includes('noview')) {
+            if (location.search.includes('mirror') || location.search.includes('view=mirror')) {
                 showMirrorView();
+            } else if (window.currentViewMode === 'mirror') {
+                showMirrorView();
+            } else {
+                showDashboardView();
             }
             startPingPong();
             startWatchdog();
@@ -3612,14 +3607,20 @@
 
     const btnDashEnterMirror = document.getElementById('btnDashEnterMirror');
     if (btnDashEnterMirror) {
-        btnDashEnterMirror.addEventListener('click', (e) => {
+        const handleEnterMirror = (e) => {
             e.stopPropagation();
+            if (e.cancelable) e.preventDefault();
+            console.log('📱 대시보드에서 1:1 스마트폰 미러링 뷰 진입');
             showMirrorView();
             if (canvas) canvas.style.display = 'block';
             try {
                 window.mMirror.sendControl({ type: 'request_keyframe' });
             } catch (_) {}
-        });
+            btnDashEnterMirror.style.transform = 'scale(0.97)';
+            setTimeout(() => { btnDashEnterMirror.style.transform = ''; }, 150);
+        };
+        btnDashEnterMirror.addEventListener('touchend', handleEnterMirror, { passive: false });
+        btnDashEnterMirror.addEventListener('click', handleEnterMirror);
     }
 
 
