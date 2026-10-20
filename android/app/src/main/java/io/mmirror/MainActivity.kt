@@ -238,7 +238,19 @@ class MainActivity : AppCompatActivity() {
             latestServerVersion?.let { showUpdateDialog(it) } ?: openDownloadUrl()
         }
         binding.tvAppVersionBadge.setOnClickListener {
-            latestServerVersion?.let { showUpdateDialog(it) }
+            if (latestServerVersion != null && AppUpdateManager.isNewerVersion(latestServerVersion!!, BuildConfig.VERSION_NAME)) {
+                showUpdateDialog(latestServerVersion!!)
+            } else {
+                Toast.makeText(this, "🔍 최신 업데이트 확인 중...", Toast.LENGTH_SHORT).show()
+                AppUpdateManager.checkServerVersionFromApi(lifecycleScope, httpClient) { serverVer ->
+                    runOnUiThread {
+                        checkAppVersionWithServer(serverVer)
+                        if (!AppUpdateManager.isNewerVersion(serverVer, BuildConfig.VERSION_NAME)) {
+                            Toast.makeText(this, "✓ 현재 최신 버전(v${BuildConfig.VERSION_NAME})을 사용 중입니다.", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            }
         }
 
         binding.btnCopyAddress.setOnClickListener {
@@ -557,13 +569,13 @@ class MainActivity : AppCompatActivity() {
     private fun checkAppVersionWithServer(serverVersion: String) {
         val currentVersion = BuildConfig.VERSION_NAME
         latestServerVersion = serverVersion
-        val isMismatch = serverVersion.isNotEmpty() && serverVersion != currentVersion
+        val isUpdateAvailable = serverVersion.isNotEmpty() && AppUpdateManager.isNewerVersion(serverVersion, currentVersion)
 
         runOnUiThread {
-            if (isMismatch) {
+            if (isUpdateAvailable) {
                 binding.cardUpdateNotice.visibility = View.VISIBLE
                 binding.tvUpdateNoticeTitle.text = "최신 버전(v$serverVersion) 업데이트 안내"
-                binding.tvUpdateNoticeDesc.text = "현재 버전: v$currentVersion · 릴레이 서버(v$serverVersion)와 버전이 다릅니다. 안정적인 연결을 위해 업데이트하세요."
+                binding.tvUpdateNoticeDesc.text = "현재 버전: v$currentVersion · 최신 배포 버전: v$serverVersion\n안정적인 60FPS 전송과 최신 기능 사용을 위해 업데이트해 주세요."
                 binding.tvAppVersionBadge.text = "v$currentVersion ⚠️ v$serverVersion"
                 binding.tvAppVersionBadge.setTextColor(0xFFF59E0B.toInt())
 

@@ -1,0 +1,7 @@
+{
+  "version": "1.5.3",
+  "versionCode": 154,
+  "downloadUrl": "https://github.com/Profavor/mplatMirror/releases/latest/download/mplatMirror.apk",
+  "playStoreUrl": "https://play.google.com/store/apps/details?id=io.mmirror",
+  "releaseNotes": "초기 접속 검은 화면 0ms 완전 해결 및 대시보드 뷰 우선 진입"
+}

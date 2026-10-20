@@ -19,11 +19,32 @@ import org.json.JSONObject
  */
 object AppUpdateManager {
     private const val TAG = "AppUpdateManager"
-    const val APK_DOWNLOAD_URL = "https://mdm.mplat.store:8088/dist/mplatMirror.apk"
-    private const val INFO_API_URL = "https://mdm.mplat.store:8088/api/info"
+    const val APK_DOWNLOAD_URL = "https://github.com/Profavor/mplatMirror/releases/latest/download/mplatMirror.apk"
+    private const val CDN_VERSION_URL = "https://mplat-mirror.web.app/version.json"
+    private const val GITHUB_RELEASES_URL = "https://api.github.com/repos/Profavor/mplatMirror/releases/latest"
 
     /**
-     * 릴레이 서버로부터 최신 빌드 버전 조회
+     * 시맨틱 버전 비교 (remote가 local보다 높은지 검사)
+     */
+    fun isNewerVersion(remoteVer: String, localVer: String): Boolean {
+        return try {
+            val rParts = remoteVer.trim().removePrefix("v").split(".").map { it.toIntOrNull() ?: 0 }
+            val lParts = localVer.trim().removePrefix("v").split(".").map { it.toIntOrNull() ?: 0 }
+            val maxLen = maxOf(rParts.size, lParts.size)
+            for (i in 0 until maxLen) {
+                val r = rParts.getOrElse(i) { 0 }
+                val l = lParts.getOrElse(i) { 0 }
+                if (r > l) return true
+                if (r < l) return false
+            }
+            false
+        } catch (_: Exception) {
+            remoteVer.trim().removePrefix("v") != localVer.trim().removePrefix("v")
+        }
+    }
+
+    /**
+     * Firebase CDN 및 GitHub API로부터 최신 빌드 버전 조회 (HTTPS 443 표준)
      */
     fun checkServerVersionFromApi(
         scope: CoroutineScope,
@@ -31,23 +52,49 @@ object AppUpdateManager {
         onVersionFetched: (serverVersion: String) -> Unit
     ) {
         scope.launch(Dispatchers.IO) {
+            // 1순위: Firebase Hosting CDN version.json 조회 (가장 빠름 & 무제한 대역폭)
             try {
                 val request = Request.Builder()
-                    .url(INFO_API_URL)
+                    .url(CDN_VERSION_URL)
+                    .header("Cache-Control", "no-cache")
                     .get()
                     .build()
                 httpClient.newCall(request).execute().use { response ->
                     if (response.isSuccessful) {
                         val body = response.body?.string() ?: return@use
                         val json = JSONObject(body)
-                        val serverVer = json.optString("version", "")
+                        val serverVer = json.optString("version", "").trim().removePrefix("v")
                         if (serverVer.isNotEmpty()) {
+                            Log.i(TAG, "✓ Version fetched from Firebase CDN: v$serverVer")
                             onVersionFetched(serverVer)
+                            return@launch
                         }
                     }
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "Server version check failed: ${e.message}")
+                Log.w(TAG, "Firebase CDN version check failed: ${e.message}, falling back to GitHub API")
+            }
+
+            // 2순위: GitHub Releases 공식 API 조회
+            try {
+                val request = Request.Builder()
+                    .url(GITHUB_RELEASES_URL)
+                    .header("User-Agent", "inYouMirror-Android")
+                    .get()
+                    .build()
+                httpClient.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) {
+                        val body = response.body?.string() ?: return@use
+                        val json = JSONObject(body)
+                        val tagName = json.optString("tag_name", "").trim().removePrefix("v")
+                        if (tagName.isNotEmpty()) {
+                            Log.i(TAG, "✓ Version fetched from GitHub API: v$tagName")
+                            onVersionFetched(tagName)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "GitHub API version check failed: ${e.message}")
             }
         }
     }
@@ -63,17 +110,17 @@ object AppUpdateManager {
         MaterialAlertDialogBuilder(activity)
             .setTitle("🚀 최신 버전 업데이트 (v$serverVersion)")
             .setMessage(
-                "새로운 버전이 감지되었습니다.\n\n" +
+                "새로운 최신 버전이 출시되었습니다.\n\n" +
                 "• 현재 앱 버전: v$currentVersion\n" +
                 "• 최신 배포 버전: v$serverVersion\n\n" +
-                "⚠️ [플레이스토어 설치 기기 필독]\n" +
-                "구글 플레이 스토어로 설치하신 경우, 앱 간 보안 서명 차이로 인해 직접 APK 설치 시 업데이트가 거부될 수 있습니다. 이 경우 기존 앱을 스마트폰에서 '삭제'하신 후 아래 [📥 최신 APK 다운로드]를 받아 설치해 주세요.\n\n" +
-                "최신 버전(v$serverVersion)에는 차량 오디오 간섭 원천 차단 및 P2P 무중단 연결 패치가 적용되어 있습니다."
+                "최신 버전에는 초기 검은 화면 방지, 0MB 로컬 WebRTC 초저지연 전송, 정밀 터치 엔진 개선 및 안정성 패치가 적용되어 있습니다.\n\n" +
+                "⚠️ [구글 플레이 스토어 설치 기기 안내]\n" +
+                "플레이 스토어로 설치하신 경우 아래 [🚀 Google Play]에서 바로 업데이트하실 수 있습니다."
             )
             .setPositiveButton("📥 최신 APK 다운로드 (추천)") { _, _ ->
                 downloadDirectApk(activity, serverVersion)
             }
-            .setNeutralButton("🚀 Google Play 스토어") { _, _ ->
+            .setNeutralButton("🚀 Google Play") { _, _ ->
                 SystemNavigationHelper.openGooglePlayStore(activity)
             }
             .setNegativeButton("나중에", null)
