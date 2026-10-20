@@ -123,13 +123,22 @@
         return pointers;
     }
 
-    // --- 멀티터치 핀치 줌 (Pinch-to-Zoom) 엔진 상태 관리 ---
+    // --- 멀티터치 핀치 줌 및 스마트폰 원핸드 더블탭 제스처 엔진 ---
     let isPinching = false;
     let pinchStartDist = 0;
     let lastPinchDist = 0;
     let lastPinchTime = 0;
     let pinchTouchStartTime = 0;
     let pinchCenter = { x: 0.5, y: 0.5 };
+
+    // 스마트폰 내비 표준 원핸드 줌: 더블탭 후 상하 드래그 줌 상태 관리
+    let lastTapTime = 0;
+    let lastTapX = 0;
+    let lastTapY = 0;
+    let isDoubleTapDrag = false;
+    let doubleTapLastY = 0;
+    let doubleTapCenter = { x: 0.5, y: 0.5 };
+    let lastMoveSentTime = 0;
 
     function isDashboardEvent(e) {
         const dash = document.getElementById('homeDashboard');
@@ -150,7 +159,7 @@
         return false;
     }
 
-    // --- 터치 이벤트 핸들러 (테슬라 디스플레이 전용 - 멀티터치 핀치 줌 & 1:1 직결 터치) ---
+    // --- 터치 이벤트 핸들러 (테슬라 디스플레이 전용 - 멀티터치 핀치 줌, 더블탭 상하 드래그 줌 & 1:1 직결 터치) ---
     viewportContainer.addEventListener('touchstart', (e) => {
         if (typeof window.ensureAudioContextUnlocked === 'function') {
             window.ensureAudioContextUnlocked();
@@ -167,7 +176,8 @@
 
         // 두 손가락 이상 터치 감지 시: 핀치 줌(Pinch-to-Zoom) 모드로 즉시 전환
         if (e.touches.length >= 2) {
-            isPinching = true;
+            isDoubleTapDrag = false;
+            isPinching = false;
             const t0 = e.touches[0];
             const t1 = e.touches[1];
             pinchStartDist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
@@ -194,6 +204,26 @@
         }
 
         if (isPinching) return;
+
+        // 스마트폰 표준 원핸드 줌: 1손가락 더블탭 후 홀드 감지 (네이버 지도, 티맵, 카카오맵과 100% 동일)
+        if (e.touches.length === 1) {
+            const touch = e.touches[0];
+            const now = Date.now();
+            if ((now - lastTapTime < 320) && Math.hypot(touch.clientX - lastTapX, touch.clientY - lastTapY) < 45) {
+                isDoubleTapDrag = true;
+                doubleTapLastY = touch.clientY;
+                const coords = getNormalizedCoords(touch.clientX, touch.clientY);
+                if (coords) doubleTapCenter = coords;
+                // 기존 터치 잔여 세션 취소
+                sendControl({
+                    type: 'touch',
+                    action: 'cancel',
+                    id: touch.identifier,
+                    mode: getMode()
+                });
+                return;
+            }
+        }
 
         for (let i = 0; i < e.changedTouches.length; i++) {
             const touch = e.changedTouches[i];
@@ -226,7 +256,7 @@
         e.preventDefault();
         if (window.resetUiHideTimer) window.resetUiHideTimer();
 
-        // 두 손가락 핀치 제스처 이동 처리
+        // 1. 두 손가락 핀치 제스처 이동 처리 (부드러운 감도 보정 & 실물 폰과 동일한 자연스러운 스케일)
         if (e.touches.length >= 2) {
             const t0 = e.touches[0];
             const t1 = e.touches[1];
@@ -238,26 +268,29 @@
             }
 
             if (!isPinching) {
-                isPinching = true;
-                pinchStartDist = currDist;
-                lastPinchDist = currDist;
-                lastPinchTime = Date.now();
-                pinchTouchStartTime = Date.now();
+                // 손가락 미세 떨림 필터링: 최초 24px 이상 거리 변화 시에만 핀치 시작
+                if (Math.abs(currDist - pinchStartDist) >= 24) {
+                    isPinching = true;
+                    lastPinchDist = currDist;
+                    lastPinchTime = Date.now();
+                }
                 return;
             }
 
             const now = Date.now();
             const delta = currDist - lastPinchDist;
 
-            // 14px 이상 거리 변화 및 110ms 쿨타임으로 안드로이드 접근성 제스처(100ms) 완결과 동기화
-            if (Math.abs(delta) >= 14 && (now - lastPinchTime >= 110)) {
+            // 18px 이상 거리 변화 및 110ms 쿨타임으로 안드로이드 접근성 제스처와 동기화
+            if (Math.abs(delta) >= 18 && (now - lastPinchTime >= 110)) {
                 const direction = delta > 0 ? 'in' : 'out';
+                const scale = lastPinchDist > 0 ? (currDist / lastPinchDist) : 1.0;
                 sendControl({
                     type: 'pinch_zoom',
                     direction: direction,
                     x: pinchCenter.x,
                     y: pinchCenter.y,
                     delta: delta,
+                    scale: scale,
                     mode: getMode()
                 });
                 lastPinchDist = currDist;
@@ -267,6 +300,35 @@
         }
 
         if (isPinching) return;
+
+        // 2. 스마트폰 표준 원핸드 더블탭 상하 드래그 줌 (위로 밀면 확대, 아래로 밀면 축소)
+        if (isDoubleTapDrag && e.touches.length === 1) {
+            const touch = e.touches[0];
+            const now = Date.now();
+            const deltaY = touch.clientY - doubleTapLastY;
+            if (Math.abs(deltaY) >= 14 && (now - lastPinchTime >= 95)) {
+                const direction = deltaY < 0 ? 'in' : 'out';
+                sendControl({
+                    type: 'pinch_zoom',
+                    direction: direction,
+                    x: doubleTapCenter.x,
+                    y: doubleTapCenter.y,
+                    delta: -deltaY * 1.5,
+                    scale: 1.0,
+                    mode: getMode()
+                });
+                doubleTapLastY = touch.clientY;
+                lastPinchTime = now;
+            }
+            return;
+        }
+
+        // 3. 단일 손가락 부드러운 드래그/스크롤: 55 FPS로 전송 제한 (DataChannel 버퍼 누적 방지)
+        const now = Date.now();
+        if (now - lastMoveSentTime < 18) {
+            return;
+        }
+        lastMoveSentTime = now;
 
         for (let i = 0; i < e.changedTouches.length; i++) {
             const touch = e.changedTouches[i];
@@ -306,18 +368,27 @@
                 isPinching = false;
                 lastTouchCoords.clear();
 
-                // 두 손가락 탭(Two-finger tap): 움직임 없이 280ms 내에 떼면 축소(Zoom Out) 처리!
-                if (elapsed < 280 && distChange < 18) {
+                // 두 손가락 탭(Two-finger tap): 움직임 없이 280ms 내에 떼면 부드러운 축소(Zoom Out) 처리!
+                if (elapsed < 280 && distChange < 20) {
                     sendControl({
                         type: 'pinch_zoom',
                         direction: 'out',
                         x: pinchCenter.x,
                         y: pinchCenter.y,
+                        delta: -35,
+                        scale: 0.9,
                         mode: getMode()
                     });
                 }
                 return;
             }
+            return;
+        }
+
+        // 더블탭 드래그 줌 종료 처리
+        if (isDoubleTapDrag) {
+            isDoubleTapDrag = false;
+            lastTapTime = 0;
             return;
         }
 
@@ -335,12 +406,20 @@
                 pointers: allPointers,
                 mode: getMode()
             });
+
+            // 다음 더블탭 제스처 인식을 위해 시각 및 좌표 기록
+            if (e.touches.length === 0) {
+                lastTapTime = Date.now();
+                lastTapX = touch.clientX;
+                lastTapY = touch.clientY;
+            }
         }
     }, { passive: false });
 
     viewportContainer.addEventListener('touchcancel', (e) => {
         if (isDashboardEvent(e)) return;
         e.preventDefault();
+        isDoubleTapDrag = false;
         if (isPinching) {
             isPinching = false;
             lastTouchCoords.clear();
@@ -374,6 +453,8 @@
             direction: direction,
             x: coords.x,
             y: coords.y,
+            delta: direction === 'in' ? 40 : -40,
+            scale: direction === 'in' ? 1.1 : 0.9,
             mode: getMode()
         });
     }, { passive: false });
@@ -455,6 +536,8 @@
             direction: direction,
             x: 0.5,
             y: 0.5,
+            delta: direction === 'in' ? 40 : -40,
+            scale: direction === 'in' ? 1.1 : 0.9,
             mode: getMode()
         });
     }

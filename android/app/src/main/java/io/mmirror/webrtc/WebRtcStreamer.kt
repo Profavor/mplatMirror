@@ -897,7 +897,9 @@ class WebRtcStreamer(
                     val direction = json.optString("direction", "in")
                     val x = json.optDouble("x", 0.5).toFloat()
                     val y = json.optDouble("y", 0.5).toFloat()
-                    io.mmirror.TouchControlService.instance?.onPinchZoom(direction, x, y)
+                    val delta = json.optDouble("delta", 0.0).toFloat()
+                    val scale = json.optDouble("scale", 1.0).toFloat()
+                    io.mmirror.TouchControlService.instance?.onPinchZoom(direction, x, y, delta, scale)
                 }
                 "key" -> {
                     val key = json.optString("key")

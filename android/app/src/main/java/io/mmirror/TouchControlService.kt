@@ -284,7 +284,7 @@ class TouchControlService : AccessibilityService(), NativeBridge.TouchListener {
                 moveTo(startX, startY)
                 lineTo(endX, endY)
             }
-            val stroke = GestureDescription.StrokeDescription(path, 0, durationMs.coerceIn(20L, 60L))
+            val stroke = GestureDescription.StrokeDescription(path, 0, durationMs.coerceIn(30L, 80L))
             val builder = GestureDescription.Builder().apply {
                 addStroke(stroke)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -393,10 +393,12 @@ class TouchControlService : AccessibilityService(), NativeBridge.TouchListener {
 
                 if (session.isMoved) {
                     val now = System.currentTimeMillis()
+                    val totalDuration = now - session.startTime
                     val stepDist = kotlin.math.hypot(pixelX - session.lastDispatchedX, pixelY - session.lastDispatchedY)
-                    // 드래그 중 30ms 간격 또는 12px 이상 이동 시 즉시 실시간 드래그 스텝 주입!
-                    if (!isDispatchingDrag && stepDist >= 12f && (now - session.lastDispatchTime >= 30L)) {
-                        dispatchDragStep(session.lastDispatchedX, session.lastDispatchedY, pixelX, pixelY, 30L)
+                    // 빠른 스와이프/플릭(< 220ms)은 안드로이드 순수 관성 스크롤(Fling)을 위해 쪼개지 않고 온전히 보존
+                    // 지속적인 긴 드래그(220ms 초과) 시에만 부드러운 중간 드래그 스텝(>= 25px, >= 75ms) 주입!
+                    if (totalDuration > 220L && !isDispatchingDrag && stepDist >= (touchSlop * 1.1f).coerceAtLeast(24f) && (now - session.lastDispatchTime >= 75L)) {
+                        dispatchDragStep(session.lastDispatchedX, session.lastDispatchedY, pixelX, pixelY, 50L)
                         session.lastDispatchedX = pixelX
                         session.lastDispatchedY = pixelY
                         session.lastDispatchTime = now
@@ -419,18 +421,18 @@ class TouchControlService : AccessibilityService(), NativeBridge.TouchListener {
                             // 단발 탭 (Tap) 주입
                             dispatchTap(session.startX, session.startY)
                         }
-                    } else if (session.dragDispatchedCount > 0) {
-                        // 이미 실시간으로 드래그가 주입된 경우:
+                    } else if (session.dragDispatchedCount == 0) {
+                        // 중간 쪼갬 없는 완결된 단일 스와이프/플릭 -> 안드로이드 순수 관성 스크롤 및 완벽한 지도 팬
+                        val swipeDuration = duration.coerceIn(50L, 260L)
+                        dispatchSwipe(session.startX, session.startY, pixelX, pixelY, swipeDuration)
+                    } else {
+                        // 지속 드래그 후 릴리즈: 마지막 손가락 속도(Fling)가 남아있을 경우 부드러운 잔여 스와이프 주입
                         val elapsedSinceLast = System.currentTimeMillis() - session.lastDispatchTime
                         val finalDist = kotlin.math.hypot(pixelX - session.lastDispatchedX, pixelY - session.lastDispatchedY)
-                        // 손가락을 빠르게 튕겼을(Fling) 때만 잔여 관성 스와이프 짧게 주입
-                        if (elapsedSinceLast < 100L && finalDist > 20f) {
-                            dispatchSwipe(session.lastDispatchedX, session.lastDispatchedY, pixelX, pixelY, 60L)
+                        if (elapsedSinceLast < 140L && finalDist > touchSlop) {
+                            val flingDuration = elapsedSinceLast.coerceIn(40L, 100L)
+                            dispatchSwipe(session.lastDispatchedX, session.lastDispatchedY, pixelX, pixelY, flingDuration)
                         }
-                    } else {
-                        // 스와이프 / 드래그 / 스크롤 제스처 주입 (완결된 스트로크로 네이티브 관성 스크롤 발동)
-                        val swipeDuration = duration.coerceIn(50L, 250L)
-                        dispatchSwipe(session.startX, session.startY, pixelX, pixelY, swipeDuration)
                     }
                 }
             }
@@ -441,8 +443,8 @@ class TouchControlService : AccessibilityService(), NativeBridge.TouchListener {
         }
     }
 
-    // 핀치 줌 (두 손가락 제스처) 주입
-    fun onPinchZoom(direction: String, x: Float, y: Float) {
+    // 핀치 줌 (두 손가락 제스처 또는 더블탭 상하 드래그 줌) 주입
+    fun onPinchZoom(direction: String, x: Float, y: Float, delta: Float = 0f, scale: Float = 1.0f) {
         val (realW, realH) = getPhysicalScreenBounds()
         if (realW > 0 && realH > 0) {
             screenWidth = realW
@@ -451,14 +453,26 @@ class TouchControlService : AccessibilityService(), NativeBridge.TouchListener {
 
         val centerX = (x * screenWidth).coerceIn(0f, screenWidth.toFloat())
         val centerY = (y * screenHeight).coerceIn(0f, screenHeight.toFloat())
-        val span = (minOf(screenWidth, screenHeight) * 0.25f).coerceAtLeast(150f)
+
+        val minDim = minOf(screenWidth, screenHeight).toFloat()
+        // 기준 핑거 거리: 1080p 기준 약 180px
+        val baseSpan = (minDim * 0.18f).coerceIn(120f, 220f)
+
+        // 이동 변위: delta가 전달되면 그에 비례, 없으면 기본 부드러운 스텝(42px)
+        // 이전 432px 폭주(5~8단계 급격한 줌 점프) 원천 제거 -> 1회당 약 0.2~0.3단계의 실물 폰과 동일한 부드러운 줌
+        val absDelta = kotlin.math.abs(delta)
+        val deltaSpan = if (absDelta > 1f) {
+            (absDelta * 0.8f).coerceIn(28f, 70f)
+        } else {
+            42f
+        }
 
         val (startSpan, endSpan) = if (direction.equals("in", ignoreCase = true)) {
-            // 확대 (줌 인): 안에서 밖으로 벌림
-            Pair(span * 0.4f, span * 1.2f)
+            // 확대 (줌 인): 안에서 밖으로 부드럽게 벌림
+            Pair(baseSpan - deltaSpan, baseSpan + deltaSpan)
         } else {
-            // 축소 (줌 아웃): 밖에서 안으로 모음
-            Pair(span * 1.2f, span * 0.4f)
+            // 축소 (줌 아웃): 밖에서 안으로 부드럽게 모음
+            Pair(baseSpan + deltaSpan, baseSpan - deltaSpan)
         }
 
         try {
@@ -471,8 +485,8 @@ class TouchControlService : AccessibilityService(), NativeBridge.TouchListener {
                 lineTo(centerX + endSpan, centerY + endSpan)
             }
 
-            val stroke1 = GestureDescription.StrokeDescription(path1, 0, 100)
-            val stroke2 = GestureDescription.StrokeDescription(path2, 0, 100)
+            val stroke1 = GestureDescription.StrokeDescription(path1, 0, 90)
+            val stroke2 = GestureDescription.StrokeDescription(path2, 0, 90)
 
             val builder = GestureDescription.Builder().apply {
                 addStroke(stroke1)
@@ -483,7 +497,7 @@ class TouchControlService : AccessibilityService(), NativeBridge.TouchListener {
             }
             dispatchGesture(builder.build(), object : GestureResultCallback() {
                 override fun onCompleted(gestureDescription: GestureDescription?) {
-                    Log.d(TAG, "✓ 핀치줌($direction) 완료: ($centerX, $centerY)")
+                    Log.d(TAG, "✓ 핀치줌($direction) 완료: ($centerX, $centerY), span: ${startSpan.toInt()} -> ${endSpan.toInt()}")
                 }
                 override fun onCancelled(gestureDescription: GestureDescription?) {
                     Log.w(TAG, "⚠️ 핀치줌($direction) 취소됨")
