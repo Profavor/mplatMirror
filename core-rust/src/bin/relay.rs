@@ -156,8 +156,8 @@ async fn serve_info() -> impl IntoResponse {
     Json(json!({
         "app": "mplat Mirror Relay",
         "version": env!("CARGO_PKG_VERSION"),
-        "domain": "mplat-mirror.web.app",
-        "web_url": "https://mplat-mirror.web.app",
+        "domain": "inyou-mirror.web.app",
+        "web_url": "https://inyou-mirror.web.app",
         "relay_endpoint": "https://mdm.mplat.store:8088",
         "status": "online",
         "play_store_url": "https://play.google.com/store/apps/details?id=io.mmirror",

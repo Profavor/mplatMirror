@@ -18,7 +18,7 @@ import java.io.InputStreamReader
  * - 0MB 모바일 데이터 원칙 준수 (실제 60FPS 스트림은 핫스팟 로컬 UDP로 직결)
  */
 class FirebaseSignalingManager(
-    private val databaseUrl: String = "https://mplat-33044-default-rtdb.asia-southeast1.firebasedatabase.app",
+    private val databaseUrl: String = "https://inyou-mirror-default-rtdb.asia-southeast1.firebasedatabase.app",
     private val room: String = "default",
     private val client: OkHttpClient,
     private val onMessage: (String) -> Unit

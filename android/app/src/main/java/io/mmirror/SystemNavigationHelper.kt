@@ -151,7 +151,7 @@ object SystemNavigationHelper {
 
     fun openPrivacyPolicy(context: Context) {
         try {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://mplat-mirror.web.app/privacy.html")).apply {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://inyou-mirror.web.app/privacy.html")).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
             }
             context.startActivity(intent)

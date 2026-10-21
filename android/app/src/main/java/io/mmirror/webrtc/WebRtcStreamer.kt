@@ -62,13 +62,13 @@ class WebRtcStreamer(
         .build()
     private var signalingWs: WebSocket? = null
     private var firebaseSignaling: FirebaseSignalingManager? = null
-    var firebaseDatabaseUrl: String = "https://mplat-33044-default-rtdb.asia-southeast1.firebasedatabase.app"
+    var firebaseDatabaseUrl: String = "https://inyou-mirror-default-rtdb.asia-southeast1.firebasedatabase.app"
         get() {
             if (field.isNotBlank()) return field
             return try {
                 val prefs = context.getSharedPreferences("mmirror_prefs", Context.MODE_PRIVATE)
-                prefs.getString("firebase_database_url", "https://mplat-33044-default-rtdb.asia-southeast1.firebasedatabase.app") ?: "https://mplat-33044-default-rtdb.asia-southeast1.firebasedatabase.app"
-            } catch (_: Exception) { "https://mplat-33044-default-rtdb.asia-southeast1.firebasedatabase.app" }
+                prefs.getString("firebase_database_url", "https://inyou-mirror-default-rtdb.asia-southeast1.firebasedatabase.app") ?: "https://inyou-mirror-default-rtdb.asia-southeast1.firebasedatabase.app"
+            } catch (_: Exception) { "https://inyou-mirror-default-rtdb.asia-southeast1.firebasedatabase.app" }
         }
 
     private fun sendSignaling(message: String) {

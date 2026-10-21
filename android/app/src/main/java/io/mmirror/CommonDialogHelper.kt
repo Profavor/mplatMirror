@@ -31,7 +31,7 @@ object CommonDialogHelper {
             【 3단계: 차량 모니터 접속 (데이터 0MB 초저지연) 】
             ① 차량 모니터 브라우저를 켭니다.
             ② 주소창에 아래 주소를 입력합니다:
-               👉 https://mplat-mirror.web.app
+               👉 https://inyou-mirror.web.app
             ③ 구글 글로벌 CDN + Firebase 실시간 시그널링 + WebRTC P2P 기술로 VPN 설정 없이 녹색 자물쇠와 함께 즉시 접속됩니다!
             ④ 차량 브라우저 상단 ★ (즐겨찾기)에 추가해 두시면, 다음 탑승부터 원클릭으로 0.5초 만에 초저지연 로컬 미러링(0MB)으로 바로 연결됩니다!
 

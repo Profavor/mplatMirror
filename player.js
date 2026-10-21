@@ -2208,7 +2208,7 @@
             console.log('🧪 [TEST] ?idle: WebSocket 연결 시도 차단');
             return;
         }
-        // Firebase Hosting(mplat-mirror.web.app) 및 공인 중계 도메인은 WebRTC P2P 직결 표준만 사용 (/ws 제외)
+        // Firebase Hosting(inyou-mirror.web.app) 및 공인 중계 도메인은 WebRTC P2P 직결 표준만 사용 (/ws 제외)
         const host = location.hostname.toLowerCase();
         if (host.includes('web.app') || host.includes('firebaseapp.com') || host.includes('mplat.store')) {
             console.log('🌐 WebRTC P2P 직결 모드 동작 (공인 도메인 환경: 레거시 /ws 웹소켓 비활성화)');

@@ -718,7 +718,7 @@ class MainActivity : AppCompatActivity() {
         val apEnabled = isWifiApEnabled()
         val hotspotIp = if (apEnabled) getHotspotIp() else NetworkUtils.DEFAULT_HOTSPOT_IP
 
-        binding.tvBrowserAddress.text = "https://mplat-mirror.web.app"
+        binding.tvBrowserAddress.text = "https://inyou-mirror.web.app"
 
         if (apEnabled) {
             binding.tvHotspotStatus.text = "✓ 핫스팟 켜짐 ($hotspotIp) - 차량 Wi-Fi 연결 대기"

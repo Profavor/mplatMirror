@@ -194,7 +194,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="10dp"
-                    android:text="https://mplat-mirror.web.app"
+                    android:text="https://inyou-mirror.web.app"
                     android:textColor="#ffffff"
                     android:textSize="20sp"
                     android:textStyle="bold" />
@@ -820,7 +820,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
                     android:lineSpacingExtra="4dp"
-                    android:text="1️⃣ 스마트폰 모바일 핫스팟 켜기 &amp; 차량 Wi-Fi 연결\n     ⚠️ 필수: 차량 Wi-Fi 설정에서 [D 기어 시 연결 유지] 체크!\n2️⃣ 아래 파란색 [미러링 시작] 터치 (화면 캡처 허용)\n3️⃣ 차량 브라우저에서 https://mplat-mirror.web.app 접속\n     (0MB 데이터 WebRTC 로컬 P2P로 1초 만에 즉시 연결!)"
+                    android:text="1️⃣ 스마트폰 모바일 핫스팟 켜기 &amp; 차량 Wi-Fi 연결\n     ⚠️ 필수: 차량 Wi-Fi 설정에서 [D 기어 시 연결 유지] 체크!\n2️⃣ 아래 파란색 [미러링 시작] 터치 (화면 캡처 허용)\n3️⃣ 차량 브라우저에서 https://inyou-mirror.web.app 접속\n     (0MB 데이터 WebRTC 로컬 P2P로 1초 만에 즉시 연결!)"
                     android:textColor="#cbd5e1"
                     android:textSize="12sp" />
 

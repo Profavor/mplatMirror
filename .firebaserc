@@ -1,12 +1,12 @@
 {
   "projects": {
-    "default": "mplat-33044"
+    "default": "inyou-mirror"
   },
   "targets": {
-    "mplat-33044": {
+    "inyou-mirror": {
       "hosting": {
-        "mplat-mirror": [
-          "mplat-mirror"
+        "inyou-mirror": [
+          "inyou-mirror"
         ]
       }
     }

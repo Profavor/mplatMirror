@@ -1,6 +1,6 @@
 {
   "hosting": {
-    "site": "mplat-mirror",
+    "site": "inyou-mirror",
     "public": "web",
     "ignore": [
       "firebase.json",
