@@ -1121,7 +1121,7 @@
                 android:id="@+id/tvVersionInfo"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="inYou Mirror v1.5.3 · 0MB 초저지연 로컬 P2P"
+                android:text="inYou Mirror v1.5.4 · 0MB 초저지연 로컬 P2P"
                 android:textColor="#888e9b"
                 android:textSize="12sp" />
 
