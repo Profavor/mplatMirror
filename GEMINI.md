@@ -26,7 +26,7 @@
   - 스마트폰과 테슬라 간 시그널링(SDP/ICE)은 **Firebase Realtime Database 전용**으로 교환되며, 실제 비디오/오디오/터치 스트림은 **핫스팟 로컬 Wi-Fi 서브넷(UDP 10.x.x.x)으로 직접 P2P 연결**됩니다.
   - 이 방식은 안드로이드 14~16의 eBPF 테더링 오프로드 제약을 완전히 우회하며, **VPN 없이도 0MB 모바일 데이터 및 초저지연(<50ms) 60 FPS 미러링**을 완벽히 달성합니다.
 - **공식 다운로드 및 배포 (GitHub Releases & Firebase CDN):**
-  - 최신 APK 및 AAB는 **GitHub Releases** (`https://github.com/Profavor/mplatMirror/releases/latest/download/mplatMirror.apk`) 및 Firebase Hosting CDN(`https://inyou-mirror.web.app/mplatMirror.apk`)을 통해 표준 HTTPS 443 포트로 안전하고 빠르게 배포됩니다. (레거시 8088 포트는 보안/방화벽 제약으로 완전 폐기됨)
+  - 최신 APK 및 AAB는 **GitHub Releases** (`https://github.com/Profavor/mplatMirror/releases/latest/download/inyou-mirror.apk`) 및 Firebase Hosting CDN(`https://inyou-mirror.web.app/inyou-mirror.apk`)을 통해 표준 HTTPS 443 포트로 안전하고 빠르게 배포됩니다. (레거시 8088 포트는 보안/방화벽 제약으로 완전 폐기됨)
 - **로컬 IP 직접 접속 방식 (태블릿/PC):**
   - 핫스팟 게이트웨이 IP(`http://<핫스팟IP>:8282`)로 일반 태블릿/PC 브라우저가 직접 접속하는 방식도 완벽히 지원됩니다.
 
@@ -61,8 +61,8 @@
 
 ### 6. 답변 시 최신 GitHub 다운로드 링크 항시 제공 원칙 (사용자 필수 지침)
 - 스마트폰 및 PC에서 즉시 최신 빌드를 내려받아 설치할 수 있도록, **모든 답변 시 항상 GitHub 최신 릴리즈 다운로드 링크를 안내**할 것:
-  - **APK**: `https://github.com/Profavor/mplatMirror/releases/latest/download/mplatMirror.apk`
-  - **AAB**: `https://github.com/Profavor/mplatMirror/releases/latest/download/mplatMirror.aab`
+  - **APK**: `https://github.com/Profavor/mplatMirror/releases/latest/download/inyou-mirror.apk`
+  - **AAB**: `https://github.com/Profavor/mplatMirror/releases/latest/download/inyou-mirror.aab`
   - (8088 포트는 방화벽 차단 이슈로 폐기되었으므로 사용 금지)
 
 ---

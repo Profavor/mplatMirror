@@ -11,23 +11,43 @@
     ],
     "redirects": [
       {
+        "source": "/inyou-mirror.apk",
+        "destination": "https://github.com/Profavor/mplatMirror/releases/latest/download/inyou-mirror.apk",
+        "type": 302
+      },
+      {
+        "source": "/dist/inyou-mirror.apk",
+        "destination": "https://github.com/Profavor/mplatMirror/releases/latest/download/inyou-mirror.apk",
+        "type": 302
+      },
+      {
+        "source": "/inyou-mirror.aab",
+        "destination": "https://github.com/Profavor/mplatMirror/releases/latest/download/inyou-mirror.aab",
+        "type": 302
+      },
+      {
+        "source": "/dist/inyou-mirror.aab",
+        "destination": "https://github.com/Profavor/mplatMirror/releases/latest/download/inyou-mirror.aab",
+        "type": 302
+      },
+      {
         "source": "/dist/mplatMirror.apk",
-        "destination": "https://github.com/Profavor/mplatMirror/releases/latest/download/mplatMirror.apk",
+        "destination": "https://github.com/Profavor/mplatMirror/releases/latest/download/inyou-mirror.apk",
         "type": 302
       },
       {
         "source": "/mplatMirror.apk",
-        "destination": "https://github.com/Profavor/mplatMirror/releases/latest/download/mplatMirror.apk",
+        "destination": "https://github.com/Profavor/mplatMirror/releases/latest/download/inyou-mirror.apk",
         "type": 302
       },
       {
         "source": "/dist/mplatMirror.aab",
-        "destination": "https://github.com/Profavor/mplatMirror/releases/latest/download/mplatMirror.aab",
+        "destination": "https://github.com/Profavor/mplatMirror/releases/latest/download/inyou-mirror.aab",
         "type": 302
       },
       {
         "source": "/mplatMirror.aab",
-        "destination": "https://github.com/Profavor/mplatMirror/releases/latest/download/mplatMirror.aab",
+        "destination": "https://github.com/Profavor/mplatMirror/releases/latest/download/inyou-mirror.aab",
         "type": 302
       }
     ],

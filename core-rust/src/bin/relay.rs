@@ -112,10 +112,9 @@ async fn serve_apk(
 ) -> Response {
     let fallback_paths = [
         state.apk_path.clone(),
-        PathBuf::from("/home/profavor/mMirror/dist/mplatMirror.apk"),
-        PathBuf::from("/home/profavor/mMirror/dist/mMirror.apk"),
-        PathBuf::from("/home/profavor/mMirror/mplatMirror.apk"),
-        PathBuf::from("/home/profavor/mMirror/mMirror.apk"),
+        PathBuf::from("/home/profavor/mMirror/inyou-mirror.apk"),
+        PathBuf::from("/home/profavor/mMirror/dist/inyou-mirror.apk"),
+        PathBuf::from("/home/profavor/mMirror/web/inyou-mirror.apk"),
         PathBuf::from("/home/profavor/mMirror/android/app/build/outputs/apk/release/app-release.apk"),
     ];
 
@@ -124,7 +123,7 @@ async fn serve_apk(
             return serve_file_with_range(
                 bytes,
                 "application/vnd.android.package-archive",
-                "mplatMirror.apk",
+                "inyou-mirror.apk",
                 &headers,
             );
         }
@@ -134,8 +133,9 @@ async fn serve_apk(
 
 async fn serve_aab(headers: axum::http::HeaderMap) -> Response {
     let fallback_paths = [
-        PathBuf::from("/home/profavor/mMirror/dist/mplatMirror.aab"),
-        PathBuf::from("/home/profavor/mMirror/mplatMirror.aab"),
+        PathBuf::from("/home/profavor/mMirror/inyou-mirror.aab"),
+        PathBuf::from("/home/profavor/mMirror/dist/inyou-mirror.aab"),
+        PathBuf::from("/home/profavor/mMirror/web/inyou-mirror.aab"),
         PathBuf::from("/home/profavor/mMirror/android/app/build/outputs/bundle/release/app-release.aab"),
     ];
 
@@ -144,7 +144,7 @@ async fn serve_aab(headers: axum::http::HeaderMap) -> Response {
             return serve_file_with_range(
                 bytes,
                 "application/octet-stream",
-                "mplatMirror.aab",
+                "inyou-mirror.aab",
                 &headers,
             );
         }
@@ -198,7 +198,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         last_keyframe: Arc::new(RwLock::new(None)),
         hosts: Arc::new(RwLock::new(HashMap::new())),
         webrtc_rooms: Arc::new(RwLock::new(HashMap::new())),
-        apk_path: PathBuf::from("/home/profavor/mMirror/dist/mplatMirror.apk"),
+        apk_path: PathBuf::from("/home/profavor/mMirror/inyou-mirror.apk"),
     };
 
     let base_app = Router::new()
@@ -214,17 +214,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/intro", get(serve_download))
         .route("/guide", get(serve_download))
         // APK 다운로드
+        .route("/inyou-mirror.apk", get(serve_apk))
+        .route("/dist/inyou-mirror.apk", get(serve_apk))
+        .route("/download/inyou-mirror.apk", get(serve_apk))
+        .route("/app-release.apk", get(serve_apk))
+        // AAB (App Bundle) 다운로드
+        .route("/inyou-mirror.aab", get(serve_aab))
+        .route("/dist/inyou-mirror.aab", get(serve_aab))
+        .route("/download/inyou-mirror.aab", get(serve_aab))
+        .route("/app-release.aab", get(serve_aab))
+        // 레거시 하위 호환
         .route("/mplatMirror.apk", get(serve_apk))
         .route("/dist/mplatMirror.apk", get(serve_apk))
-        .route("/mMirror.apk", get(serve_apk))
-        .route("/dist/mMirror.apk", get(serve_apk))
-        .route("/app-release.apk", get(serve_apk))
-        .route("/download/mplatMirror.apk", get(serve_apk))
-        // AAB (App Bundle) 다운로드
         .route("/mplatMirror.aab", get(serve_aab))
         .route("/dist/mplatMirror.aab", get(serve_aab))
-        .route("/app-release.aab", get(serve_aab))
-        .route("/download/mplatMirror.aab", get(serve_aab))
         // API
         .route("/api/register_host", axum::routing::post(relay::discovery::register_host))
         .route("/api/discover", get(relay::discovery::discover_host))

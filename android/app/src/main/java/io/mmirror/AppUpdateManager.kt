@@ -19,8 +19,8 @@ import org.json.JSONObject
  */
 object AppUpdateManager {
     private const val TAG = "AppUpdateManager"
-    const val APK_DOWNLOAD_URL = "https://github.com/Profavor/mplatMirror/releases/latest/download/mplatMirror.apk"
-    private const val CDN_VERSION_URL = "https://mplat-mirror.web.app/version.json"
+    const val APK_DOWNLOAD_URL = "https://github.com/Profavor/mplatMirror/releases/latest/download/inyou-mirror.apk"
+    private const val CDN_VERSION_URL = "https://inyou-mirror.web.app/version.json"
     private const val GITHUB_RELEASES_URL = "https://api.github.com/repos/Profavor/mplatMirror/releases/latest"
 
     /**

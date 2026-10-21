@@ -1,7 +1,7 @@
 {
   "version": "1.5.4",
   "versionCode": 155,
-  "downloadUrl": "https://github.com/Profavor/mplatMirror/releases/latest/download/mplatMirror.apk",
+  "downloadUrl": "https://github.com/Profavor/mplatMirror/releases/latest/download/inyou-mirror.apk",
   "playStoreUrl": "https://play.google.com/store/apps/details?id=io.mmirror",
   "releaseNotes": "신규 공식 도메인(inyou-mirror.web.app) 전환 및 최적화 시그널링 연동"
 }
