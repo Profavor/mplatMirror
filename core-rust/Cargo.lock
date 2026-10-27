@@ -803,7 +803,7 @@ dependencies = [
 
 [[package]]
 name = "mplat-mirror-core"
-version = "1.5.4"
+version = "1.5.5"
 dependencies = [
  "axum",
  "axum-server",

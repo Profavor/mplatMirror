@@ -437,6 +437,7 @@ class WebRtcStreamer(
     }
 
     private var lastOfferTimestamp = 0L
+    @Volatile private var lastDataChannelMessageTime = 0L
     @Volatile private var currentOfferId: String = ""
     @Volatile private var hasSynthesizedHotspotCandidate = false
     @Volatile private var hasNativeHotspotCandidate = false
@@ -696,6 +697,7 @@ class WebRtcStreamer(
                 }
             }
             override fun onMessage(buffer: DataChannel.Buffer) {
+                lastDataChannelMessageTime = System.currentTimeMillis()
                 val bytes = ByteArray(buffer.data.remaining())
                 buffer.data.get(bytes)
                 val text = String(bytes, Charsets.UTF_8)
@@ -1034,18 +1036,17 @@ class WebRtcStreamer(
                         existingPc.connectionState() == PeerConnection.PeerConnectionState.CONNECTED ||
                         existingPc.iceConnectionState() == PeerConnection.IceConnectionState.CONNECTED
                     )
-                    if (isConnected) {
-                        AppLogger.i(TAG, "⚡ 뷰어 ready 수신: 이미 P2P 연결 상태입니다. 키프레임 전송으로 화면 즉시 갱신.")
+                    val now = System.currentTimeMillis()
+                    val isActivelyStreaming = isConnected && (now - lastDataChannelMessageTime < 3000L)
+
+                    if (isActivelyStreaming) {
+                        AppLogger.i(TAG, "⚡ 뷰어 ready 수신: 이미 P2P 활성 스트리밍 중입니다 (최근 메시지 ${now - lastDataChannelMessageTime}ms 전). 키프레임 전송으로 화면 즉시 갱신.")
                         MediaProjectionService.instance?.requestKeyFrame(immediateCached = true)
+                    } else if (existingPc != null && existingPc.signalingState() == PeerConnection.SignalingState.HAVE_LOCAL_OFFER && (now - lastOfferTimestamp < 120_000L)) {
+                        AppLogger.i(TAG, "⏳ 뷰어 ready 수신: 유효한 Offer 대기 중 (${now - lastOfferTimestamp}ms 전 발행, offerId=$currentOfferId). 기존 세션 유지 및 뷰어 Answer 대기.")
                     } else {
-                        val now = System.currentTimeMillis()
-                        val state = existingPc?.signalingState()
-                        if (state == PeerConnection.SignalingState.HAVE_LOCAL_OFFER && (now - lastOfferTimestamp < 2500L)) {
-                            AppLogger.i(TAG, "⏳ 뷰어 ready 수신: 이미 Offer 발행 후 핸드셰이크 진행 중 (${now - lastOfferTimestamp}ms 전). 대기.")
-                        } else {
-                            AppLogger.i(TAG, "📥 테슬라 뷰어 ready 수신 -> 새 SDP Offer 생성")
-                            createPeerConnectionAndOffer(force = false)
-                        }
+                        AppLogger.i(TAG, "📥 테슬라 뷰어 ready 수신 -> 새 SDP Offer 생성 (state=${existingPc?.signalingState()}, isConnected=$isConnected, 경과=${now - lastOfferTimestamp}ms)")
+                        createPeerConnectionAndOffer(force = isConnected)
                     }
                 }
                 "reconnect" -> {

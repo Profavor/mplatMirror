@@ -199,7 +199,7 @@
     const PKT_TYPE_AUDIO = 0x02; // Raw PCM Audio (48000Hz, 16bit Stereo)
     const PKT_TYPE_CONFIG = 0x03; // Metadata (Width, Height, FPS, etc.)
     const PKT_TYPE_GPS = 0x04;    // Realtime GPS
-    const CURRENT_WEB_VERSION = '1.5.4';
+    const CURRENT_WEB_VERSION = '1.5.5';
 
     // 오디오 및 A/V 싱크 제어 상태 변수 (100ms 지터 링 버퍼 엔진)
     let audioCtx = null;
@@ -739,6 +739,19 @@
                 return;
             }
 
+            // [A-0] 초기 연결 협상 타임아웃 보호 (스마트폰 미러링 중인데 7.5초 이상 P2P 미체결 시)
+            if (publisherOnline && !isWebRtcConnected && !hasEverReceivedWebRtcVideo) {
+                if (lastHandledOfferTimestamp > 0) {
+                    const handshakeAge = Date.now() - lastHandledOfferTimestamp;
+                    if (handshakeAge > 7500 && (now - lastWebRtcRecoveryTime > 10000)) {
+                        console.warn(`⚡ [WATCHDOG-WebRTC] 초기 연결 협상 타임아웃 감지 (${Math.round(handshakeAge/1000)}초간 미연결) -> Self-Healing 재협상 가동`);
+                        triggerWebRtcAutoRecovery('초기 연결 협상 타임아웃 (7.5초)');
+                        return;
+                    }
+                }
+                return;
+            }
+
             // [A] WebRTC 로컬 P2P 직결 모드 전용 Self-Healing 워치독
             if (isWebRtcConnected || hasEverReceivedWebRtcVideo) {
                 // 퍼블리셔가 이미 오프라인으로 전환된 경우 즉시 세션 리셋
@@ -1203,13 +1216,15 @@
                 }
             });
 
-            // 초기 기동: 이전 잔여 후보 및 Answer 정리 후 테슬라 준비 완료 신호 1회 등록
+            // 초기 기동: 이전 잔여 후보 및 Answer 정리 후 테슬라 준비 완료 신호 등록
             firebaseRoomRef.child('viewer_candidates').remove();
             firebaseRoomRef.child('answer').remove();
-            firebaseRoomRef.child('viewer_ready').set({
-                ready: true,
-                timestamp: Date.now()
-            });
+            if (!publisherOnline) {
+                firebaseRoomRef.child('viewer_ready').set({
+                    ready: true,
+                    timestamp: Date.now()
+                });
+            }
 
             return true;
         } catch (e) {
@@ -1602,7 +1617,15 @@
         stopWebRtcStats();
         stopPingPong();
         isWebRtcConnected = false;
-        pendingCandidates = [];
+        if (currentOfferUfrag) {
+            pendingCandidates = pendingCandidates.filter(c => {
+                const s = c.candidate || '';
+                const m = s.match(/ufrag\s+([^\s]+)/);
+                return !m || m[1] === currentOfferUfrag;
+            });
+        } else {
+            pendingCandidates = [];
+        }
 
         const rtcConfig = {
             iceServers: [
@@ -1942,7 +1965,6 @@
     }
 
     async function handleRemoteCandidate(candidate) {
-        if (!peerConnection) return;
         const candObj = (typeof candidate === 'string') ? { candidate: candidate, sdpMid: '0', sdpMLineIndex: 0 } : candidate;
         const candStr = candObj.candidate || '';
 
@@ -1955,7 +1977,7 @@
             }
         }
 
-        if (peerConnection.remoteDescription && peerConnection.remoteDescription.type) {
+        if (peerConnection && peerConnection.remoteDescription && peerConnection.remoteDescription.type) {
             try {
                 await peerConnection.addIceCandidate(new RTCIceCandidate(candObj));
             } catch (e) {
