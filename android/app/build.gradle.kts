@@ -84,4 +84,5 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("io.getstream:stream-webrtc-android:1.3.8")
+    implementation("com.google.android.play:app-update-ktx:2.1.0")
 }

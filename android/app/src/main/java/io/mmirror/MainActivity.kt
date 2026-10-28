@@ -144,6 +144,18 @@ class MainActivity : AppCompatActivity() {
         moveTaskToBack(true)
     }
 
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == AppUpdateManager.REQUEST_CODE_PLAY_UPDATE) {
+            if (resultCode != RESULT_OK) {
+                AppLogger.w(TAG, "Google Play In-App Update cancelled or incomplete: resultCode=$resultCode")
+            } else {
+                AppLogger.i(TAG, "✓ Google Play In-App Update completed")
+            }
+        }
+    }
+
     private fun ensureServerRunning() {
         try {
             val port = NativeBridge.startServer(serverPort)
@@ -193,6 +205,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         ensureServerRunning()
+        AppUpdateManager.resumeInProgressUpdateIfAny(this)
 
         // 삼성페이 간섭 방지: 순수 WebRTC 로컬 P2P 직결로 구동되어 VPN 없이 UI 상태만 갱신합니다.
 
@@ -558,34 +571,62 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun triggerManualUpdateCheck() {
-        Toast.makeText(this, "🔍 최신 업데이트 확인 중...", Toast.LENGTH_SHORT).show()
-        AppUpdateManager.checkServerVersion(lifecycleScope) { info, errorMsg ->
+        Toast.makeText(this, "🔍 Google Play 최신 업데이트 확인 중...", Toast.LENGTH_SHORT).show()
+        // 1순위: Google Play In-App Update API 확인 (구글 플레이 스토어 기준)
+        AppUpdateManager.checkPlayStoreInAppUpdate(this) { isAvailable, appUpdateInfo, playManager ->
             runOnUiThread {
-                if (info != null) {
-                    latestUpdateInfo = info
-                    latestServerVersion = info.version
-                    val isNewer = AppUpdateManager.isNewerVersion(info.version, BuildConfig.VERSION_NAME)
-                    checkAppVersionWithServer(info.version)
-                    if (isNewer) {
-                        showUpdateDialog(info.version)
-                    } else {
-                        Toast.makeText(this, "✓ 현재 최신 버전(v${BuildConfig.VERSION_NAME})을 사용 중입니다.", Toast.LENGTH_SHORT).show()
+                if (isAvailable && appUpdateInfo != null && playManager != null) {
+                    val launched = AppUpdateManager.launchPlayStoreImmediateUpdate(this, playManager, appUpdateInfo)
+                    if (!launched) {
+                        SystemNavigationHelper.openGooglePlayStore(this)
                     }
-                } else {
-                    val msg = errorMsg ?: "네트워크 상태를 확인해 주세요."
-                    Toast.makeText(this, "⚠️ 업데이트 확인 실패: $msg", Toast.LENGTH_LONG).show()
+                    return@runOnUiThread
+                }
+
+                // 2순위: Google Play 배포 상태 확인 (CDN / Server)
+                AppUpdateManager.checkServerVersion(lifecycleScope) { info, _ ->
+                    runOnUiThread {
+                        if (info != null) {
+                            latestUpdateInfo = info
+                            latestServerVersion = info.version
+                            val isNewer = AppUpdateManager.isNewerVersion(info.version, BuildConfig.VERSION_NAME)
+                            checkAppVersionWithServer(info.version)
+                            if (isNewer) {
+                                AppUpdateManager.showPlayStoreUpdateDialog(this, info)
+                            } else {
+                                Toast.makeText(this, "✓ 현재 최신 버전(v${BuildConfig.VERSION_NAME})을 사용 중입니다 (Google Play).", Toast.LENGTH_SHORT).show()
+                            }
+                        } else {
+                            // 구글 플레이 인앱 API도 불가하고 네트워크 오류인 경우 -> 구글 플레이 스토어 직접 열기
+                            SystemNavigationHelper.openGooglePlayStore(this)
+                        }
+                    }
                 }
             }
         }
     }
 
     private fun checkServerVersionFromApi() {
-        AppUpdateManager.checkServerVersion(lifecycleScope) { info, _ ->
-            if (info != null) {
-                latestUpdateInfo = info
-                latestServerVersion = info.version
+        // 1순위: Google Play In-App Update API 확인 (구글 플레이 스토어 기준)
+        AppUpdateManager.checkPlayStoreInAppUpdate(this) { isAvailable, appUpdateInfo, playManager ->
+            if (isAvailable && appUpdateInfo != null && playManager != null) {
                 runOnUiThread {
-                    checkAppVersionWithServer(info.version)
+                    if (!hasShownUpdateDialogThisSession) {
+                        hasShownUpdateDialogThisSession = true
+                        AppUpdateManager.launchPlayStoreImmediateUpdate(this, playManager, appUpdateInfo)
+                    }
+                }
+                return@checkPlayStoreInAppUpdate
+            }
+
+            // 2순위: CDN / Server 배포 버전 확인
+            AppUpdateManager.checkServerVersion(lifecycleScope) { info, _ ->
+                if (info != null) {
+                    latestUpdateInfo = info
+                    latestServerVersion = info.version
+                    runOnUiThread {
+                        checkAppVersionWithServer(info.version)
+                    }
                 }
             }
         }
@@ -599,8 +640,8 @@ class MainActivity : AppCompatActivity() {
         runOnUiThread {
             if (isUpdateAvailable) {
                 binding.cardUpdateNotice.visibility = View.VISIBLE
-                binding.tvUpdateNoticeTitle.text = "최신 버전(v$serverVersion) 업데이트 안내"
-                binding.tvUpdateNoticeDesc.text = "현재 버전: v$currentVersion · 최신 배포 버전: v$serverVersion\n안정적인 60FPS 전송과 최신 기능 사용을 위해 업데이트해 주세요."
+                binding.tvUpdateNoticeTitle.text = "Google Play 최신 버전(v$serverVersion) 업데이트"
+                binding.tvUpdateNoticeDesc.text = "현재 버전: v$currentVersion · Play 스토어 최신: v$serverVersion\n안정적인 60FPS 전송을 위해 Google Play에서 업데이트하세요."
                 binding.tvAppVersionBadge.text = "v$currentVersion ⚠️ v$serverVersion"
                 binding.tvAppVersionBadge.setTextColor(0xFFF59E0B.toInt())
 
@@ -618,12 +659,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun showUpdateDialog(serverVersion: String) {
         val info = latestUpdateInfo?.takeIf { it.version == serverVersion } ?: AppUpdateManager.UpdateInfo(version = serverVersion)
-        AppUpdateManager.showUpdateDialog(this, info)
-    }
-
-    private fun downloadDirectApk() {
-        val customUrl = latestUpdateInfo?.downloadUrl ?: AppUpdateManager.APK_DOWNLOAD_URL
-        AppUpdateManager.downloadDirectApk(this, latestServerVersion, customUrl)
+        AppUpdateManager.showPlayStoreUpdateDialog(this, info)
     }
 
     private fun openGooglePlayStore() {
@@ -631,11 +667,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openDownloadUrl() {
-        latestUpdateInfo?.let {
-            AppUpdateManager.showUpdateDialog(this, it)
-        } ?: latestServerVersion?.let {
-            showUpdateDialog(it)
-        } ?: downloadDirectApk()
+        SystemNavigationHelper.openGooglePlayStore(this)
     }
 
     private fun updateUIState() {
