@@ -60,10 +60,13 @@ class MainActivity : AppCompatActivity() {
     private var serverPort = 8282
     private var hasShownUpdateDialogThisSession = false
     private var latestServerVersion: String? = null
+    private var latestUpdateInfo: AppUpdateManager.UpdateInfo? = null
 
     private val httpClient = okhttp3.OkHttpClient.Builder()
-        .connectTimeout(3, java.util.concurrent.TimeUnit.SECONDS)
-        .readTimeout(3, java.util.concurrent.TimeUnit.SECONDS)
+        .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+        .callTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
         .build()
 
     private val screenCaptureLauncher = registerForActivityResult(
@@ -235,22 +238,16 @@ class MainActivity : AppCompatActivity() {
             openDownloadUrl()
         }
         binding.cardUpdateNotice.setOnClickListener {
-            latestServerVersion?.let { showUpdateDialog(it) } ?: openDownloadUrl()
+            openDownloadUrl()
         }
         binding.tvAppVersionBadge.setOnClickListener {
-            if (latestServerVersion != null && AppUpdateManager.isNewerVersion(latestServerVersion!!, BuildConfig.VERSION_NAME)) {
-                showUpdateDialog(latestServerVersion!!)
-            } else {
-                Toast.makeText(this, "🔍 최신 업데이트 확인 중...", Toast.LENGTH_SHORT).show()
-                AppUpdateManager.checkServerVersionFromApi(lifecycleScope, httpClient) { serverVer ->
-                    runOnUiThread {
-                        checkAppVersionWithServer(serverVer)
-                        if (!AppUpdateManager.isNewerVersion(serverVer, BuildConfig.VERSION_NAME)) {
-                            Toast.makeText(this, "✓ 현재 최신 버전(v${BuildConfig.VERSION_NAME})을 사용 중입니다.", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                }
-            }
+            triggerManualUpdateCheck()
+        }
+        binding.tvVersionInfo.setOnClickListener {
+            triggerManualUpdateCheck()
+        }
+        binding.btnCheckAppUpdate.setOnClickListener {
+            triggerManualUpdateCheck()
         }
 
         binding.btnCopyAddress.setOnClickListener {
@@ -560,9 +557,37 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun triggerManualUpdateCheck() {
+        Toast.makeText(this, "🔍 최신 업데이트 확인 중...", Toast.LENGTH_SHORT).show()
+        AppUpdateManager.checkServerVersion(lifecycleScope) { info, errorMsg ->
+            runOnUiThread {
+                if (info != null) {
+                    latestUpdateInfo = info
+                    latestServerVersion = info.version
+                    val isNewer = AppUpdateManager.isNewerVersion(info.version, BuildConfig.VERSION_NAME)
+                    checkAppVersionWithServer(info.version)
+                    if (isNewer) {
+                        showUpdateDialog(info.version)
+                    } else {
+                        Toast.makeText(this, "✓ 현재 최신 버전(v${BuildConfig.VERSION_NAME})을 사용 중입니다.", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    val msg = errorMsg ?: "네트워크 상태를 확인해 주세요."
+                    Toast.makeText(this, "⚠️ 업데이트 확인 실패: $msg", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
     private fun checkServerVersionFromApi() {
-        AppUpdateManager.checkServerVersionFromApi(lifecycleScope, httpClient) { serverVer ->
-            checkAppVersionWithServer(serverVer)
+        AppUpdateManager.checkServerVersion(lifecycleScope) { info, _ ->
+            if (info != null) {
+                latestUpdateInfo = info
+                latestServerVersion = info.version
+                runOnUiThread {
+                    checkAppVersionWithServer(info.version)
+                }
+            }
         }
     }
 
@@ -592,11 +617,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showUpdateDialog(serverVersion: String) {
-        AppUpdateManager.showUpdateDialog(this, serverVersion)
+        val info = latestUpdateInfo?.takeIf { it.version == serverVersion } ?: AppUpdateManager.UpdateInfo(version = serverVersion)
+        AppUpdateManager.showUpdateDialog(this, info)
     }
 
     private fun downloadDirectApk() {
-        AppUpdateManager.downloadDirectApk(this, latestServerVersion)
+        val customUrl = latestUpdateInfo?.downloadUrl ?: AppUpdateManager.APK_DOWNLOAD_URL
+        AppUpdateManager.downloadDirectApk(this, latestServerVersion, customUrl)
     }
 
     private fun openGooglePlayStore() {
@@ -604,7 +631,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openDownloadUrl() {
-        latestServerVersion?.let { showUpdateDialog(it) } ?: downloadDirectApk()
+        latestUpdateInfo?.let {
+            AppUpdateManager.showUpdateDialog(this, it)
+        } ?: latestServerVersion?.let {
+            showUpdateDialog(it)
+        } ?: downloadDirectApk()
     }
 
     private fun updateUIState() {

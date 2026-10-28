@@ -52,6 +52,8 @@
                         android:layout_height="wrap_content"
                         android:layout_marginStart="8dp"
                         android:background="@drawable/badge_version_bg"
+                        android:clickable="true"
+                        android:focusable="true"
                         android:paddingStart="7dp"
                         android:paddingTop="2dp"
                         android:paddingEnd="7dp"
@@ -1121,7 +1123,9 @@
                 android:id="@+id/tvVersionInfo"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="inYou Mirror v1.5.5 · 0MB 초저지연 로컬 P2P"
+                android:clickable="true"
+                android:focusable="true"
+                android:text="inYou Mirror v1.5.6 · 0MB 초저지연 로컬 P2P"
                 android:textColor="#888e9b"
                 android:textSize="12sp" />
 
@@ -1136,16 +1140,35 @@
             <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
+                android:layout_marginTop="8dp"
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/btnCheckAppUpdate"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:padding="6dp"
+                    android:text="🔄 최신 업데이트 확인"
+                    android:textColor="#f59e0b"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text=" · "
+                    android:textColor="#555a66"
+                    android:textSize="12sp" />
 
                 <TextView
                     android:id="@+id/btnViewLicenses"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:padding="6dp"
-                    android:text="⚖️ 법적 고지 · 안전 운전 · 라이선스"
+                    android:text="⚖️ 법적 고지 · 라이선스"
                     android:textColor="#3498db"
                     android:textSize="12sp" />
             </LinearLayout>
