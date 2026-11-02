@@ -12,7 +12,6 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
@@ -52,13 +51,13 @@
             </intent-filter>
         </activity>
 
-        <!-- 미디어 프로젝션 화면/오디오 캡처 포그라운드 서비스 (차량 대시보드 GPS 날씨 실시간 연동) -->
+        <!-- 미디어 프로젝션 화면/오디오 캡처 포그라운드 서비스 -->
         <service
             android:name=".MediaProjectionService"
             android:enabled="true"
             android:exported="false"
             android:stopWithTask="false"
-            android:foregroundServiceType="mediaProjection|connectedDevice|location" />
+            android:foregroundServiceType="mediaProjection|connectedDevice" />
 
         <!-- 차량 브라우저 양방향 원격 터치/제스처 제어 접근성 서비스 -->
         <service

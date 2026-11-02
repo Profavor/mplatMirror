@@ -126,7 +126,7 @@ class MediaProjectionService : Service() {
 
     fun sendLocationToWeb(location: android.location.Location? = null) {
         try {
-            val loc = location ?: LocationServiceManager.getLastKnownLocation(this)
+            val loc = location ?: LocationServiceManager.getCachedOrLastKnownLocation(this)
             if (loc != null) {
                 val json = LocationServiceManager.toJson(loc)
                 webRtcStreamer?.sendGps(json)
@@ -489,11 +489,7 @@ class MediaProjectionService : Service() {
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                var t = ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION or ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
-                if (LocationServiceManager.hasLocationPermission(this)) {
-                    t = t or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
-                }
-                t
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION or ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
             } else {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
             }
@@ -665,10 +661,8 @@ class MediaProjectionService : Service() {
                 }
             }
 
-            // 4. 모바일 GPS 실시간 연동 (차량 대시보드 날씨/위치 0MB 로컬 Wi-Fi 동기화)
-            LocationServiceManager.startLocationUpdates(this) { loc ->
-                sendLocationToWeb(loc)
-            }
+            // 4. 모바일 위치 연동 (차량 대시보드 날씨/위치 0MB 로컬 Wi-Fi 동기화)
+            sendLocationToWeb()
 
         } catch (e: Exception) {
             AppLogger.e(TAG, "❌ Error starting mirroring: ${e.message}", e)
@@ -1140,8 +1134,6 @@ class MediaProjectionService : Service() {
 
         webRtcStreamer?.stop()
         webRtcStreamer = null
-
-        LocationServiceManager.stopLocationUpdates()
 
         stopAudioCapture()
         savedMediaVolume?.let { prevVol ->

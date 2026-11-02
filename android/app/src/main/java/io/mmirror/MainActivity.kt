@@ -206,6 +206,7 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         ensureServerRunning()
         AppUpdateManager.resumeInProgressUpdateIfAny(this)
+        LocationServiceManager.refreshLocationInForeground(this)
 
         // 삼성페이 간섭 방지: 순수 WebRTC 로컬 P2P 직결로 구동되어 VPN 없이 UI 상태만 갱신합니다.
 
@@ -503,6 +504,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startMirroringService(resultCode: Int, data: Intent) {
+        LocationServiceManager.refreshLocationInForeground(this)
         if (!isWifiApEnabled()) {
             Toast.makeText(this, "모바일 핫스팟이 꺼져 있어 미러링을 시작할 수 없습니다.", Toast.LENGTH_LONG).show()
             showHotspotRequiredDialog()
