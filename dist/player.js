@@ -199,7 +199,7 @@
     const PKT_TYPE_AUDIO = 0x02; // Raw PCM Audio (48000Hz, 16bit Stereo)
     const PKT_TYPE_CONFIG = 0x03; // Metadata (Width, Height, FPS, etc.)
     const PKT_TYPE_GPS = 0x04;    // Realtime GPS
-    const CURRENT_WEB_VERSION = '1.5.7';
+    const CURRENT_WEB_VERSION = '1.5.8';
 
     // 오디오 및 A/V 싱크 제어 상태 변수 (100ms 지터 링 버퍼 엔진)
     let audioCtx = null;
@@ -3516,7 +3516,8 @@
 
             if (needsInitialRealGps || isHardcodedSeoul || now - lastWeatherFetchTime > 15 * 60 * 1000 || distMoved > 0.015) {
                 hasReceivedRealGpsLocation = true;
-                console.log('📍 [WEATHER] 스마트폰 실제 GPS 수신에 따른 날씨 위치 즉시 갱신:', gpsData.lat, gpsData.lng);
+                const kmMoved = (distMoved * 111).toFixed(1);
+                console.log(`📍 [WEATHER] 스마트폰 실제 모바일 GPS 수신 -> 날씨 갱신: lat=${gpsData.lat.toFixed(4)}, lng=${gpsData.lng.toFixed(4)} (이동: ${kmMoved}km)`);
                 fetchWeather(gpsData.lat, gpsData.lng);
             }
         }

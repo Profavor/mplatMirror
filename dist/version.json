@@ -1,7 +1,7 @@
 {
-  "version": "1.5.7",
-  "versionCode": 158,
+  "version": "1.5.8",
+  "versionCode": 159,
   "downloadUrl": "https://github.com/Profavor/mplatMirror/releases/latest/download/inyou-mirror.apk",
   "playStoreUrl": "https://play.google.com/store/apps/details?id=io.mmirror",
-  "releaseNotes": "구글 플레이 공식 In-App Update API 연동 및 Play 스토어 기준 최신 업데이트 시스템 탑재"
+  "releaseNotes": "스마트폰 모바일 실시간 GPS 위치 기반 차량 대시보드 날씨 및 현재 위치 0MB 로컬 Wi-Fi 무손실 연동"
 }

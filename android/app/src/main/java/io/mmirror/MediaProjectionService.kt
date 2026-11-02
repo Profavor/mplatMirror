@@ -124,6 +124,19 @@ class MediaProjectionService : Service() {
         webRtcStreamer?.sendAudio(data, length)
     }
 
+    fun sendLocationToWeb(location: android.location.Location? = null) {
+        try {
+            val loc = location ?: LocationServiceManager.getLastKnownLocation(this)
+            if (loc != null) {
+                val json = LocationServiceManager.toJson(loc)
+                webRtcStreamer?.sendGps(json)
+                AppLogger.d(TAG, "📍 Sent location to web player: lat=${loc.latitude}, lng=${loc.longitude}")
+            }
+        } catch (e: Exception) {
+            AppLogger.w(TAG, "Failed to send location to web: ${e.message}")
+        }
+    }
+
     private fun startAudioCapture() {
         val mp = mediaProjection ?: run {
             AppLogger.w(TAG, "⚠️ Cannot start audio capture: mediaProjection is null")
@@ -476,7 +489,11 @@ class MediaProjectionService : Service() {
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION or ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+                var t = ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION or ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+                if (LocationServiceManager.hasLocationPermission(this)) {
+                    t = t or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+                }
+                t
             } else {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
             }
@@ -646,6 +663,11 @@ class MediaProjectionService : Service() {
                 } catch (e: Exception) {
                     Log.w(TAG, "Audio volume configuration warning: ${e.message}")
                 }
+            }
+
+            // 4. 모바일 GPS 실시간 연동 (차량 대시보드 날씨/위치 0MB 로컬 Wi-Fi 동기화)
+            LocationServiceManager.startLocationUpdates(this) { loc ->
+                sendLocationToWeb(loc)
             }
 
         } catch (e: Exception) {
@@ -1118,6 +1140,8 @@ class MediaProjectionService : Service() {
 
         webRtcStreamer?.stop()
         webRtcStreamer = null
+
+        LocationServiceManager.stopLocationUpdates()
 
         stopAudioCapture()
         savedMediaVolume?.let { prevVol ->

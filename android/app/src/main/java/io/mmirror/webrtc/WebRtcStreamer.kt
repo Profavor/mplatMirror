@@ -693,6 +693,7 @@ class WebRtcStreamer(
                     sendTouchStatus()
                     sendAppList()
                     sendAudioModeStatus()
+                    MediaProjectionService.instance?.sendLocationToWeb()
                     MediaProjectionService.instance?.requestKeyFrame(immediateCached = true)
                 }
             }
